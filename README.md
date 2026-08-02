@@ -1,6 +1,6 @@
 # codex-skills-mcp
 
-> 🧠 Codex-Skills 技能库的 MCP (Model Context Protocol) Server — 让任意 AI 编程工具都能检索、阅读和使用 170+ 专业技能。
+> 🧠 Codex-Skills 技能库的 MCP (Model Context Protocol) Server — 让任意 AI 编程工具都能检索、阅读和使用 180+ 专业技能。
 
 ## 这是什么
 
@@ -16,7 +16,21 @@
 
 ## 快速开始
 
-### 1. 安装
+### 1. 远程模式（默认，零配置，推荐）
+
+直接通过 npx 运行即可，无需安装、无需手动指定技能库路径：
+
+```bash
+npx -y codex-skills-mcp@latest
+```
+
+默认以远程模式启动：自动从 GitHub 拉取技能库清单（180+ 技能），技能文件按需下载，并内置「GitHub 直连 → jsDelivr → gh-proxy.com → ghfast.top」网络加速回退链，国内网络无需额外配置。技能内容缓存在当前目录的 `.codex-skills-cache/`，二次启动秒级加载，远端文件有更新时自动增量同步。
+
+如需指定技能库来源，支持 `--github-repo` / `--github-branch` / `--github-path` 参数。
+
+### 2. 本地安装（可选）
+
+本地模式适用于离线开发或使用本地技能库副本：
 
 ```bash
 cd codex-skills-mcp
@@ -24,19 +38,40 @@ npm install
 npm run build
 ```
 
-### 2. 配置客户端
+### 3. 配置客户端
 
 ---
 
-#### ⭐ ChatGPT 桌面端（主要推荐）
+#### ⭐ Codex 桌面端 / Claude Desktop / Cursor（stdio，推荐）
 
-ChatGPT 桌面端仅支持远程 HTTP 连接，不支持本地 stdio。需要以 HTTP 模式启动 MCP Server，再通过 ngrok 等隧道工具暴露为公网地址。
+这些客户端支持本地 stdio 模式，无需隧道工具。以 Codex 桌面端为例，编辑 `~/.codex/config.toml`：
+
+```toml
+[mcp_servers.codex-skills]
+command = "npx"
+args = ["-y", "codex-skills-mcp@latest"]
+```
+
+> 上方配置让客户端以远程模式自动拉取技能库（推荐）。若本地已有技能库副本，也可改用本地模式：
+> ```toml
+> [mcp_servers.codex-skills]
+> command = "node"
+> args = ["/path/to/codex-skills-mcp/dist/index.js", "--skills-dir", "/path/to/codex-skills"]
+> ```
+
+Claude Desktop、Cursor、Windsurf / VS Code + Copilot 等客户端的配置示例见下文各小节（同样支持上面的远程 npx 写法）。
+
+#### 🌐 需要远程 HTTP 连接的客户端（如 ChatGPT 桌面端集成场景）
+
+如果你的客户端需要以远程 HTTP 地址接入 MCP，则以 HTTP 模式启动服务，并通过 ngrok 等隧道工具暴露为公网地址。
 
 **Step 1：启动 HTTP 模式**
 
 ```bash
 node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
 ```
+
+> 远程模式下也可以不带 `--skills-dir` 直接启动：`node dist/index.js --http --port 3456`（自动拉取远端技能库）。
 
 启动后会看到：
 ```
@@ -69,7 +104,7 @@ ngrok http 3456
 curl http://localhost:3456/health
 
 # 预期输出
-{"status":"ok","name":"codex-skills-mcp","version":"1.0.0","skills":181}
+{"status":"ok","name":"codex-skills-mcp","version":"1.0.6","skills":181}
 ```
 
 ---
@@ -138,8 +173,9 @@ node /path/to/codex-skills-mcp/dist/index.js --http --port 3456
 
 | 模式 | 启动方式 | 适用客户端 |
 |------|---------|-----------|
-| **stdio**（默认） | `node dist/index.js --skills-dir ...` | Claude Desktop, Cursor, Windsurf, VS Code |
-| **HTTP** | `node dist/index.js --skills-dir ... --http --port 3456` | ChatGPT 桌面端, 远程客户端 |
+| **远程 stdio**（默认） | `npx -y codex-skills-mcp@latest` | Codex 桌面端, Claude Desktop, Cursor, Windsurf, VS Code |
+| **本地 stdio** | `node dist/index.js --skills-dir ...` | 离线开发 / 使用本地技能库副本 |
+| **HTTP** | `node dist/index.js [--skills-dir ...] --http --port 3456` | 需要远程 HTTP 连接的客户端（如 ChatGPT 桌面端集成场景） |
 
 ## MCP Tools
 
