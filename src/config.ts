@@ -8,8 +8,9 @@ export interface Config {
   isRemote: boolean;
   githubRepo?: string;
   githubBranch?: string;
-  githubPath?: string;
+  githubPath: string;
   githubToken?: string;
+  useCnMirror: boolean;
 }
 
 /**
@@ -108,6 +109,8 @@ export function parseConfig(args: string[]): Config {
     process.exit(1);
   }
 
+  const useCnMirror = args.includes("--cn-mirror");
+
   return { 
     skillsDir, 
     manifestPath, 
@@ -115,7 +118,8 @@ export function parseConfig(args: string[]): Config {
     githubRepo, 
     githubBranch, 
     githubPath, 
-    githubToken 
+    githubToken,
+    useCnMirror
   };
 }
 

@@ -30,6 +30,54 @@ async function fetchWithAuth(url: string, token?: string): Promise<Response> {
 }
 
 /**
+ * Advanced raw file downloader with CN Mirror Fallback Chain
+ */
+async function fetchRawWithFallback(config: Config, path: string): Promise<Response> {
+  // If not using CN mirror, just use the official raw domain
+  if (!config.useCnMirror) {
+    const rawUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`;
+    return fetchWithAuth(rawUrl, config.githubToken);
+  }
+
+  // Define the fallback chain
+  const fallbacks = [
+    // 1. jsdelivr CDN (Fastest, backed by GCore/Fastly in China)
+    {
+      name: "jsDelivr",
+      url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${config.githubBranch}/${path}`
+    },
+    // 2. gh-proxy.com (Reliable raw proxy)
+    {
+      name: "gh-proxy.com",
+      url: `https://gh-proxy.com/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`
+    },
+    // 3. ghfast.top (Backup raw proxy)
+    {
+      name: "ghfast.top",
+      url: `https://ghfast.top/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`
+    }
+  ];
+
+  let lastError: any = null;
+
+  for (const proxy of fallbacks) {
+    try {
+      // jsdelivr and some proxies might strip or reject Auth headers, so we omit token for mirrors
+      const res = await fetch(proxy.url); 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return res; // Success!
+    } catch (e: any) {
+      console.error(`[codex-skills-mcp] Network warning: ${proxy.name} failed to fetch (${e.message}). Downgrading to next...`);
+      lastError = e;
+    }
+  }
+
+  throw new Error(`All acceleration nodes (CN Mirrors) failed to fetch ${path}. Network error: ${lastError?.message}`);
+}
+
+/**
  * Initialize remote caching (just creates the cache dir now)
  */
 export async function initRemote(config: Config): Promise<void> {
@@ -44,10 +92,10 @@ export async function initRemote(config: Config): Promise<void> {
 export async function fetchManifest(config: Config): Promise<void> {
   if (existsSync(config.manifestPath)) return;
 
-  const rawUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${config.githubPath}/skills_manifest.json`;
-  console.error(`[codex-skills-mcp] Fetching manifest from ${rawUrl}...`);
+  const manifestPath = `${config.githubPath}/skills_manifest.json`;
+  console.error(`[codex-skills-mcp] Fetching manifest...`);
 
-  const res = await fetchWithAuth(rawUrl, config.githubToken);
+  const res = await fetchRawWithFallback(config, manifestPath);
   const text = await res.text();
 
   writeFileSync(config.manifestPath, text, "utf-8");
@@ -60,6 +108,7 @@ async function fetchDirectoryRecursive(
   config: Config,
   path: string
 ): Promise<{ path: string; downloadUrl: string }[]> {
+  // API is always direct because proxies return 403 for API
   const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path}?ref=${config.githubBranch}`;
   const res = await fetchWithAuth(url, config.githubToken);
   const data = (await res.json()) as GithubContentsItem[];
@@ -89,8 +138,6 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
     return; // Already fetched
   }
 
-  // The prefix in github is githubPath + relPath
-  // e.g. "codex-skills/01_代码工程与架构/planning-with-files"
   let prefix = config.githubPath ? `${config.githubPath}/${relPath}` : relPath;
   if (prefix.startsWith("/")) prefix = prefix.slice(1);
   if (prefix.startsWith("./")) prefix = prefix.slice(2);
@@ -100,7 +147,6 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
 
     if (filesToFetch.length === 0) {
       console.error(`[codex-skills-mcp] Warning: No files found in remote tree for prefix ${prefix}`);
-      // Create an empty dir to prevent repeated failures
       mkdirSync(skillLocalPath, { recursive: true });
       return;
     }
@@ -108,23 +154,21 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
     console.error(`[codex-skills-mcp] Fetching ${filesToFetch.length} files for skill: ${entry.name}...`);
 
     for (const file of filesToFetch) {
-      // Determine local path by stripping githubPath prefix
       let relativeFilePath = file.path;
       if (config.githubPath && relativeFilePath.startsWith(config.githubPath + "/")) {
         relativeFilePath = relativeFilePath.substring(config.githubPath.length + 1);
       }
       
       const localFilePath = resolve(config.skillsDir, relativeFilePath);
-      
       mkdirSync(dirname(localFilePath), { recursive: true });
       
-      const res = await fetchWithAuth(file.downloadUrl, config.githubToken);
+      // Use fallback logic for raw files
+      const res = await fetchRawWithFallback(config, file.path);
       const buffer = await res.arrayBuffer();
       writeFileSync(localFilePath, Buffer.from(buffer));
     }
   } catch (error: any) {
     console.error(`[codex-skills-mcp] Failed to fetch skill ${entry.name}: ${error.message}`);
-    // Create an empty dir to prevent repeated failures on 404
     mkdirSync(skillLocalPath, { recursive: true });
   }
 }
