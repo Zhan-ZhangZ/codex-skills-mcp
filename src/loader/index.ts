@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { resolve, join, relative, extname } from "node:path";
-import type { ManifestEntry } from "../config.js";
+import type { ManifestEntry, Config } from "../config.js";
+import { ensureSkillFetched } from "../remote/github.js";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -46,10 +47,14 @@ const MAX_FILE_SIZE = 500 * 1024;
  * Skill loader — reads SKILL.md, scans structure, detects dependencies.
  */
 export class SkillLoader {
+  private skillsDir: string;
+
   constructor(
-    private skillsDir: string,
+    private config: Config,
     private manifest: ManifestEntry[]
-  ) {}
+  ) {
+    this.skillsDir = config.skillsDir;
+  }
 
   /**
    * Resolve the absolute filesystem path for a skill.
@@ -63,7 +68,11 @@ export class SkillLoader {
   /**
    * Read a skill's SKILL.md + structure + dependencies.
    */
-  readSkill(entry: ManifestEntry): ReadSkillResult {
+  async readSkill(entry: ManifestEntry): Promise<ReadSkillResult> {
+    if (this.config.isRemote) {
+      await ensureSkillFetched(this.config, entry);
+    }
+
     const skillPath = this.resolveSkillPath(entry);
 
     // Read SKILL.md
@@ -242,10 +251,14 @@ export class SkillLoader {
   /**
    * Load a specific file from within a skill directory.
    */
-  loadSkillFile(
+  async loadSkillFile(
     entry: ManifestEntry,
     filePath: string
-  ): { content: string; size_bytes: number } {
+  ): Promise<{ content: string; size_bytes: number }> {
+    if (this.config.isRemote) {
+      await ensureSkillFetched(this.config, entry);
+    }
+
     const skillPath = this.resolveSkillPath(entry);
     const fullPath = resolve(skillPath, filePath);
 
@@ -293,11 +306,15 @@ export class SkillLoader {
   /**
    * List files in a subdirectory of a skill.
    */
-  listSkillFiles(
+  async listSkillFiles(
     entry: ManifestEntry,
     subPath: string = "",
     maxDepth: number = 2
-  ): FileNode[] {
+  ): Promise<FileNode[]> {
+    if (this.config.isRemote) {
+      await ensureSkillFetched(this.config, entry);
+    }
+
     const skillPath = this.resolveSkillPath(entry);
     const targetPath = subPath ? resolve(skillPath, subPath) : skillPath;
 

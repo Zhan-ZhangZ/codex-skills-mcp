@@ -29,13 +29,13 @@ export function registerLoadSkillFile(
       }
 
       try {
-        const result = loader.loadSkillFile(entry, file_path);
+        const { content, size_bytes } = await loader.loadSkillFile(entry, file_path);
 
         return {
           content: [
             {
               type: "text" as const,
-              text: `## ${skill_name} / ${file_path} (${result.size_bytes} bytes)\n\n${result.content}`,
+              text: `## ${skill_name} / ${file_path} (${size_bytes} bytes)\n\n${content}`,
             },
           ],
         };

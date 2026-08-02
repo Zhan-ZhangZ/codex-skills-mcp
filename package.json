@@ -1,16 +1,20 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP Server for Codex-Skills - Intelligent skill library search, read and orchestration",
   "type": "module",
   "bin": {
     "codex-skills-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",

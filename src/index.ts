@@ -161,6 +161,13 @@ async function main(): Promise<void> {
   // Parse configuration
   const config = parseConfig(args);
 
+  if (config.isRemote) {
+    const { initRemote, fetchManifest } = await import("./remote/github.js");
+    console.error("[codex-skills-mcp] Initializing remote GitHub fetching...");
+    await initRemote(config);
+    await fetchManifest(config);
+  }
+
   // Load manifest
   console.error(`[codex-skills-mcp] Loading manifest from: ${config.manifestPath}`);
   const manifest = loadManifest(config.manifestPath);
@@ -175,7 +182,7 @@ async function main(): Promise<void> {
   );
 
   // Create skill loader
-  const loader = new SkillLoader(config.skillsDir, manifest);
+  const loader = new SkillLoader(config, manifest);
 
   // Determine transport mode
   const useHTTP = args.includes("--http");

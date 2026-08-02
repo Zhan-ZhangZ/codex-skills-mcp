@@ -28,7 +28,7 @@ export function registerReadSkill(
       }
 
       try {
-        const result = loader.readSkill(entry);
+        const result = await loader.readSkill(entry);
 
         // Format structure as a compact tree
         const structureStr = formatTree(result.structure.files, "");

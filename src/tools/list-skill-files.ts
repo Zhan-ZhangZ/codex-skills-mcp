@@ -30,7 +30,7 @@ export function registerListSkillFiles(
       }
 
       try {
-        const files = loader.listSkillFiles(entry, path, max_depth);
+        const files = await loader.listSkillFiles(entry, path, max_depth);
         const treeStr = formatFileTree(files, "");
 
         return {
