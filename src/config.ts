@@ -11,6 +11,7 @@ export interface Config {
   githubPath: string;
   githubToken?: string;
   useCnMirror: boolean;
+  downloadConcurrency: number;
 }
 
 /**
@@ -111,6 +112,16 @@ export function parseConfig(args: string[]): Config {
 
   const useCnMirror = args.includes("--cn-mirror");
 
+  // Concurrent downloads for skill files (default 16). Configurable via
+  // --download-concurrency <n> or CODEX_SKILLS_DOWNLOAD_CONCURRENCY env var.
+  const concurrencyArg = getArg("--download-concurrency");
+  const concurrencyEnv = process.env.CODEX_SKILLS_DOWNLOAD_CONCURRENCY;
+  const downloadConcurrency = parseInt(concurrencyArg || concurrencyEnv || "16", 10);
+  if (!Number.isInteger(downloadConcurrency) || downloadConcurrency < 1) {
+    console.error("Error: --download-concurrency must be a positive integer");
+    process.exit(1);
+  }
+
   return { 
     skillsDir, 
     manifestPath, 
@@ -119,7 +130,8 @@ export function parseConfig(args: string[]): Config {
     githubBranch, 
     githubPath, 
     githubToken,
-    useCnMirror
+    useCnMirror,
+    downloadConcurrency
   };
 }
 

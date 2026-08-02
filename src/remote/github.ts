@@ -1,18 +1,25 @@
-import { writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { resolve, dirname, join, basename } from "node:path";
 import type { Config, ManifestEntry } from "../config.js";
 
-interface GithubContentsItem {
-  name: string;
+interface TreeFileEntry {
+  /** Path relative to the skill directory, e.g. "README.md" or "skills/nature-reader/SKILL.md" */
   path: string;
-  sha: string;
-  size?: number;
-  url: string;
-  html_url: string;
-  git_url: string;
-  download_url: string | null;
-  type: "file" | "dir";
+  /** File size in bytes (from the git tree API) — used to skip already-downloaded files */
+  size: number;
 }
+
+interface SkillTreeCache {
+  version: 1;
+  /** Set only when every file in `files` has been downloaded successfully */
+  completedAt?: string;
+  files: TreeFileEntry[];
+  /** For single-file skills: absolute remote path to fetch (files.path is not prefixed) */
+  singleFileRemotePath?: string;
+}
+
+/** Metadata marker written inside each cached skill directory */
+const TREE_CACHE_FILE = ".codex-skills.tree.json";
 
 /**
  * Fetch with timeout using AbortController
@@ -88,10 +95,10 @@ async function fetchRawWithFallback(config: Config, path: string): Promise<Respo
 
   for (const proxy of fallbacks) {
     try {
-      const res = proxy.useAuth 
+      const res = proxy.useAuth
         ? await fetchWithAuth(proxy.url, config.githubToken, proxy.timeout)
         : await fetchWithTimeout(proxy.url, {}, proxy.timeout);
-        
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -103,6 +110,168 @@ async function fetchRawWithFallback(config: Config, path: string): Promise<Respo
   }
 
   throw new Error(`All download nodes failed to fetch ${path}. Network error: ${lastError?.message}\n\n【网络兜底提示】您的网络环境极其恶劣，所有的直连与免翻墙加速节点均已失效。为了保证技能库的稳定拉取，建议您配置科学上网环境。推荐服务：https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs (该服务极具性价比，最便宜每月200G流量一年仅需13.99元)`);
+}
+
+/**
+ * Build the remote repo path of a skill directory, e.g.
+ * "codex-skills/00_全局大管家/12_学术论文与科研图表/nature-skills"
+ */
+function buildSkillRemotePath(config: Config, relPath: string): string {
+  let prefix = config.githubPath ? `${config.githubPath}/${relPath}` : relPath;
+  prefix = prefix.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
+  return prefix;
+}
+
+/**
+ * List a skill's files with exactly 2 GitHub API calls (never the full repo tree):
+ *   1. contents(parent dir)          -> locate the skill dir and get its tree SHA
+ *   2. git/trees/{sha}?recursive=1   -> all blobs of that single skill subtree, with sizes
+ */
+async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTreeCache> {
+  const segments = relPath.split("/").filter(Boolean);
+  const dirName = segments[segments.length - 1];
+  const parentPath = segments.slice(0, -1).join("/");
+  const parentRemotePath = buildSkillRemotePath(config, parentPath);
+  const apiBase = `https://api.github.com/repos/${config.githubRepo}/`;
+
+  // STEP 1: find the skill directory's tree SHA from its parent listing
+  const contentsRes = await fetchWithAuth(
+    `${apiBase}contents/${parentRemotePath}?ref=${config.githubBranch}`,
+    config.githubToken,
+    10000
+  );
+  const contents = (await contentsRes.json()) as any;
+
+  if (Array.isArray(contents)) {
+    const dir = contents.find(
+      (item: any) => item.name === dirName && item.type === "dir"
+    );
+    if (!dir || !dir.sha) {
+      throw new Error(`Skill directory "${dirName}" not found at "${parentRemotePath}"`);
+    }
+
+    // STEP 2: recursive tree of ONLY this skill subtree (small, not truncated)
+    const treeRes = await fetchWithAuth(
+      `${apiBase}git/trees/${dir.sha}?recursive=1`,
+      config.githubToken,
+      30000
+    );
+    const tree = (await treeRes.json()) as any;
+    if (tree.truncated) {
+      throw new Error(`Git tree truncated for skill "${dirName}" (too many files)`);
+    }
+
+    const files: TreeFileEntry[] = (tree.tree || [])
+      .filter((t: any) => t.type === "blob" && typeof t.path === "string")
+      .map((t: any) => ({
+        path: t.path,
+        size: typeof t.size === "number" ? t.size : 0,
+      }));
+
+    return { version: 1, files };
+  }
+
+  if (contents && contents.type === "file") {
+    // Single-file skill: the manifest "directory" is actually one file
+    return {
+      version: 1,
+      files: [{ path: basename(contents.path), size: contents.size ?? 0 }],
+      singleFileRemotePath: `${parentRemotePath}/${dirName}`,
+    };
+  }
+
+  throw new Error(
+    `Unexpected GitHub Contents API response for "${parentRemotePath}": ${contentsRes.status}`
+  );
+}
+
+/**
+ * Run `worker` over `items` with at most `limit` concurrent executions.
+ * Collects per-item errors instead of failing fast, so one bad file never
+ * aborts an entire skill download.
+ */
+async function runPool<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  const errors: Error[] = [];
+  let next = 0;
+  const run = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        await worker(items[index]);
+      } catch (error: any) {
+        errors.push(error);
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, run)
+  );
+
+  if (errors.length > 0) {
+    throw new Error(
+      `${errors.length} of ${items.length} downloads failed. First error: ${errors[0].message}`
+    );
+  }
+}
+
+/** True when the local file already exists with the expected size (resume support) */
+function isFileUpToDate(localPath: string, expectedSize: number): boolean {
+  try {
+    return statSync(localPath).size === expectedSize;
+  } catch {
+    return false;
+  }
+}
+
+/** Verify every recorded file exists with the expected size */
+function areFilesUpToDate(tree: SkillTreeCache, skillLocalPath: string): boolean {
+  return tree.files.every((file) =>
+    isFileUpToDate(resolve(skillLocalPath, file.path), file.size)
+  );
+}
+
+/**
+ * Download every missing file of a skill, skipping files already cached.
+ * Failures throw AFTER the pool finishes so the caller can resume next time.
+ */
+async function downloadMissing(
+  config: Config,
+  relPath: string,
+  tree: SkillTreeCache,
+  skillLocalPath: string
+): Promise<void> {
+  if (!tree.files || tree.files.length === 0) return;
+
+  const skillRemotePath = buildSkillRemotePath(config, relPath);
+  const missing = tree.files.filter(
+    (file) => !isFileUpToDate(resolve(skillLocalPath, file.path), file.size)
+  );
+  if (missing.length === 0) return;
+
+  const skillName = basename(skillLocalPath);
+  console.error(
+    `[codex-skills-mcp] Fetching ${missing.length}/${tree.files.length} files for skill: ${skillName}...`
+  );
+  const startedAt = Date.now();
+  const limit = Math.max(1, config.downloadConcurrency);
+
+  await runPool(missing, limit, async (file) => {
+    const remotePath = tree.singleFileRemotePath ?? `${skillRemotePath}/${file.path}`;
+    const res = await fetchRawWithFallback(config, remotePath);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const localFile = resolve(skillLocalPath, file.path);
+    mkdirSync(dirname(localFile), { recursive: true });
+    writeFileSync(localFile, buffer);
+  });
+
+  console.error(
+    `[codex-skills-mcp] Skill ${skillName}: downloaded ${missing.length} files in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+  );
 }
 
 /**
@@ -130,76 +299,58 @@ export async function fetchManifest(config: Config): Promise<void> {
 }
 
 /**
- * Recursively fetch files from a GitHub directory using Contents API
- */
-async function fetchDirectoryRecursive(
-  config: Config,
-  path: string
-): Promise<{ path: string; downloadUrl: string }[]> {
-  try {
-    const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path}?ref=${config.githubBranch}`;
-    const res = await fetchWithAuth(url, config.githubToken, 10000);
-    const data = (await res.json()) as GithubContentsItem[];
-
-    let files: { path: string; downloadUrl: string }[] = [];
-
-    for (const item of data) {
-      if (item.type === "file" && item.download_url) {
-        files.push({ path: item.path, downloadUrl: item.download_url });
-      } else if (item.type === "dir") {
-        const subFiles = await fetchDirectoryRecursive(config, item.path);
-        files.push(...subFiles);
-      }
-    }
-
-    return files;
-  } catch (error: any) {
-    throw new Error(`Failed to fetch directory from GitHub API: ${error.message}\n\n【网络兜底提示】由于网络封锁，无法连接到 GitHub API。建议您配置科学上网环境：https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs (极具性价比，最便宜每月200G流量一年仅需13.99元)`);
-  }
-}
-
-/**
- * Ensure a skill's directory is downloaded and cached
+ * Ensure a skill's directory is downloaded and cached.
+ *
+ * - Listing uses only 2 API calls (parent contents + recursive subtree tree),
+ *   never the full repository tree, so huge repos stay within GitHub limits.
+ * - Downloads run concurrently and skip files already cached with the right size.
+ * - A `.codex-skills.tree.json` marker records the file list + completion state,
+ *   so an interrupted download resumes on the next call instead of being
+ *   silently treated as complete.
  */
 export async function ensureSkillFetched(config: Config, entry: ManifestEntry): Promise<void> {
   const relPath = entry.relative_path.replace(/^\.\//, "");
   const skillLocalPath = resolve(config.skillsDir, relPath);
-  
-  if (existsSync(skillLocalPath)) {
-    return; // Already fetched
-  }
+  const cacheFile = join(skillLocalPath, TREE_CACHE_FILE);
 
-  let prefix = config.githubPath ? `${config.githubPath}/${relPath}` : relPath;
-  if (prefix.startsWith("/")) prefix = prefix.slice(1);
-  if (prefix.startsWith("./")) prefix = prefix.slice(2);
-
-  try {
-    const filesToFetch = await fetchDirectoryRecursive(config, prefix);
-
-    if (filesToFetch.length === 0) {
-      console.error(`[codex-skills-mcp] Warning: No files found in remote tree for prefix ${prefix}`);
-      mkdirSync(skillLocalPath, { recursive: true });
-      return;
-    }
-
-    console.error(`[codex-skills-mcp] Fetching ${filesToFetch.length} files for skill: ${entry.name}...`);
-
-    for (const file of filesToFetch) {
-      let relativeFilePath = file.path;
-      if (config.githubPath && relativeFilePath.startsWith(config.githubPath + "/")) {
-        relativeFilePath = relativeFilePath.substring(config.githubPath.length + 1);
+  // Fast path: fully downloaded in a previous run
+  if (existsSync(cacheFile)) {
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
+      if (cached.completedAt && Array.isArray(cached.files)) {
+        if (areFilesUpToDate(cached, skillLocalPath)) {
+          return;
+        }
+        // Some files disappeared after completion — fetch only the gaps.
+        await downloadMissing(config, relPath, cached, skillLocalPath);
+        return;
       }
-      
-      const localFilePath = resolve(config.skillsDir, relativeFilePath);
-      mkdirSync(dirname(localFilePath), { recursive: true });
-      
-      // Use smart fallback logic for raw files
-      const res = await fetchRawWithFallback(config, file.path);
-      const buffer = await res.arrayBuffer();
-      writeFileSync(localFilePath, Buffer.from(buffer));
+      if (Array.isArray(cached.files)) {
+        // Resume: reuse the cached file list, download only what is missing
+        await downloadMissing(config, relPath, cached, skillLocalPath);
+        writeFileSync(
+          cacheFile,
+          JSON.stringify({ ...cached, completedAt: new Date().toISOString() }, null, 2),
+          "utf-8"
+        );
+        return;
+      }
+    } catch {
+      // Corrupted marker — fall through and rebuild the file list
     }
-  } catch (error: any) {
-    console.error(`[codex-skills-mcp] Failed to fetch skill ${entry.name}: ${error.message}`);
-    mkdirSync(skillLocalPath, { recursive: true });
   }
+
+  mkdirSync(skillLocalPath, { recursive: true });
+
+  console.error(`[codex-skills-mcp] Listing files for skill: ${entry.name}...`);
+  const tree = await fetchSkillTree(config, relPath);
+  writeFileSync(cacheFile, JSON.stringify(tree, null, 2), "utf-8");
+
+  await downloadMissing(config, relPath, tree, skillLocalPath);
+
+  writeFileSync(
+    cacheFile,
+    JSON.stringify({ ...tree, completedAt: new Date().toISOString() }, null, 2),
+    "utf-8"
+  );
 }
