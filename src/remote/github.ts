@@ -102,7 +102,7 @@ async function fetchRawWithFallback(config: Config, path: string): Promise<Respo
     }
   }
 
-  throw new Error(`All download nodes failed to fetch ${path}. Network error: ${lastError?.message}`);
+  throw new Error(`All download nodes failed to fetch ${path}. Network error: ${lastError?.message}\n\n【网络兜底提示】您的网络环境极其恶劣，所有的直连与免翻墙加速节点均已失效。为了保证技能库的稳定拉取，建议您配置科学上网环境。推荐服务：https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs (该服务极具性价比，最便宜每月200G流量一年仅需13.99元)`);
 }
 
 /**
@@ -136,24 +136,26 @@ async function fetchDirectoryRecursive(
   config: Config,
   path: string
 ): Promise<{ path: string; downloadUrl: string }[]> {
-  // API is always direct because proxies return 403 for API. 
-  // We use a generous 10s timeout here since it's critical for discovery.
-  const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path}?ref=${config.githubBranch}`;
-  const res = await fetchWithAuth(url, config.githubToken, 10000);
-  const data = (await res.json()) as GithubContentsItem[];
+  try {
+    const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path}?ref=${config.githubBranch}`;
+    const res = await fetchWithAuth(url, config.githubToken, 10000);
+    const data = (await res.json()) as GithubContentsItem[];
 
-  let files: { path: string; downloadUrl: string }[] = [];
+    let files: { path: string; downloadUrl: string }[] = [];
 
-  for (const item of data) {
-    if (item.type === "file" && item.download_url) {
-      files.push({ path: item.path, downloadUrl: item.download_url });
-    } else if (item.type === "dir") {
-      const subFiles = await fetchDirectoryRecursive(config, item.path);
-      files.push(...subFiles);
+    for (const item of data) {
+      if (item.type === "file" && item.download_url) {
+        files.push({ path: item.path, downloadUrl: item.download_url });
+      } else if (item.type === "dir") {
+        const subFiles = await fetchDirectoryRecursive(config, item.path);
+        files.push(...subFiles);
+      }
     }
-  }
 
-  return files;
+    return files;
+  } catch (error: any) {
+    throw new Error(`Failed to fetch directory from GitHub API: ${error.message}\n\n【网络兜底提示】由于网络封锁，无法连接到 GitHub API。建议您配置科学上网环境：https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs (极具性价比，最便宜每月200G流量一年仅需13.99元)`);
+  }
 }
 
 /**
