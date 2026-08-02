@@ -15,14 +15,33 @@ interface GithubContentsItem {
 }
 
 /**
+ * Fetch with timeout using AbortController
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 3000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+/**
  * Fetch with optional auth token
  */
-async function fetchWithAuth(url: string, token?: string): Promise<Response> {
+async function fetchWithAuth(url: string, token?: string, timeout = 3000): Promise<Response> {
   const headers: Record<string, string> = {};
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { headers });
+  const res = await fetchWithTimeout(url, { headers }, timeout);
   if (!res.ok) {
     throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
   }
@@ -30,31 +49,38 @@ async function fetchWithAuth(url: string, token?: string): Promise<Response> {
 }
 
 /**
- * Advanced raw file downloader with CN Mirror Fallback Chain
+ * Advanced raw file downloader with Automatic 3-second Timeout Fallback Chain
  */
 async function fetchRawWithFallback(config: Config, path: string): Promise<Response> {
-  // If not using CN mirror, just use the official raw domain
-  if (!config.useCnMirror) {
-    const rawUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`;
-    return fetchWithAuth(rawUrl, config.githubToken);
-  }
-
-  // Define the fallback chain
+  // Define the smart fallback chain
   const fallbacks = [
-    // 1. jsdelivr CDN (Fastest, backed by GCore/Fastly in China)
+    // 0. Official direct (Fastest if VPN is on, but fails/timeouts in pure CN network)
+    {
+      name: "GitHub Official",
+      url: `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
+      useAuth: true,
+      timeout: 3000 // 3 seconds timeout for direct connection
+    },
+    // 1. jsdelivr CDN (Fastest in China without VPN)
     {
       name: "jsDelivr",
-      url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${config.githubBranch}/${path}`
+      url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${config.githubBranch}/${path}`,
+      useAuth: false,
+      timeout: 10000 // longer timeout for fallbacks
     },
     // 2. gh-proxy.com (Reliable raw proxy)
     {
       name: "gh-proxy.com",
-      url: `https://gh-proxy.com/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`
+      url: `https://gh-proxy.com/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
+      useAuth: false,
+      timeout: 10000
     },
     // 3. ghfast.top (Backup raw proxy)
     {
       name: "ghfast.top",
-      url: `https://ghfast.top/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`
+      url: `https://ghfast.top/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
+      useAuth: false,
+      timeout: 10000
     }
   ];
 
@@ -62,19 +88,21 @@ async function fetchRawWithFallback(config: Config, path: string): Promise<Respo
 
   for (const proxy of fallbacks) {
     try {
-      // jsdelivr and some proxies might strip or reject Auth headers, so we omit token for mirrors
-      const res = await fetch(proxy.url); 
+      const res = proxy.useAuth 
+        ? await fetchWithAuth(proxy.url, config.githubToken, proxy.timeout)
+        : await fetchWithTimeout(proxy.url, {}, proxy.timeout);
+        
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       return res; // Success!
     } catch (e: any) {
-      console.error(`[codex-skills-mcp] Network warning: ${proxy.name} failed to fetch (${e.message}). Downgrading to next...`);
+      console.error(`[codex-skills-mcp] Network warning: [${proxy.name}] failed (${e.message}). Auto-switching to next node...`);
       lastError = e;
     }
   }
 
-  throw new Error(`All acceleration nodes (CN Mirrors) failed to fetch ${path}. Network error: ${lastError?.message}`);
+  throw new Error(`All download nodes failed to fetch ${path}. Network error: ${lastError?.message}`);
 }
 
 /**
@@ -108,9 +136,10 @@ async function fetchDirectoryRecursive(
   config: Config,
   path: string
 ): Promise<{ path: string; downloadUrl: string }[]> {
-  // API is always direct because proxies return 403 for API
+  // API is always direct because proxies return 403 for API. 
+  // We use a generous 10s timeout here since it's critical for discovery.
   const url = `https://api.github.com/repos/${config.githubRepo}/contents/${path}?ref=${config.githubBranch}`;
-  const res = await fetchWithAuth(url, config.githubToken);
+  const res = await fetchWithAuth(url, config.githubToken, 10000);
   const data = (await res.json()) as GithubContentsItem[];
 
   let files: { path: string; downloadUrl: string }[] = [];
@@ -162,7 +191,7 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
       const localFilePath = resolve(config.skillsDir, relativeFilePath);
       mkdirSync(dirname(localFilePath), { recursive: true });
       
-      // Use fallback logic for raw files
+      // Use smart fallback logic for raw files
       const res = await fetchRawWithFallback(config, file.path);
       const buffer = await res.arrayBuffer();
       writeFileSync(localFilePath, Buffer.from(buffer));
