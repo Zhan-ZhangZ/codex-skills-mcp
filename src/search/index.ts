@@ -244,7 +244,7 @@ export class SkillSearchEngine {
   private readonly b = 0.75;
 
   private usageFile?: string;
-  private usageCount: Record<string, number> = {};
+  private usageCount: Record<string, number | { reads: number; failures: number }> = {};
 
   constructor(manifest: ManifestEntry[], config?: Config) {
     if (config) {
@@ -259,20 +259,53 @@ export class SkillSearchEngine {
     if (this.usageFile && existsSync(this.usageFile)) {
       try {
         this.usageCount = JSON.parse(readFileSync(this.usageFile, "utf-8"));
+        // Normalize the legacy `{ skill: count }` format.
+        for (const key of Object.keys(this.usageCount)) {
+          const value = this.usageCount[key];
+          if (typeof value === "number") {
+            this.usageCount[key] = { reads: value, failures: 0 };
+          }
+        }
       } catch {
         this.usageCount = {};
       }
     }
   }
 
-  public recordUsage(skillName: string) {
+  private getUsage(name: string): { reads: number; failures: number } {
+    const value = this.usageCount[name];
+    if (value && typeof value === "object") {
+      return { reads: value.reads || 0, failures: value.failures || 0 };
+    }
+    if (typeof value === "number") {
+      return { reads: value, failures: 0 };
+    }
+    return { reads: 0, failures: 0 };
+  }
+
+  private saveUsage(): void {
     if (!this.usageFile) return;
-    this.usageCount[skillName] = (this.usageCount[skillName] || 0) + 1;
     try {
       writeFileSync(this.usageFile, JSON.stringify(this.usageCount, null, 2), "utf-8");
     } catch {
       // Ignore write errors
     }
+  }
+
+  /** Record a successful read (personalized search boost). */
+  public recordUsage(skillName: string) {
+    if (!this.usageFile) return;
+    const cur = this.getUsage(skillName);
+    this.usageCount[skillName] = { reads: cur.reads + 1, failures: cur.failures };
+    this.saveUsage();
+  }
+
+  /** Record a failed read (search demotion for unreliable skills). */
+  public recordFailure(skillName: string) {
+    if (!this.usageFile) return;
+    const cur = this.getUsage(skillName);
+    this.usageCount[skillName] = { reads: cur.reads, failures: cur.failures + 1 };
+    this.saveUsage();
   }
 
   private buildIndex(manifest: ManifestEntry[]): void {
@@ -514,10 +547,13 @@ export class SkillSearchEngine {
         if (exactNameMatch) finalScore += 15;
         if (leadingMatch) finalScore += 5;
 
-        // Personalization boost from usage history
-        const usage = this.usageCount[item.entry.name] || 0;
-        if (usage > 0) {
-          finalScore *= 1 + 0.2 * Math.log(1 + usage);
+        // Personalization from usage history: reads boost, failures demote.
+        const usage = this.getUsage(item.entry.name);
+        if (usage.reads > 0) {
+          finalScore *= 1 + 0.2 * Math.log(1 + usage.reads);
+        }
+        if (usage.failures > 0) {
+          finalScore *= Math.max(0.5, 1 - 0.3 * Math.log(1 + usage.failures));
         }
 
         if (item.isSubSkill) finalScore *= 0.7;

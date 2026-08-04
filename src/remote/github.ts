@@ -22,6 +22,31 @@ interface SkillTreeCache {
 const TREE_CACHE_FILE = ".codex-skills.tree.json";
 
 /**
+ * Category-wide tree cache. The repository and even single top-level
+ * categories can exceed GitHub's recursive-tree truncation limit (this repo
+ * is >100k files), but small categories such as the academic ones fit easily.
+ * One `contents + git/trees` pair per category replaces the previous 2 API
+ * calls per uncached skill, and the result is cached next to the manifest.
+ */
+const CATEGORY_TREE_TTL_MS = 60 * 60 * 1000;
+const CATEGORY_TREE_CACHE_FILE = ".category-trees.json";
+
+interface CategoryTreeEntry {
+  /** Path relative to the category dir, e.g. "paper-search/SKILL.md" */
+  path: string;
+  size: number;
+}
+
+interface CategoryTreeData {
+  fetchedAt: number;
+  truncated: boolean;
+  entries: CategoryTreeEntry[];
+}
+
+/** Progress reporter used to emit MCP `notifications/progress` during fetches. */
+export type ProgressCallback = (done: number, total: number, message: string) => void;
+
+/**
  * Fetch with timeout using AbortController
  */
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 3000): Promise<Response> {
@@ -56,33 +81,35 @@ async function fetchWithAuth(url: string, token?: string, timeout = 3000): Promi
 }
 
 /**
- * Advanced raw file downloader with Automatic 3-second Timeout Fallback Chain
+ * Advanced raw file downloader — races all download nodes in parallel and
+ * returns the first success, aborting the losers. This replaces the old
+ * sequential 3s + 10s + 10s + 10s fallback chain, so a fast node (e.g.
+ * jsDelivr) wins immediately instead of waiting for GitHub to time out.
  */
 async function fetchRawWithFallback(config: Config, path: string): Promise<Response> {
-  // Define the smart fallback chain
-  const fallbacks = [
-    // 0. Official direct (Fastest if VPN is on, but fails/timeouts in pure CN network)
+  const nodes = [
+    // Official direct (fastest with a working route to GitHub)
     {
       name: "GitHub Official",
       url: `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
       useAuth: true,
-      timeout: 3000 // 3 seconds timeout for direct connection
+      timeout: 3000
     },
-    // 1. jsdelivr CDN (Fastest in China without VPN)
+    // jsDelivr CDN (fastest in CN without VPN)
     {
       name: "jsDelivr",
       url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${config.githubBranch}/${path}`,
       useAuth: false,
-      timeout: 10000 // longer timeout for fallbacks
+      timeout: 10000
     },
-    // 2. gh-proxy.com (Reliable raw proxy)
+    // gh-proxy.com
     {
       name: "gh-proxy.com",
       url: `https://gh-proxy.com/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
       useAuth: false,
       timeout: 10000
     },
-    // 3. ghfast.top (Backup raw proxy)
+    // ghfast.top
     {
       name: "ghfast.top",
       url: `https://ghfast.top/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
@@ -91,25 +118,46 @@ async function fetchRawWithFallback(config: Config, path: string): Promise<Respo
     }
   ];
 
-  let lastError: any = null;
-
-  for (const proxy of fallbacks) {
+  const controllers: AbortController[] = [];
+  const attempts = nodes.map(async (node) => {
+    const controller = new AbortController();
+    controllers.push(controller);
+    const timer = setTimeout(() => controller.abort(), node.timeout);
     try {
-      const res = proxy.useAuth
-        ? await fetchWithAuth(proxy.url, config.githubToken, proxy.timeout)
-        : await fetchWithTimeout(proxy.url, {}, proxy.timeout);
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      const headers: Record<string, string> = {};
+      if (node.useAuth && config.githubToken) {
+        headers["Authorization"] = `Bearer ${config.githubToken}`;
       }
-      return res; // Success!
-    } catch (e: any) {
-      console.error(`[codex-skills-mcp] Network warning: [${proxy.name}] failed (${e.message}). Auto-switching to next node...`);
-      lastError = e;
+      const res = await fetch(node.url, { headers, signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return { node, res, controller };
+    } catch (error: any) {
+      throw Object.assign(new Error(error.message || String(error)), { nodeName: node.name });
+    } finally {
+      clearTimeout(timer);
     }
-  }
+  });
+  // Swallow rejections of losing nodes so they never surface as unhandled.
+  for (const attempt of attempts) attempt.catch(() => {});
 
-  throw new Error(`All download nodes failed to fetch ${path}. Network error: ${lastError?.message}\n\n【网络兜底提示】您的网络环境极其恶劣，所有的直连与免翻墙加速节点均已失效。为了保证技能库的稳定拉取，建议您配置科学上网环境。推荐服务：https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs (该服务极具性价比，最便宜每月200G流量一年仅需13.99元)`);
+  try {
+    const winner = await Promise.any(attempts);
+    for (const c of controllers) {
+      if (c !== winner.controller) c.abort();
+    }
+    return winner.res;
+  } catch (aggregate: any) {
+    const reasons = (aggregate.errors || [])
+      .map((e: any) => `[${e.nodeName}] ${e.message}`)
+      .join("; ");
+    throw new Error(
+      `All download nodes failed to fetch ${path}. ${reasons}\n\n` +
+      `【网络兜底提示】您的网络环境极其恶劣，所有的直连与免翻墙加速节点均已失效。` +
+      `为了保证技能库的稳定拉取，建议您配置科学上网环境。推荐服务：` +
+      `https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs ` +
+      `(该服务极具性价比，最便宜每月200G流量一年仅需13.99元)`
+    );
+  }
 }
 
 /**
@@ -185,6 +233,168 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
   );
 }
 
+function loadCategoryTree(config: Config, categoryPath: string): CategoryTreeData | null {
+  const file = join(config.skillsDir, CATEGORY_TREE_CACHE_FILE);
+  if (!existsSync(file)) return null;
+  try {
+    const all = JSON.parse(readFileSync(file, "utf-8")) as Record<string, CategoryTreeData>;
+    const cached = all[categoryPath];
+    if (!cached) return null;
+    if (Date.now() - cached.fetchedAt > CATEGORY_TREE_TTL_MS) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function saveCategoryTree(
+  config: Config,
+  categoryPath: string,
+  data: Omit<CategoryTreeData, "fetchedAt">
+): void {
+  const file = join(config.skillsDir, CATEGORY_TREE_CACHE_FILE);
+  let all: Record<string, CategoryTreeData> = {};
+  if (existsSync(file)) {
+    try {
+      all = JSON.parse(readFileSync(file, "utf-8")) as Record<string, CategoryTreeData>;
+    } catch {
+      all = {};
+    }
+  }
+  all[categoryPath] = { ...data, fetchedAt: Date.now() };
+  mkdirSync(config.skillsDir, { recursive: true });
+  writeFileSync(file, JSON.stringify(all), "utf-8");
+}
+
+/**
+ * Fetch the recursive tree of one category directory (contents + git/trees).
+ * Returns `truncated: true` when the category is too large for the API, in
+ * which case callers fall back to the per-skill path.
+ */
+async function fetchCategoryTree(
+  config: Config,
+  categoryPath: string
+): Promise<Omit<CategoryTreeData, "fetchedAt">> {
+  const segments = categoryPath.split("/").filter(Boolean);
+  const dirName = segments[segments.length - 1];
+  const parentPath = segments.slice(0, -1).join("/");
+  const parentRemotePath = buildSkillRemotePath(config, parentPath);
+  const apiBase = `https://api.github.com/repos/${config.githubRepo}/`;
+
+  console.error(`[codex-skills-mcp] Listing category tree: ${categoryPath}...`);
+  const contentsRes = await fetchWithAuth(
+    `${apiBase}contents/${parentRemotePath}?ref=${config.githubBranch}`,
+    config.githubToken,
+    10000
+  );
+  const contents = (await contentsRes.json()) as any;
+  const dir = (Array.isArray(contents) ? contents : []).find(
+    (item: any) => item.name === dirName && item.type === "dir"
+  );
+  if (!dir || !dir.sha) {
+    throw new Error(`Category directory "${dirName}" not found at "${parentRemotePath}"`);
+  }
+
+  const treeRes = await fetchWithAuth(
+    `${apiBase}git/trees/${dir.sha}?recursive=1`,
+    config.githubToken,
+    30000
+  );
+  const tree = (await treeRes.json()) as any;
+  if (tree.truncated) {
+    return { truncated: true, entries: [] };
+  }
+  const entries: CategoryTreeEntry[] = (tree.tree || [])
+    .filter((t: any) => t.type === "blob" && typeof t.path === "string")
+    .map((t: any) => ({
+      path: t.path,
+      size: typeof t.size === "number" ? t.size : 0,
+    }));
+  console.error(
+    `[codex-skills-mcp] Category tree cached: ${entries.length} files (${categoryPath})`
+  );
+  return { truncated: false, entries };
+}
+
+const categoryTreeInflight = new Map<
+  string,
+  Promise<CategoryTreeData | null>
+>();
+
+/**
+ * Ensure a category's tree is cached (deduplicated, TTL-checked). Failures and
+ * truncated categories degrade gracefully to null so the per-skill API still
+ * works — and truncated results are cached so we don't retry a huge category
+ * repeatedly within the TTL.
+ */
+export async function ensureCategoryTree(
+  config: Config,
+  categoryPath: string
+): Promise<CategoryTreeData | null> {
+  const cached = loadCategoryTree(config, categoryPath);
+  if (cached) return cached;
+
+  const existing = categoryTreeInflight.get(categoryPath);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const data = await fetchCategoryTree(config, categoryPath);
+      const full: CategoryTreeData = { ...data, fetchedAt: Date.now() };
+      saveCategoryTree(config, categoryPath, full);
+      return full;
+    } catch (error: any) {
+      console.error(
+        `[codex-skills-mcp] Category tree unavailable for ${categoryPath} (${error.message}); per-skill API fallback.`
+      );
+      return null;
+    } finally {
+      categoryTreeInflight.delete(categoryPath);
+    }
+  })();
+  categoryTreeInflight.set(categoryPath, promise);
+  return promise;
+}
+
+/**
+ * Look up a skill's file list in its category tree cache. Returns null when
+ * unavailable/truncated so callers fall back to the per-skill API path.
+ */
+async function fetchSkillTreeFromCategory(
+  config: Config,
+  entry: ManifestEntry
+): Promise<SkillTreeCache | null> {
+  const relPath = entry.relative_path.replace(/^\.\//, "");
+  const segments = relPath.split("/").filter(Boolean);
+  if (segments.length < 3) return null; // router/special entries
+  const categoryPath = segments.slice(0, 2).join("/");
+  const skillName = segments[segments.length - 1];
+
+  const data = await ensureCategoryTree(config, categoryPath);
+  if (!data || data.truncated || data.entries.length === 0) return null;
+
+  const prefix = skillName + "/";
+  const files: TreeFileEntry[] = [];
+  for (const entryItem of data.entries) {
+    if (entryItem.path.startsWith(prefix)) {
+      files.push({ path: entryItem.path.slice(prefix.length), size: entryItem.size });
+    }
+  }
+  if (files.length > 0) {
+    return { version: 1, files };
+  }
+  // Single-file skill: the entry itself is the file.
+  const exact = data.entries.find((entryItem) => entryItem.path === skillName);
+  if (exact) {
+    return {
+      version: 1,
+      files: [{ path: basename(skillName), size: exact.size }],
+      singleFileRemotePath: buildSkillRemotePath(config, `${categoryPath}/${skillName}`),
+    };
+  }
+  return null;
+}
+
 /**
  * Run `worker` over `items` with at most `limit` concurrent executions.
  * Collects per-item errors instead of failing fast, so one bad file never
@@ -243,7 +453,8 @@ async function downloadMissing(
   config: Config,
   relPath: string,
   tree: SkillTreeCache,
-  skillLocalPath: string
+  skillLocalPath: string,
+  onProgress?: ProgressCallback
 ): Promise<void> {
   if (!tree.files || tree.files.length === 0) return;
 
@@ -259,6 +470,7 @@ async function downloadMissing(
   );
   const startedAt = Date.now();
   const limit = Math.max(1, config.downloadConcurrency);
+  let done = 0;
 
   await runPool(missing, limit, async (file) => {
     const remotePath = tree.singleFileRemotePath ?? `${skillRemotePath}/${file.path}`;
@@ -267,6 +479,8 @@ async function downloadMissing(
     const localFile = resolve(skillLocalPath, file.path);
     mkdirSync(dirname(localFile), { recursive: true });
     writeFileSync(localFile, buffer);
+    done += 1;
+    onProgress?.(done, missing.length, `Fetching ${done}/${missing.length} files for ${skillName}`);
   });
 
   console.error(
@@ -318,15 +532,19 @@ const inflightFetches = new Map<string, Promise<void>>();
 /**
  * Ensure a skill's directory is downloaded and cached.
  *
- * - Listing uses only 2 API calls (parent contents + recursive subtree tree),
- *   never the full repository tree, so huge repos stay within GitHub limits.
+ * - Listing prefers the category-wide tree cache (2 API calls per category,
+ *   refreshed on a TTL); falls back to the per-skill subtree API if needed.
  * - Downloads run concurrently and skip files already cached with the right size.
  * - A `.codex-skills.tree.json` marker records the file list + completion state,
  *   so an interrupted download resumes on the next call instead of being
  *   silently treated as complete.
  * - Concurrent calls for the same skill are deduplicated via a promise lock.
  */
-export async function ensureSkillFetched(config: Config, entry: ManifestEntry): Promise<void> {
+export async function ensureSkillFetched(
+  config: Config,
+  entry: ManifestEntry,
+  onProgress?: ProgressCallback
+): Promise<void> {
   const relPath = entry.relative_path.replace(/^\.\//, "");
   const skillLocalPath = resolve(config.skillsDir, relPath);
   const cacheFile = join(skillLocalPath, TREE_CACHE_FILE);
@@ -354,7 +572,7 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
 
   const fetchPromise = (async () => {
     try {
-      await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile);
+      await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
     } finally {
       inflightFetches.delete(relPath);
     }
@@ -370,7 +588,8 @@ async function doFetchSkill(
   entry: ManifestEntry,
   relPath: string,
   skillLocalPath: string,
-  cacheFile: string
+  cacheFile: string,
+  onProgress?: ProgressCallback
 ): Promise<void> {
   // Re-check after acquiring lock (another caller may have completed)
   if (existsSync(cacheFile)) {
@@ -381,12 +600,12 @@ async function doFetchSkill(
           return;
         }
         // Some files disappeared — fetch only the gaps
-        await downloadMissing(config, relPath, cached, skillLocalPath);
+        await downloadMissing(config, relPath, cached, skillLocalPath, onProgress);
         return;
       }
       if (Array.isArray(cached.files)) {
         // Resume: reuse the cached file list
-        await downloadMissing(config, relPath, cached, skillLocalPath);
+        await downloadMissing(config, relPath, cached, skillLocalPath, onProgress);
         writeFileSync(
           cacheFile,
           JSON.stringify({ ...cached, completedAt: new Date().toISOString() }, null, 2),
@@ -402,10 +621,11 @@ async function doFetchSkill(
   mkdirSync(skillLocalPath, { recursive: true });
 
   console.error(`[codex-skills-mcp] Listing files for skill: ${entry.name}...`);
-  const tree = await fetchSkillTree(config, relPath);
+  const treeFromCategory = await fetchSkillTreeFromCategory(config, entry);
+  const tree = treeFromCategory ?? (await fetchSkillTree(config, relPath));
   writeFileSync(cacheFile, JSON.stringify(tree, null, 2), "utf-8");
 
-  await downloadMissing(config, relPath, tree, skillLocalPath);
+  await downloadMissing(config, relPath, tree, skillLocalPath, onProgress);
 
   writeFileSync(
     cacheFile,

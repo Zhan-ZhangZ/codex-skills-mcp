@@ -14,7 +14,7 @@ export function registerReadSkill(
     {
       name: z.string().describe("Exact skill name from search results, e.g. 'MediaCrawler'"),
     },
-    async ({ name }) => {
+    async ({ name }, extra) => {
       const entry = searchEngine.findByName(name);
       if (!entry) {
         return {
@@ -27,8 +27,22 @@ export function registerReadSkill(
         };
       }
 
+      // MCP progress notifications — clients opt in by sending a progressToken
+      // in the request meta. Without one we stay silent (backwards compatible).
+      const progressToken = extra?._meta?.progressToken;
+      const sendProgress = (progress: number, total: number, message: string) => {
+        if (progressToken !== undefined) {
+          void extra.sendNotification({
+            method: "notifications/progress",
+            params: { progressToken, progress, total, message },
+          });
+        }
+      };
+
       try {
-        const result = await loader.readSkill(entry);
+        const result = await loader.readSkill(entry, (done, total, message) =>
+          sendProgress(done, total, message)
+        );
 
         // Record usage for personalized search ranking
         if (typeof searchEngine.recordUsage === "function") {
@@ -89,6 +103,10 @@ export function registerReadSkill(
           ],
         };
       } catch (err) {
+        // Record the failure so search ranking can demote unreliable skills
+        if (typeof searchEngine.recordFailure === "function") {
+          searchEngine.recordFailure(entry.name);
+        }
         return {
           content: [
             {
