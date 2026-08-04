@@ -68,9 +68,15 @@ curl http://localhost:3456/health
 
 ## 客户端配置
 
-### Codex 桌面端（stdio）
+### Codex / ChatGPT 桌面端（stdio）
 
-编辑 `~/.codex/config.toml`：
+**方式一：通过 CLI 快速添加（推荐）**
+
+```bash
+codex mcp add codex-skills -- npx -y codex-skills-mcp@latest
+```
+
+**方式二：编辑 `~/.codex/config.toml` 添加**
 
 ```toml
 [mcp_servers.codex-skills]

@@ -7,14 +7,14 @@
  * library via the Model Context Protocol (MCP).
  *
  * Supports two transport modes:
- *   1. stdio (default) — for Claude Desktop, Cursor, Windsurf etc.
- *   2. HTTP  (--http)  — for ChatGPT desktop app and other remote clients
+ *   1. stdio (default) — for Codex, ChatGPT, Claude Desktop, Cursor, Windsurf etc.
+ *   2. HTTP  (--http)  — for remote clients or Streamable HTTP connections
  *
  * Usage:
  *   # stdio mode (default)
  *   node dist/index.js --skills-dir /path/to/codex-skills
  *
- *   # HTTP mode (for ChatGPT desktop)
+ *   # HTTP mode (for remote connections or HTTP clients)
  *   node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
  */
 
@@ -39,7 +39,7 @@ function createServer(
 ): McpServer {
   const server = new McpServer({
     name: "codex-skills",
-    version: "1.0.6",
+    version: "1.0.7",
   });
 
   registerSearchSkills(server, searchEngine);
@@ -77,8 +77,31 @@ async function startHTTP(
   const app = express();
   app.use(express.json());
 
-  // Store transports for session management
-  const transports = new Map<string, StreamableHTTPServerTransport>();
+  // Session management with activity tracking for timeout cleanup
+  const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes idle timeout
+  interface SessionEntry {
+    transport: StreamableHTTPServerTransport;
+    lastActivity: number;
+  }
+  const sessions = new Map<string, SessionEntry>();
+
+  /** Touch session activity timestamp */
+  function touchSession(sid: string): void {
+    const entry = sessions.get(sid);
+    if (entry) entry.lastActivity = Date.now();
+  }
+
+  // Periodic cleanup of idle sessions (every 5 minutes)
+  setInterval(() => {
+    const now = Date.now();
+    for (const [sid, entry] of sessions) {
+      if (now - entry.lastActivity > SESSION_TTL_MS) {
+        console.error(`[codex-skills-mcp] Evicting idle session: ${sid.substring(0, 8)}...`);
+        try { entry.transport.close?.(); } catch { /* ignore */ }
+        sessions.delete(sid);
+      }
+    }
+  }, 5 * 60 * 1000).unref(); // unref so it doesn't prevent process exit
 
   // MCP endpoint — handles POST (messages) and GET (SSE stream) and DELETE (session close)
   app.post("/mcp", async (req, res) => {
@@ -86,21 +109,22 @@ async function startHTTP(
 
     let transport: StreamableHTTPServerTransport;
 
-    if (sessionId && transports.has(sessionId)) {
-      transport = transports.get(sessionId)!;
+    if (sessionId && sessions.has(sessionId)) {
+      transport = sessions.get(sessionId)!.transport;
+      touchSession(sessionId);
     } else {
       // New session
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         onsessioninitialized: (sid) => {
-          transports.set(sid, transport);
+          sessions.set(sid, { transport, lastActivity: Date.now() });
           console.error(`[codex-skills-mcp] New session: ${sid}`);
         },
       });
 
       transport.onclose = () => {
         const sid = (transport as any).sessionId;
-        if (sid) transports.delete(sid);
+        if (sid) sessions.delete(sid);
       };
 
       // Each session gets its own server instance
@@ -114,21 +138,22 @@ async function startHTTP(
   // GET endpoint for SSE stream (needed by some clients)
   app.get("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !transports.has(sessionId)) {
+    if (!sessionId || !sessions.has(sessionId)) {
       res.status(400).json({ error: "Invalid or missing session ID" });
       return;
     }
-    const transport = transports.get(sessionId)!;
+    touchSession(sessionId);
+    const transport = sessions.get(sessionId)!.transport;
     await transport.handleRequest(req, res);
   });
 
   // DELETE endpoint for session cleanup
   app.delete("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (sessionId && transports.has(sessionId)) {
-      const transport = transports.get(sessionId)!;
+    if (sessionId && sessions.has(sessionId)) {
+      const transport = sessions.get(sessionId)!.transport;
       await transport.handleRequest(req, res);
-      transports.delete(sessionId);
+      sessions.delete(sessionId);
     } else {
       res.status(200).end();
     }
@@ -139,8 +164,9 @@ async function startHTTP(
     res.json({
       status: "ok",
       name: "codex-skills-mcp",
-      version: "1.0.6",
+      version: "1.0.7",
       skills: searchEngine.getCategories().reduce((s, c) => s + c.skill_count, 0),
+      activeSessions: sessions.size,
     });
   });
 
@@ -150,7 +176,7 @@ async function startHTTP(
     console.error(`[codex-skills-mcp] HTTP server running at http://localhost:${port}/mcp`);
     console.error(`[codex-skills-mcp] Health check: http://localhost:${port}/health`);
     console.error(
-      `[codex-skills-mcp] For ChatGPT desktop: use ngrok or similar to expose this endpoint`
+      `[codex-skills-mcp] For remote clients: use ngrok or similar to expose this endpoint`
     );
   });
 }
