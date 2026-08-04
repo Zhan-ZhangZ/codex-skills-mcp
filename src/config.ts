@@ -12,6 +12,8 @@ export interface Config {
   githubToken?: string;
   useCnMirror: boolean;
   downloadConcurrency: number;
+  /** Manifest cache TTL in milliseconds. Default 24 hours. 0 = never refresh. */
+  manifestTTL: number;
 }
 
 /**
@@ -19,7 +21,7 @@ export interface Config {
  */
 function getGitGithubToken(): string | undefined {
   try {
-    const output = execSync('echo "protocol=https\\nhost=github.com\\n" | git credential fill', {
+    const output = execSync('printf "protocol=https\nhost=github.com\n" | git credential fill', {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"]
     });
@@ -112,6 +114,10 @@ export function parseConfig(args: string[]): Config {
 
   const useCnMirror = args.includes("--cn-mirror");
 
+  // Manifest cache TTL (default: 24 hours). --manifest-ttl <seconds> or 0 to disable.
+  const ttlArg = getArg("--manifest-ttl");
+  const manifestTTL = ttlArg !== undefined ? parseInt(ttlArg, 10) * 1000 : 24 * 60 * 60 * 1000;
+
   // Concurrent downloads for skill files (default 16). Configurable via
   // --download-concurrency <n> or CODEX_SKILLS_DOWNLOAD_CONCURRENCY env var.
   const concurrencyArg = getArg("--download-concurrency");
@@ -131,7 +137,8 @@ export function parseConfig(args: string[]): Config {
     githubPath, 
     githubToken,
     useCnMirror,
-    downloadConcurrency
+    downloadConcurrency,
+    manifestTTL
   };
 }
 

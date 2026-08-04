@@ -284,10 +284,24 @@ export async function initRemote(config: Config): Promise<void> {
 }
 
 /**
- * Download the manifest file
+ * Download the manifest file, or refresh it if stale (older than config.manifestTTL).
  */
 export async function fetchManifest(config: Config): Promise<void> {
-  if (existsSync(config.manifestPath)) return;
+  if (existsSync(config.manifestPath)) {
+    // Check staleness
+    if (config.manifestTTL > 0) {
+      try {
+        const mtime = statSync(config.manifestPath).mtimeMs;
+        const age = Date.now() - mtime;
+        if (age < config.manifestTTL) return; // Still fresh
+        console.error(`[codex-skills-mcp] Manifest is ${Math.round(age / 3600000)}h old, refreshing...`);
+      } catch {
+        // Can't stat — fall through to re-download
+      }
+    } else {
+      return; // TTL=0 means never refresh
+    }
+  }
 
   const manifestPath = `${config.githubPath}/skills_manifest.json`;
   console.error(`[codex-skills-mcp] Fetching manifest...`);
@@ -298,6 +312,9 @@ export async function fetchManifest(config: Config): Promise<void> {
   writeFileSync(config.manifestPath, text, "utf-8");
 }
 
+/** Per-skill fetch deduplication: prevents concurrent downloads of the same skill */
+const inflightFetches = new Map<string, Promise<void>>();
+
 /**
  * Ensure a skill's directory is downloaded and cached.
  *
@@ -307,13 +324,14 @@ export async function fetchManifest(config: Config): Promise<void> {
  * - A `.codex-skills.tree.json` marker records the file list + completion state,
  *   so an interrupted download resumes on the next call instead of being
  *   silently treated as complete.
+ * - Concurrent calls for the same skill are deduplicated via a promise lock.
  */
 export async function ensureSkillFetched(config: Config, entry: ManifestEntry): Promise<void> {
   const relPath = entry.relative_path.replace(/^\.\//, "");
   const skillLocalPath = resolve(config.skillsDir, relPath);
   const cacheFile = join(skillLocalPath, TREE_CACHE_FILE);
 
-  // Fast path: fully downloaded in a previous run
+  // Fast path: fully downloaded in a previous run (sync check, no lock needed)
   if (existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
@@ -321,12 +339,53 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
         if (areFilesUpToDate(cached, skillLocalPath)) {
           return;
         }
-        // Some files disappeared after completion — fetch only the gaps.
+      }
+    } catch {
+      // Corrupted — fall through to locked fetch
+    }
+  }
+
+  // Dedup: if another call is already fetching this skill, wait for it
+  const existing = inflightFetches.get(relPath);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile);
+    } finally {
+      inflightFetches.delete(relPath);
+    }
+  })();
+
+  inflightFetches.set(relPath, fetchPromise);
+  await fetchPromise;
+}
+
+/** Inner fetch logic, called under dedup lock */
+async function doFetchSkill(
+  config: Config,
+  entry: ManifestEntry,
+  relPath: string,
+  skillLocalPath: string,
+  cacheFile: string
+): Promise<void> {
+  // Re-check after acquiring lock (another caller may have completed)
+  if (existsSync(cacheFile)) {
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
+      if (cached.completedAt && Array.isArray(cached.files)) {
+        if (areFilesUpToDate(cached, skillLocalPath)) {
+          return;
+        }
+        // Some files disappeared — fetch only the gaps
         await downloadMissing(config, relPath, cached, skillLocalPath);
         return;
       }
       if (Array.isArray(cached.files)) {
-        // Resume: reuse the cached file list, download only what is missing
+        // Resume: reuse the cached file list
         await downloadMissing(config, relPath, cached, skillLocalPath);
         writeFileSync(
           cacheFile,
@@ -336,7 +395,7 @@ export async function ensureSkillFetched(config: Config, entry: ManifestEntry): 
         return;
       }
     } catch {
-      // Corrupted marker — fall through and rebuild the file list
+      // Corrupted marker — fall through
     }
   }
 

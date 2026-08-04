@@ -1,7 +1,6 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { resolve, join, relative, extname } from "node:path";
 import type { ManifestEntry, Config } from "../config.js";
-import { ensureSkillFetched } from "../remote/github.js";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -48,12 +47,22 @@ const MAX_FILE_SIZE = 500 * 1024;
  */
 export class SkillLoader {
   private skillsDir: string;
+  private _ensureSkillFetched: ((config: Config, entry: ManifestEntry) => Promise<void>) | null = null;
 
   constructor(
     private config: Config,
     private manifest: ManifestEntry[]
   ) {
     this.skillsDir = config.skillsDir;
+  }
+
+  /** Lazy-load remote module only when needed */
+  private async ensureRemoteFetched(entry: ManifestEntry): Promise<void> {
+    if (!this._ensureSkillFetched) {
+      const { ensureSkillFetched } = await import("../remote/github.js");
+      this._ensureSkillFetched = ensureSkillFetched;
+    }
+    await this._ensureSkillFetched(this.config, entry);
   }
 
   /**
@@ -70,7 +79,7 @@ export class SkillLoader {
    */
   async readSkill(entry: ManifestEntry): Promise<ReadSkillResult> {
     if (this.config.isRemote) {
-      await ensureSkillFetched(this.config, entry);
+      await this.ensureRemoteFetched(entry);
     }
 
     const skillPath = this.resolveSkillPath(entry);
@@ -256,7 +265,7 @@ export class SkillLoader {
     filePath: string
   ): Promise<{ content: string; size_bytes: number }> {
     if (this.config.isRemote) {
-      await ensureSkillFetched(this.config, entry);
+      await this.ensureRemoteFetched(entry);
     }
 
     const skillPath = this.resolveSkillPath(entry);
@@ -312,7 +321,7 @@ export class SkillLoader {
     maxDepth: number = 2
   ): Promise<FileNode[]> {
     if (this.config.isRemote) {
-      await ensureSkillFetched(this.config, entry);
+      await this.ensureRemoteFetched(entry);
     }
 
     const skillPath = this.resolveSkillPath(entry);
