@@ -148,6 +148,13 @@ export interface ManifestEntry {
   category: string;
   folder: string;
   relative_path: string;
+  // Metadata Extensions
+  aliases?: string[];
+  tags?: string[];
+  language?: string;
+  dependencies?: string[];
+  updated_at?: string;
+  stars?: number;
 }
 
 export function loadManifest(manifestPath: string): ManifestEntry[] {

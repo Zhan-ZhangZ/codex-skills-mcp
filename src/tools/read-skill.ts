@@ -30,6 +30,11 @@ export function registerReadSkill(
       try {
         const result = await loader.readSkill(entry);
 
+        // Record usage for personalized search ranking
+        if (typeof searchEngine.recordUsage === "function") {
+          searchEngine.recordUsage(entry.name);
+        }
+
         // Format structure as a compact tree
         const structureStr = formatTree(result.structure.files, "");
 
