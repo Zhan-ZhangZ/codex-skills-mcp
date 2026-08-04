@@ -39,7 +39,7 @@ function createServer(
 ): McpServer {
   const server = new McpServer({
     name: "codex-skills",
-    version: "1.0.7",
+    version: "1.1.0",
   });
 
   registerSearchSkills(server, searchEngine);
@@ -164,7 +164,7 @@ async function startHTTP(
     res.json({
       status: "ok",
       name: "codex-skills-mcp",
-      version: "1.0.7",
+      version: "1.1.0",
       skills: searchEngine.getCategories().reduce((s, c) => s + c.skill_count, 0),
       activeSessions: sessions.size,
     });

@@ -1,6 +1,6 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.0.7",
+  "version": "1.1.0",
   "description": "MCP Server for Codex-Skills - Intelligent skill library search, read and orchestration",
   "type": "module",
   "bin": {
