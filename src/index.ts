@@ -200,7 +200,7 @@ async function main(): Promise<void> {
   console.error(`[codex-skills-mcp] Loaded ${manifest.length} skills`);
 
   // Build search index
-  const searchEngine = new SkillSearchEngine(manifest);
+  const searchEngine = new SkillSearchEngine(manifest, config);
   const categories = searchEngine.getCategories();
   console.error(
     `[codex-skills-mcp] Index built: ${categories.length} categories, ` +

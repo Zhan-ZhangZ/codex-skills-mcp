@@ -38,8 +38,8 @@ export function registerPlanWorkflow(
       let output = `## Workflow Suggestions for:\n> ${task_description}\n\n`;
       output += `Found ${results.length} potentially relevant skills:\n\n`;
 
-      // Top recommendations (score > 3)
-      const topSkills = results.filter((r) => r.score > 3);
+      // Top recommendations (top 5 by rank, no hardcoded score threshold)
+      const topSkills = results.slice(0, 5);
       if (topSkills.length > 0) {
         output += "### 🎯 Top Recommendations\n";
         for (const s of topSkills) {

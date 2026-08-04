@@ -29,10 +29,13 @@ export function registerSearchSkills(
       }
 
       const formatted = results
-        .map(
-          (r, i) =>
-            `${i + 1}. **${r.name}** [${r.category}] (score: ${r.score})\n   ${r.description.substring(0, 200)}${r.description.length > 200 ? "..." : ""}`
-        )
+        .map((r, i) => {
+          const hit =
+            Array.isArray(r.matched_terms) && r.matched_terms.length > 0
+              ? `\n   命中: ${r.matched_terms.join("、")}`
+              : "";
+          return `${i + 1}. **${r.name}** [${r.category}] (score: ${r.score})\n   ${r.description.substring(0, 200)}${r.description.length > 200 ? "..." : ""}${hit}`;
+        })
         .join("\n\n");
 
       return {
