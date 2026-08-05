@@ -63,7 +63,7 @@ node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
 ```bash
 curl http://localhost:3456/health
 # 预期输出
-{"status":"ok","name":"codex-skills-mcp","version":"1.0.6","skills":181}
+{"status":"ok","name":"codex-skills-mcp","version":"1.2.1","skills":181}
 ```
 
 ## 客户端配置

@@ -21,6 +21,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createRequire } from "node:module";
 
 import { parseConfig, loadManifest } from "./config.js";
 import { SkillSearchEngine } from "./search/index.js";
@@ -33,13 +34,18 @@ import { registerLoadSkillFile } from "./tools/load-skill-file.js";
 import { registerListSkillFiles } from "./tools/list-skill-files.js";
 import { registerPlanWorkflow } from "./tools/plan-workflow.js";
 
+// Single source of truth for the version: read package.json instead of
+// hardcoding it here, so releasing a new version only requires one bump.
+const require = createRequire(import.meta.url);
+const PKG_VERSION = require("../package.json").version as string;
+
 function createServer(
   searchEngine: SkillSearchEngine,
   loader: SkillLoader
 ): McpServer {
   const server = new McpServer({
     name: "codex-skills",
-    version: "1.2.0",
+    version: PKG_VERSION,
   });
 
   registerSearchSkills(server, searchEngine);
@@ -164,7 +170,7 @@ async function startHTTP(
     res.json({
       status: "ok",
       name: "codex-skills-mcp",
-      version: "1.2.0",
+      version: PKG_VERSION,
       skills: searchEngine.getCategories().reduce((s, c) => s + c.skill_count, 0),
       activeSessions: sessions.size,
     });
