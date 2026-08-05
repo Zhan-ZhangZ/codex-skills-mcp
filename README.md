@@ -264,6 +264,7 @@ Agent → 按 SKILL.md 指令执行任务
 | `--http` | - | 启动 HTTP 模式 |
 | `--port` | `3456` | HTTP 端口 |
 | `--download-concurrency` | `16` | 技能文件并发下载数 |
+| `--manifest-ttl <秒>` | `86400` | 清单缓存有效期（0 = 永不刷新；设小值如 60 可让新技能更快出现） |
 | `--cn-mirror` | - | ⚠️ 已废弃（兼容保留）：网络加速现为自动回退链，此参数不再生效 |
 
 环境变量：`CODEX_SKILLS_DIR`（本地技能库路径）、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`。
@@ -276,7 +277,8 @@ Agent → 按 SKILL.md 指令执行任务
 |------|------|
 | npx 首次运行较慢 | 首次需下载 npm 包 + 拉取清单，属正常；之后走缓存 |
 | 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
-| 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启 |
+| 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启，或设 `--manifest-ttl 60` 让清单自动高频刷新 |
+| 仓库新增了技能但搜不到 | 可能是 CDN 旧清单缓存所致：清单现在优先直连 GitHub 权威源；仍异常时删除 `.codex-skills-cache/skills_manifest.json` 再重启 |
 | `load_skill_file` 读大文件失败 | 单文件上限 500KB，属保护设计 |
 | GitHub API 限流 | 每个技能仅 2 次 API 调用，已缓存技能不再请求；未登录配额 60 次/小时 |
 | 工具列表里看不到 MCP | 客户端未重启，重启会话即可 |

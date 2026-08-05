@@ -520,10 +520,41 @@ export async function fetchManifest(config: Config): Promise<void> {
   const manifestPath = `${config.githubPath}/skills_manifest.json`;
   console.error(`[codex-skills-mcp] Fetching manifest...`);
 
-  const res = await fetchRawWithFallback(config, manifestPath);
+  // The manifest is the source of truth for what skills exist, so it must NOT
+  // race through CDN mirrors: jsDelivr etc. can serve a stale copy for hours
+  // after a repo update, and the stale copy often wins the race. Fetch the
+  // authoritative GitHub raw URL first, and only fall back to mirrors when
+  // the direct connection is unavailable (accepting possible staleness there).
+  const directUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${manifestPath}`;
+  let res: Response;
+  try {
+    res = await fetchWithAuth(directUrl, config.githubToken, 8000);
+  } catch (directErr) {
+    console.error(
+      `[codex-skills-mcp] Direct manifest fetch failed (${(directErr as Error).message}); falling back to mirror chain...`
+    );
+    res = await fetchRawWithFallback(config, manifestPath);
+  }
   const text = await res.text();
 
+  // Validate before replacing the cache — never let a corrupt/empty response
+  // clobber a previously working manifest.
+  let skillCount = 0;
+  try {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error("not a non-empty array");
+    }
+    skillCount = parsed.length;
+  } catch (parseErr) {
+    console.error(
+      `[codex-skills-mcp] Warning: fetched manifest failed validation (${(parseErr as Error).message}); keeping existing cache.`
+    );
+    return;
+  }
+
   writeFileSync(config.manifestPath, text, "utf-8");
+  console.error(`[codex-skills-mcp] Manifest refreshed: ${skillCount} skills`);
 }
 
 /** Per-skill fetch deduplication: prevents concurrent downloads of the same skill */
