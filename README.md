@@ -258,7 +258,7 @@ Agent → 按 SKILL.md 指令执行任务
 | `--skills-dir <path>` | - | 本地技能库目录（指定后进入本地模式） |
 | `--local` | - | 强制本地模式（从 cwd 或 `--skills-dir` 查找清单） |
 | `--github-repo` | `Zhan-ZhangZ/codexprojec` | 远端技能库仓库 |
-| `--github-branch` | `main-lite` | 远端分支 |
+| `--github-branch` | `main` | 远端分支 |
 | `--github-path` | `codex-skills` | 技能库在仓库内的目录 |
 | `--github-token` | 自动从 git 凭据 / `GITHUB_TOKEN` 获取 | GitHub API 鉴权 |
 | `--http` | - | 启动 HTTP 模式 |

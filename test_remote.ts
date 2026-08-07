@@ -4,7 +4,7 @@ import { SkillLoader } from "./src/loader/index.js";
 import { SkillSearchEngine } from "./src/search/index.js";
 
 async function main() {
-  const args = ["--github-repo", "Zhan-ZhangZ/codexprojec", "--github-branch", "main-lite", "--github-path", "codex-skills"];
+  const args = ["--github-repo", "Zhan-ZhangZ/codexprojec", "--github-branch", "main", "--github-path", "codex-skills"];
   const config = parseConfig(args);
   
   console.log("Initializing remote...");

@@ -50,7 +50,7 @@ export function parseConfig(args: string[]): Config {
   };
   
   const githubRepo = getArg("--github-repo") || "Zhan-ZhangZ/codexprojec";
-  const githubBranch = getArg("--github-branch") || "main-lite";
+  const githubBranch = getArg("--github-branch") || "main";
   const githubPath = getArg("--github-path") || "codex-skills";
   
   let githubToken = getArg("--github-token");

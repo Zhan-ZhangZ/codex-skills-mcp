@@ -16,6 +16,8 @@ interface SkillTreeCache {
   files: TreeFileEntry[];
   /** For single-file skills: absolute remote path to fetch (files.path is not prefixed) */
   singleFileRemotePath?: string;
+  /** Remote source (repo/branch/path) this cache entry was fetched from */
+  source?: CacheSource;
 }
 
 /** Metadata marker written inside each cached skill directory */
@@ -41,6 +43,56 @@ interface CategoryTreeData {
   fetchedAt: number;
   truncated: boolean;
   entries: CategoryTreeEntry[];
+  /** Remote source (repo/branch/path) this cache entry was fetched from */
+  source?: CacheSource;
+}
+
+/** Identity of the remote source a cache entry was fetched from. */
+interface CacheSource {
+  repo: string;
+  branch: string;
+  path: string;
+}
+
+/** Sidecar marker recording which remote source produced the manifest cache. */
+const SOURCE_CACHE_FILE = ".codex-skills.source.json";
+
+function cacheSource(config: Config): CacheSource {
+  return {
+    repo: config.githubRepo ?? "",
+    branch: config.githubBranch ?? "",
+    path: config.githubPath ?? "",
+  };
+}
+
+/** True when a cached entry belongs to the currently configured remote source. */
+function sameSource(cached: CacheSource | null | undefined, config: Config): boolean {
+  if (!cached) return false;
+  const current = cacheSource(config);
+  return (
+    cached.repo === current.repo &&
+    cached.branch === current.branch &&
+    cached.path === current.path
+  );
+}
+
+function readSourceCache(config: Config): CacheSource | null {
+  try {
+    return JSON.parse(
+      readFileSync(join(config.skillsDir, SOURCE_CACHE_FILE), "utf-8")
+    ) as CacheSource;
+  } catch {
+    return null;
+  }
+}
+
+function writeSourceCache(config: Config): void {
+  mkdirSync(config.skillsDir, { recursive: true });
+  writeFileSync(
+    join(config.skillsDir, SOURCE_CACHE_FILE),
+    JSON.stringify(cacheSource(config), null, 2),
+    "utf-8"
+  );
 }
 
 /** Progress reporter used to emit MCP `notifications/progress` during fetches. */
@@ -240,6 +292,8 @@ function loadCategoryTree(config: Config, categoryPath: string): CategoryTreeDat
     const all = JSON.parse(readFileSync(file, "utf-8")) as Record<string, CategoryTreeData>;
     const cached = all[categoryPath];
     if (!cached) return null;
+    // Cache from another repo/branch must not be reused
+    if (!sameSource(cached.source, config)) return null;
     if (Date.now() - cached.fetchedAt > CATEGORY_TREE_TTL_MS) return null;
     return cached;
   } catch {
@@ -261,7 +315,7 @@ function saveCategoryTree(
       all = {};
     }
   }
-  all[categoryPath] = { ...data, fetchedAt: Date.now() };
+  all[categoryPath] = { ...data, source: cacheSource(config), fetchedAt: Date.now() };
   mkdirSync(config.skillsDir, { recursive: true });
   writeFileSync(file, JSON.stringify(all), "utf-8");
 }
@@ -502,8 +556,10 @@ export async function initRemote(config: Config): Promise<void> {
  */
 export async function fetchManifest(config: Config): Promise<void> {
   if (existsSync(config.manifestPath)) {
-    // Check staleness
-    if (config.manifestTTL > 0) {
+    const cachedSource = readSourceCache(config);
+    if (sameSource(cachedSource, config)) {
+      // Same remote source: honor TTL (0 = never refresh by age)
+      if (config.manifestTTL === 0) return;
       try {
         const mtime = statSync(config.manifestPath).mtimeMs;
         const age = Date.now() - mtime;
@@ -513,7 +569,9 @@ export async function fetchManifest(config: Config): Promise<void> {
         // Can't stat — fall through to re-download
       }
     } else {
-      return; // TTL=0 means never refresh
+      console.error(
+        "[codex-skills-mcp] Remote source changed (repo/branch/path), forcing manifest refresh..."
+      );
     }
   }
 
@@ -554,6 +612,7 @@ export async function fetchManifest(config: Config): Promise<void> {
   }
 
   writeFileSync(config.manifestPath, text, "utf-8");
+  writeSourceCache(config);
   console.error(`[codex-skills-mcp] Manifest refreshed: ${skillCount} skills`);
 }
 
@@ -584,7 +643,8 @@ export async function ensureSkillFetched(
   if (existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
-      if (cached.completedAt && Array.isArray(cached.files)) {
+      // Only trust the cache when it belongs to the configured remote source
+      if (sameSource(cached.source, config) && cached.completedAt && Array.isArray(cached.files)) {
         if (areFilesUpToDate(cached, skillLocalPath)) {
           return;
         }
@@ -626,7 +686,9 @@ async function doFetchSkill(
   if (existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
-      if (cached.completedAt && Array.isArray(cached.files)) {
+      if (!sameSource(cached.source, config)) {
+        // Stale cache from another repo/branch — re-list and re-download below
+      } else if (cached.completedAt && Array.isArray(cached.files)) {
         if (areFilesUpToDate(cached, skillLocalPath)) {
           return;
         }
@@ -654,13 +716,14 @@ async function doFetchSkill(
   console.error(`[codex-skills-mcp] Listing files for skill: ${entry.name}...`);
   const treeFromCategory = await fetchSkillTreeFromCategory(config, entry);
   const tree = treeFromCategory ?? (await fetchSkillTree(config, relPath));
-  writeFileSync(cacheFile, JSON.stringify(tree, null, 2), "utf-8");
+  const treeWithSource = { ...tree, source: cacheSource(config) };
+  writeFileSync(cacheFile, JSON.stringify(treeWithSource, null, 2), "utf-8");
 
   await downloadMissing(config, relPath, tree, skillLocalPath, onProgress);
 
   writeFileSync(
     cacheFile,
-    JSON.stringify({ ...tree, completedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ ...treeWithSource, completedAt: new Date().toISOString() }, null, 2),
     "utf-8"
   );
 }
