@@ -245,8 +245,10 @@ export class SkillSearchEngine {
 
   private usageFile?: string;
   private usageCount: Record<string, number | { reads: number; failures: number }> = {};
+  private config?: Config;
 
   constructor(manifest: ManifestEntry[], config?: Config) {
+    this.config = config;
     if (config) {
       // Cache dir path lives next to the manifest
       this.usageFile = dirname(config.manifestPath) + "/usage.json";
@@ -582,5 +584,35 @@ export class SkillSearchEngine {
   findByName(name: string): ManifestEntry | undefined {
     const nameLower = name.toLowerCase();
     return this.index.find((item) => item.entry.name.toLowerCase() === nameLower)?.entry;
+  }
+
+  /**
+   * Forces a refresh of the remote manifest cache and rebuilds the search index.
+   * Returns true if a refresh was attempted, false if running in local mode.
+   */
+  async refreshManifest(): Promise<boolean> {
+    if (!this.config || !this.config.isRemote) return false;
+    try {
+      const { fetchManifest } = await import("../remote/github.js");
+      const { loadManifest } = await import("../config.js");
+      
+      // Temporarily bypass TTL to force a fetch
+      const originalTTL = this.config.manifestTTL;
+      this.config.manifestTTL = 0;
+      
+      console.error("[codex-skills-mcp] Forcing manifest refresh for search...");
+      await fetchManifest(this.config);
+      
+      this.config.manifestTTL = originalTTL;
+      
+      // Reload and rebuild index
+      const manifest = loadManifest(this.config.manifestPath);
+      this.index = [];
+      this.buildIndex(manifest);
+      return true;
+    } catch (err) {
+      console.error("[codex-skills-mcp] Failed to refresh manifest:", err);
+      return false;
+    }
   }
 }

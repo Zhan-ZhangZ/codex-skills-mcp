@@ -13,9 +13,21 @@ export function registerSearchSkills(
       query: z.string().describe("Natural language description of what you need, e.g. '前端性能优化' or 'video subtitle translation'"),
       category: z.string().optional().describe("Optional category filter, e.g. '05_多媒体与设计资产'"),
       limit: z.number().optional().default(8).describe("Max number of results to return (default: 8)"),
+      force_refresh: z.boolean().optional().describe("If true, forcefully refreshes the remote skills list cache. Use this when the user just integrated a new skill and it's not showing up."),
     },
-    async ({ query, category, limit }) => {
-      const results = searchEngine.search(query, { category, limit });
+    async ({ query, category, limit, force_refresh }) => {
+      let results = searchEngine.search(query, { category, limit });
+
+      // Auto-refresh if explicitly requested or if no results are found (might be a newly added skill)
+      if (force_refresh || results.length === 0) {
+        if (typeof searchEngine.refreshManifest === "function") {
+          console.error(`[codex-skills-mcp] ${force_refresh ? 'Explicitly' : 'Automatically'} refreshing manifest for query: "${query}"`);
+          const refreshed = await searchEngine.refreshManifest();
+          if (refreshed) {
+            results = searchEngine.search(query, { category, limit });
+          }
+        }
+      }
 
       if (results.length === 0) {
         return {
