@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 
 export interface Config {
@@ -72,7 +73,13 @@ export function parseConfig(args: string[]): Config {
   }
 
   if (isRemote) {
-    skillsDir = resolve(process.cwd(), ".codex-skills-cache");
+    const cacheDirArg = getArg("--cache-dir");
+    const cacheDirEnv = process.env.CODEX_SKILLS_CACHE_DIR;
+    skillsDir = cacheDirArg
+      ? resolve(cacheDirArg)
+      : cacheDirEnv
+      ? resolve(cacheDirEnv)
+      : resolve(homedir(), ".codex-skills-cache");
     if (!existsSync(skillsDir)) {
       mkdirSync(skillsDir, { recursive: true });
     }
