@@ -15,6 +15,8 @@ export interface Config {
   downloadConcurrency: number;
   /** Manifest cache TTL in milliseconds. Default 24 hours. 0 = never refresh. */
   manifestTTL: number;
+  /** Base download timeout for skill files in milliseconds. Default: 30000 (30s). */
+  downloadTimeout: number;
 }
 
 /**
@@ -135,6 +137,17 @@ export function parseConfig(args: string[]): Config {
     process.exit(1);
   }
 
+  // Base download timeout for skill files (default 30 seconds). Configurable via
+  // --download-timeout <seconds> or CODEX_SKILLS_DOWNLOAD_TIMEOUT env var.
+  const timeoutArg = getArg("--download-timeout");
+  const timeoutEnv = process.env.CODEX_SKILLS_DOWNLOAD_TIMEOUT;
+  const downloadTimeoutSeconds = parseInt(timeoutArg || timeoutEnv || "30", 10);
+  if (!Number.isInteger(downloadTimeoutSeconds) || downloadTimeoutSeconds < 1) {
+    console.error("Error: --download-timeout must be a positive integer");
+    process.exit(1);
+  }
+  const downloadTimeout = downloadTimeoutSeconds * 1000;
+
   return { 
     skillsDir, 
     manifestPath, 
@@ -145,7 +158,8 @@ export function parseConfig(args: string[]): Config {
     githubToken,
     useCnMirror,
     downloadConcurrency,
-    manifestTTL
+    manifestTTL,
+    downloadTimeout
   };
 }
 

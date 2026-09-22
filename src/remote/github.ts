@@ -101,7 +101,7 @@ export type ProgressCallback = (done: number, total: number, message: string) =>
 /**
  * Fetch with timeout using AbortController
  */
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 3000): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -120,7 +120,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
 /**
  * Fetch with optional auth token
  */
-async function fetchWithAuth(url: string, token?: string, timeout = 3000): Promise<Response> {
+async function fetchWithAuth(url: string, token?: string, timeout = 15000): Promise<Response> {
   const headers: Record<string, string> = {};
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
@@ -138,35 +138,41 @@ async function fetchWithAuth(url: string, token?: string, timeout = 3000): Promi
  * sequential 3s + 10s + 10s + 10s fallback chain, so a fast node (e.g.
  * jsDelivr) wins immediately instead of waiting for GitHub to time out.
  */
-async function fetchRawWithFallback(config: Config, path: string): Promise<Response> {
+async function fetchRawWithFallback(config: Config, path: string, expectedSize?: number): Promise<Response> {
+  const baseTimeout = config.downloadTimeout || 30000;
+  // Dynamically expand timeout for large files (>5MB), assuming at least ~300KB/s transfer floor
+  const dynamicTimeout = expectedSize && expectedSize > 5 * 1024 * 1024
+    ? Math.max(baseTimeout, Math.min(180000, Math.ceil(expectedSize / (300 * 1024)) * 1000))
+    : baseTimeout;
+
   const nodes = [
-    // Official direct (fastest with a working route to GitHub)
+    // Official direct (fastest with a working route or VPN to GitHub)
     {
       name: "GitHub Official",
       url: `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
       useAuth: true,
-      timeout: 3000
+      timeout: dynamicTimeout
     },
     // jsDelivr CDN (fastest in CN without VPN)
     {
       name: "jsDelivr",
       url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${config.githubBranch}/${path}`,
       useAuth: false,
-      timeout: 10000
+      timeout: dynamicTimeout
     },
     // gh-proxy.com
     {
       name: "gh-proxy.com",
       url: `https://gh-proxy.com/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
       useAuth: false,
-      timeout: 10000
+      timeout: dynamicTimeout
     },
     // ghfast.top
     {
       name: "ghfast.top",
       url: `https://ghfast.top/https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`,
       useAuth: false,
-      timeout: 10000
+      timeout: dynamicTimeout
     }
   ];
 
@@ -238,7 +244,7 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
   const contentsRes = await fetchWithAuth(
     `${apiBase}contents/${parentRemotePath}?ref=${config.githubBranch}`,
     config.githubToken,
-    10000
+    20000
   );
   const contents = (await contentsRes.json()) as any;
 
@@ -254,7 +260,7 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
     const treeRes = await fetchWithAuth(
       `${apiBase}git/trees/${dir.sha}?recursive=1`,
       config.githubToken,
-      30000
+      60000
     );
     const tree = (await treeRes.json()) as any;
     if (tree.truncated) {
@@ -339,7 +345,7 @@ async function fetchCategoryTree(
   const contentsRes = await fetchWithAuth(
     `${apiBase}contents/${parentRemotePath}?ref=${config.githubBranch}`,
     config.githubToken,
-    10000
+    20000
   );
   const contents = (await contentsRes.json()) as any;
   const dir = (Array.isArray(contents) ? contents : []).find(
@@ -352,7 +358,7 @@ async function fetchCategoryTree(
   const treeRes = await fetchWithAuth(
     `${apiBase}git/trees/${dir.sha}?recursive=1`,
     config.githubToken,
-    30000
+    60000
   );
   const tree = (await treeRes.json()) as any;
   if (tree.truncated) {
@@ -528,7 +534,7 @@ async function downloadMissing(
 
   await runPool(missing, limit, async (file) => {
     const remotePath = tree.singleFileRemotePath ?? `${skillRemotePath}/${file.path}`;
-    const res = await fetchRawWithFallback(config, remotePath);
+    const res = await fetchRawWithFallback(config, remotePath, file.size);
     const buffer = Buffer.from(await res.arrayBuffer());
     const localFile = resolve(skillLocalPath, file.path);
     mkdirSync(dirname(localFile), { recursive: true });
@@ -586,7 +592,7 @@ export async function fetchManifest(config: Config): Promise<void> {
   const directUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${manifestPath}`;
   let res: Response;
   try {
-    res = await fetchWithAuth(directUrl, config.githubToken, 8000);
+    res = await fetchWithAuth(directUrl, config.githubToken, 20000);
   } catch (directErr) {
     console.error(
       `[codex-skills-mcp] Direct manifest fetch failed (${(directErr as Error).message}); falling back to mirror chain...`
