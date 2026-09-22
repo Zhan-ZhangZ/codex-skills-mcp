@@ -12,7 +12,10 @@
 
 | 特性 | 说明 |
 |------|------|
-| **6 个 MCP Tools** | search_skills, read_skill, load_skill_file, list_skill_files, list_categories, plan_workflow |
+| **8 个 MCP Tools** | search_skills, read_skill, load_skill_file, list_skill_files, list_categories, plan_workflow, skill_status, diagnostics |
+| **Agent 行为合约** | server instructions + 工具描述 + 返回体尾部三层强化同一套 5 步工作流（见 [docs/AGENT-PROTOCOL.md](docs/AGENT-PROTOCOL.md)） |
+| **缓存状态可见** | search/plan 结果带 `[cached]` 徽标；read_skill 返回 `local_path`；skill_status 深度校验完整性 |
+| **活动日志与诊断** | 全部工具调用/下载/错误落 JSONL 日志；diagnostics 一键审计 |
 | **三层渐进加载** | 检索(~500 tokens) → 阅读(~5K tokens) → 深入(按需) |
 | **中文搜索优化** | CJK bigram 分词 + Leading Words 权重 |
 | **零外部 AI 依赖** | 纯关键词搜索，不需要 embedding 模型 |
@@ -32,7 +35,7 @@ npx -y codex-skills-mcp@latest
 
 1. 从远端技能库拉取清单 `skills_manifest.json`（约 108KB，仅首次）；
 2. 建立本地搜索索引（毫秒级）；
-3. 技能文件按需下载，缓存在当前目录 `.codex-skills-cache/`。
+3. 技能文件按需下载，缓存在 `~/.codex-skills-cache/`（可用 `--cache-dir` / `CODEX_SKILLS_CACHE_DIR` 覆盖）。
 
 ### 2. 本地模式（可选）
 
@@ -144,10 +147,11 @@ ngrok http 3456
 ```mermaid
 flowchart LR
     A["启动 MCP"] --> B["拉取清单 manifest + 建本地索引"]
-    B --> C["search_skills 秒出结果"]
-    C --> D["read_skill 按需拉取技能全文"]
-    D --> E["load_skill_file 按需读脚本/配置"]
-    E --> F["Agent 在本机执行"]
+    B --> C["plan_workflow / search_skills<br/>DISCOVER（[cached] 徽标）"]
+    C --> D["read_skill x N<br/>MATERIALIZE：完整下载+缓存"]
+    D --> E["skill_status 校验（可选）"]
+    E --> F["按 SKILL.md 从 local_path 执行<br/>load_skill_file 按需补读"]
+    F --> G["diagnostics / 汇报"]
 ```
 
 | 阶段 | 行为 | 耗时 |
@@ -167,9 +171,26 @@ flowchart LR
 
 前一个节点失败时自动降级到下一个；全部失败才会报错。
 
+### Agent 标准工作流（行为合约）
+
+服务端通过 initialize instructions、工具描述、返回体尾部三层向 Agent 强化同一套协议（措辞单点维护于 `src/lib/protocol.ts`）：
+
+1. **DISCOVER** — `plan_workflow` / `search_skills` 检索；`[cached]` 徽标 = 已在本地，分数相近优先选；
+2. **SELECT** — 选出覆盖任务的最小技能组合；
+3. **MATERIALIZE（必做）** — 对每个选定技能调用 `read_skill`，完整下载到本地并返回 `local_path`；
+4. **EXECUTE** — 严格按 SKILL.md 执行，脚本从 `local_path` 运行，禁止凭通用知识自行替代；
+5. **VERIFY & REPORT** — `skill_status` 校验缓存完整性；`diagnostics` 排障并审计。
+
+### 日志与诊断
+
+- 活动日志：`~/.codex-skills-cache/logs/mcp-activity-YYYY-MM-DD.jsonl`（按天分文件，保留 14 天，best-effort 不影响主流程）；
+- 记录事件：`tool_call` / `tool_result` / `download_skill_start` / `download_skill_complete` / `tool_error` / `server_start`；
+- `diagnostics` 工具返回：近期调用、近期错误、缓存统计（已缓存技能数/体积）、清单新鲜度与配置摘要；
+- 本地模式（`--skills-dir`）不写文件日志，仅镜像到 stderr。
+
 ### 缓存与增量同步
 
-- 清单与技能文件缓存在当前目录 `.codex-skills-cache/`，二次启动秒级完成；
+- 清单与技能文件缓存在 `~/.codex-skills-cache/`，二次启动秒级完成；
 - 每个技能带 `.codex-skills.tree.json` 标记（文件列表 + 完成状态）；
 - 已完整下载的技能直接本地读取，不重复请求远端；
 - 中断的下载支持断点续传：按文件大小比对，只补拉缺失/不完整的文件；
@@ -180,7 +201,7 @@ flowchart LR
 
 ### 🔍 search_skills
 
-搜索技能库，Agent 的主入口。
+搜索技能库，Agent 的主入口（协议 STEP 1）。结果带 `[cached]` 徽标与"下一步必须 read_skill 物化"的协议尾部。
 
 ```
 input:  { query: "前端性能优化", category?: "01_代码工程与架构", limit?: 8 }
@@ -198,7 +219,7 @@ output: 14 个分类 + 各自的技能数量
 
 ### 📖 read_skill
 
-读取技能的完整指令（SKILL.md）+ 文件结构 + 环境依赖 + 子技能。
+物化技能（协议 STEP 3，执行前必调）：完整下载技能目录到本地缓存（已缓存则秒回），返回 SKILL.md 指令 + 文件结构 + 依赖 + **Cache & Execution 段（local_path / 完整性 / setup 命令）** + 子技能。
 
 ```
 input:  { name: "MediaCrawler" }
@@ -227,28 +248,48 @@ output: 目录树
 
 ### 🔗 plan_workflow
 
-给定任务描述，推荐可组合使用的技能。
+给定任务描述，产出可组合技能的**有序执行计划草稿**（带 `[cached]` 徽标），并强制"先 read_skill 全部选定技能再开工"。
 
 ```
 input:  { task_description: "把技术博客做成小红书图文" }
 output: 推荐技能列表 + 分类分组
 ```
 
-## 使用流程
+### ✅ skill_status
+
+深度校验一个或多个技能的本地缓存完整性（逐文件大小核对，只读不下载）。
+
+``
+input:  { names: "KrillinAI, videocut-skills" }
+output: cached/complete/local_path/files_total/files_missing/completed_at
+```
+
+### 🩺 diagnostics
+
+审计与排障：近期工具调用、近期错误（活动日志）、缓存统计、清单新鲜度、配置摘要。
+
+``
+input:  { include_log?: true, log_lines?: 20 }
+output: Server / Manifest / Local skill cache / Recent errors / Recent tool calls
+```
+
+## 使用流程（示例）
 
 ```
 用户: "帮我把这个视频翻译成中文字幕"
 
-Agent → search_skills("视频字幕翻译")
-     → 命中: KrillinAI, videocut-skills, VideoClaw
+Agent → plan_workflow("把视频翻译成中文字幕")          # DISCOVER：拿到组合计划
+Agent → search_skills("视频字幕翻译")                   # DISCOVER：精确定位
+     → 命中: KrillinAI, videocut-skills, VideoClaw      # [cached] 徽标优先
 
-Agent → read_skill("KrillinAI")
-     → 获取 SKILL.md 指令，了解怎么用
+Agent → read_skill("KrillinAI")                         # MATERIALIZE：完整下载
+     → 返回 SKILL.md + local_path + 依赖
+Agent → read_skill("videocut-skills")                   # 每个选定技能都要物化
 
-Agent → load_skill_file("KrillinAI", "README.md")
-     → 获取详细配置参数
+Agent → skill_status("KrillinAI, videocut-skills")      # VERIFY：确认缓存完整
 
-Agent → 按 SKILL.md 指令执行任务
+Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严格遵循指令
+     → 需要补充文件时 load_skill_file(...)
 ```
 
 ## 配置参考
@@ -275,6 +316,8 @@ Agent → 按 SKILL.md 指令执行任务
 
 | 问题 | 处理 |
 |------|------|
+| Agent 读了 SKILL.md 却不按指令执行 | v1.4.0 起三层合约强制 5 步协议；仍异常时用 `diagnostics` 审计该 Agent 实际调用序列 |
+| 想看 Agent 到底做了什么 | `diagnostics` 或直接读 `~/.codex-skills-cache/logs/mcp-activity-*.jsonl` |
 | npx 首次运行较慢 | 首次需下载 npm 包 + 拉取清单，属正常；之后走缓存 |
 | 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
 | 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启，或设 `--manifest-ttl 60` 让清单自动高频刷新 |

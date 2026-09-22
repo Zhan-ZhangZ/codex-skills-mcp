@@ -1,6 +1,7 @@
 import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { resolve, dirname, join, basename } from "node:path";
 import type { Config, ManifestEntry } from "../config.js";
+import { logEvent } from "../lib/logger.js";
 
 interface TreeFileEntry {
   /** Path relative to the skill directory, e.g. "README.md" or "skills/nature-reader/SKILL.md" */
@@ -528,6 +529,10 @@ async function downloadMissing(
   console.error(
     `[codex-skills-mcp] Fetching ${missing.length}/${tree.files.length} files for skill: ${skillName}...`
   );
+  logEvent("info", "download_skill_start", {
+    skill: skillName,
+    detail: `${missing.length}/${tree.files.length} files`,
+  });
   const startedAt = Date.now();
   const limit = Math.max(1, config.downloadConcurrency);
   let done = 0;
@@ -546,6 +551,11 @@ async function downloadMissing(
   console.error(
     `[codex-skills-mcp] Skill ${skillName}: downloaded ${missing.length} files in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`
   );
+  logEvent("info", "download_skill_complete", {
+    skill: skillName,
+    duration_ms: Date.now() - startedAt,
+    detail: `${missing.length} files`,
+  });
 }
 
 /**
@@ -732,4 +742,80 @@ async function doFetchSkill(
     JSON.stringify({ ...treeWithSource, completedAt: new Date().toISOString() }, null, 2),
     "utf-8"
   );
+}
+
+/** Deep cache-state report for one skill (see docs/IMPROVEMENT-PLAN.md §5). */
+export interface SkillCacheState {
+  /** A tree marker exists: at least one download attempt happened */
+  cached: boolean;
+  /** Marker says complete AND every recorded file is present with expected size */
+  complete: boolean;
+  localPath: string;
+  filesTotal: number;
+  filesMissing: string[];
+  /** Expected total size in bytes (sum of the recorded tree) */
+  sizeBytes: number;
+  completedAt?: string;
+}
+
+/**
+ * Deep check: read the skill's .codex-skills.tree.json marker and verify every
+ * recorded file exists locally with the expected size. Read-only — never
+ * triggers a download.
+ */
+export function readSkillCacheState(config: Config, entry: ManifestEntry): SkillCacheState {
+  const relPath = entry.relative_path.replace(/^\.\//, "");
+  const localPath = resolve(config.skillsDir, relPath);
+  const base: SkillCacheState = {
+    cached: false,
+    complete: false,
+    localPath,
+    filesTotal: 0,
+    filesMissing: [],
+    sizeBytes: 0,
+  };
+  const cacheFile = join(localPath, TREE_CACHE_FILE);
+  if (!existsSync(cacheFile)) return base;
+  try {
+    const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
+    if (!Array.isArray(cached.files) || cached.files.length === 0) return base;
+    const filesMissing = cached.files
+      .filter((f) => !isFileUpToDate(resolve(localPath, f.path), f.size))
+      .map((f) => f.path);
+    return {
+      cached: true,
+      complete:
+        !!cached.completedAt &&
+        sameSource(cached.source, config) &&
+        filesMissing.length === 0,
+      localPath,
+      filesTotal: cached.files.length,
+      filesMissing,
+      sizeBytes: cached.files.reduce((s, f) => s + (f.size || 0), 0),
+      completedAt: cached.completedAt,
+    };
+  } catch {
+    return base;
+  }
+}
+
+/**
+ * Light check (no per-file stats): marker exists, belongs to the current
+ * remote source and records a completed download. Used for [cached] badges.
+ */
+export function isSkillCachedLight(config: Config, entry: ManifestEntry): boolean {
+  const relPath = entry.relative_path.replace(/^\.\//, "");
+  const cacheFile = join(resolve(config.skillsDir, relPath), TREE_CACHE_FILE);
+  if (!existsSync(cacheFile)) return false;
+  try {
+    const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
+    return (
+      !!cached.completedAt &&
+      Array.isArray(cached.files) &&
+      cached.files.length > 0 &&
+      sameSource(cached.source, config)
+    );
+  } catch {
+    return false;
+  }
 }

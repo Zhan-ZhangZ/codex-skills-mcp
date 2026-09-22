@@ -26,6 +26,8 @@ import { createRequire } from "node:module";
 import { parseConfig, loadManifest } from "./config.js";
 import { SkillSearchEngine } from "./search/index.js";
 import { SkillLoader } from "./loader/index.js";
+import { SERVER_INSTRUCTIONS } from "./lib/protocol.js";
+import { initLogger, logEvent } from "./lib/logger.js";
 
 import { registerSearchSkills } from "./tools/search-skills.js";
 import { registerListCategories } from "./tools/list-categories.js";
@@ -33,6 +35,8 @@ import { registerReadSkill } from "./tools/read-skill.js";
 import { registerLoadSkillFile } from "./tools/load-skill-file.js";
 import { registerListSkillFiles } from "./tools/list-skill-files.js";
 import { registerPlanWorkflow } from "./tools/plan-workflow.js";
+import { registerSkillStatus } from "./tools/skill-status.js";
+import { registerDiagnostics } from "./tools/diagnostics.js";
 
 // Single source of truth for the version: read package.json instead of
 // hardcoding it here, so releasing a new version only requires one bump.
@@ -40,31 +44,40 @@ const require = createRequire(import.meta.url);
 const PKG_VERSION = require("../package.json").version as string;
 
 function createServer(
+  config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
   loader: SkillLoader
 ): McpServer {
-  const server = new McpServer({
-    name: "codex-skills",
-    version: PKG_VERSION,
-  });
+  const server = new McpServer(
+    { name: "codex-skills", version: PKG_VERSION },
+    {
+      // The agent-facing behavioral contract (docs/AGENT-PROTOCOL.md) is
+      // returned to clients in the initialize result and reinforced in every
+      // tool description and result footer.
+      instructions: SERVER_INSTRUCTIONS,
+    }
+  );
 
-  registerSearchSkills(server, searchEngine);
+  registerSearchSkills(server, searchEngine, loader);
   registerListCategories(server, searchEngine);
   registerReadSkill(server, searchEngine, loader);
   registerLoadSkillFile(server, searchEngine, loader);
   registerListSkillFiles(server, searchEngine, loader);
-  registerPlanWorkflow(server, searchEngine);
+  registerPlanWorkflow(server, searchEngine, loader);
+  registerSkillStatus(server, searchEngine, loader);
+  registerDiagnostics(server, config, searchEngine, loader, PKG_VERSION);
 
   return server;
 }
 
 async function startStdio(
+  config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
   loader: SkillLoader
 ): Promise<void> {
-  const server = createServer(searchEngine, loader);
+  const server = createServer(config, searchEngine, loader);
 
-  console.error("[codex-skills-mcp] 6 tools registered, starting stdio server...");
+  console.error("[codex-skills-mcp] 8 tools registered, starting stdio server...");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -73,6 +86,7 @@ async function startStdio(
 }
 
 async function startHTTP(
+  config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
   loader: SkillLoader,
   port: number
@@ -134,7 +148,7 @@ async function startHTTP(
       };
 
       // Each session gets its own server instance
-      const server = createServer(searchEngine, loader);
+      const server = createServer(config, searchEngine, loader);
       await server.connect(transport);
     }
 
@@ -176,7 +190,7 @@ async function startHTTP(
     });
   });
 
-  console.error("[codex-skills-mcp] 6 tools registered, starting HTTP server...");
+  console.error("[codex-skills-mcp] 8 tools registered, starting HTTP server...");
 
   app.listen(port, () => {
     console.error(`[codex-skills-mcp] HTTP server running at http://localhost:${port}/mcp`);
@@ -194,6 +208,10 @@ async function main(): Promise<void> {
   const config = parseConfig(args);
 
   if (config.isRemote) {
+    // Activity log lives under <cacheDir>/logs (remote mode only, so local
+    // skill libraries are never polluted). See docs/IMPROVEMENT-PLAN.md §7.
+    initLogger(config.skillsDir);
+    logEvent("info", "server_start", { detail: `v${PKG_VERSION} remote mode` });
     const { initRemote, fetchManifest } = await import("./remote/github.js");
     console.error("[codex-skills-mcp] Initializing remote GitHub fetching...");
     await initRemote(config);
@@ -224,9 +242,9 @@ async function main(): Promise<void> {
     const portIdx = args.indexOf("--port");
     const port = portIdx !== -1 && args[portIdx + 1] ? parseInt(args[portIdx + 1], 10) : 3456;
 
-    await startHTTP(searchEngine, loader, port);
+    await startHTTP(config, searchEngine, loader, port);
   } else {
-    await startStdio(searchEngine, loader);
+    await startStdio(config, searchEngine, loader);
   }
 }
 

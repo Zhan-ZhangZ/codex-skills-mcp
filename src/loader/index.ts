@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { resolve, join, relative, extname } from "node:path";
 import type { ManifestEntry, Config } from "../config.js";
 import type { ProgressCallback } from "../remote/github.js";
+import { readSkillCacheState, isSkillCachedLight, type SkillCacheState } from "../remote/github.js";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -343,5 +344,32 @@ export class SkillLoader {
     }
 
     return this.scanDirectory(targetPath, 0, maxDepth);
+  }
+
+  /**
+   * Deep cache-state check for one skill. Read-only: never triggers a
+   * download. In local mode every skill is on disk by definition.
+   */
+  cacheState(entry: ManifestEntry): SkillCacheState {
+    if (!this.config.isRemote) {
+      return {
+        cached: true,
+        complete: true,
+        localPath: this.resolveSkillPath(entry),
+        filesTotal: 0,
+        filesMissing: [],
+        sizeBytes: 0,
+      };
+    }
+    return readSkillCacheState(this.config, entry);
+  }
+
+  /**
+   * Light cache check (marker + completedAt only) for [cached] badges in
+   * search results. In local mode always true.
+   */
+  isCached(entry: ManifestEntry): boolean {
+    if (!this.config.isRemote) return true;
+    return isSkillCachedLight(this.config, entry);
   }
 }
