@@ -36,3 +36,12 @@
 子代理自述将行为归因于服务器指令原文（"MANDATORY 5-step protocol"、"NEVER improvise a substitute for a loaded skill"、反模式清单），而非自行判断 —— 提示层合约生效。
 
 **已知限制**：客户端传入参数未通过 zod 校验的调用在 SDK 层被拒绝，不会进入活动日志（handler 未执行）；此类失败可在客户端侧观察。
+
+### 验证结果 · 第二轮（冷缓存 + 执行留痕，2026-09-22）
+
+第一轮未覆盖的两个盲区：① 子代理命中了已缓存技能，未验证真实冷下载；② 本地执行仅有自述佐证。第二轮针对性补测（测试前删除 human-writing 缓存、清空产物目录 /tmp/e2e2，日志基线 68 行）：
+
+- **冷下载客观成立**：日志 17:50:34 `read_skill` → `download_skill_start skill=human-writing 13/13 files` → 17:50:35 `download_skill_complete`；磁盘 marker `completedAt` 从 17:38:21（旧）变为 17:50:35.550Z（新），13 文件 101374 字节与删除前一致。
+- **协议顺序客观成立**：plan_workflow(17:50:21) → search_skills(17:50:29) → read_skill+下载(17:50:34) → 5 分 40 秒无 MCP 调用间隙（本地执行：读 README/references、联网核验材料、写作、跑检查脚本）→ skill_status(17:56:15)。
+- **执行留痕独立复核**：/tmp/e2e2/ 留有 9 个产物（CLI 输出、read_skill 全文、check_prose.py 输出、成稿）；审计者独立重跑 check_prose.py 结果与子代理一致（汉字 829，12 项禁令计数全 0）；抽查引用来源真实（Google eng-practices 页面含 "overall code health"）。
+- **行为细节**：本轮代理直接从 local_path 磁盘读取 references（未走 load_skill_file），说明"本地执行入口"按设计生效；且其先读 README、初稿后才读 revision.md，与 SKILL.md 的流程编排一致。
