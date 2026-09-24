@@ -15,6 +15,12 @@ export interface Config {
   downloadConcurrency: number;
   /** Manifest cache TTL in milliseconds. Default 24 hours. 0 = never refresh. */
   manifestTTL: number;
+  /**
+   * Throttled manifest freshness poll interval in milliseconds (conditional
+   * GET on search/plan calls). Default 5 minutes. 0 = disabled.
+   * See docs/IMPROVEMENT-MANIFEST-FRESHNESS.md.
+   */
+  manifestPollMs: number;
   /** Base download timeout for skill files in milliseconds. Default: 30000 (30s). */
   downloadTimeout: number;
 }
@@ -127,6 +133,17 @@ export function parseConfig(args: string[]): Config {
   const ttlArg = getArg("--manifest-ttl");
   const manifestTTL = ttlArg !== undefined ? parseInt(ttlArg, 10) * 1000 : 24 * 60 * 60 * 1000;
 
+  // Freshness poll interval (default: 5 minutes). --manifest-poll <seconds>
+  // or CODEX_SKILLS_MANIFEST_POLL_SECONDS; 0 disables the poll.
+  const pollArg = getArg("--manifest-poll");
+  const pollEnv = process.env.CODEX_SKILLS_MANIFEST_POLL_SECONDS;
+  const manifestPollSeconds = parseInt(pollArg || pollEnv || "300", 10);
+  if (!Number.isInteger(manifestPollSeconds) || manifestPollSeconds < 0) {
+    console.error("Error: --manifest-poll must be a non-negative integer (seconds)");
+    process.exit(1);
+  }
+  const manifestPollMs = manifestPollSeconds * 1000;
+
   // Concurrent downloads for skill files (default 16). Configurable via
   // --download-concurrency <n> or CODEX_SKILLS_DOWNLOAD_CONCURRENCY env var.
   const concurrencyArg = getArg("--download-concurrency");
@@ -159,6 +176,7 @@ export function parseConfig(args: string[]): Config {
     useCnMirror,
     downloadConcurrency,
     manifestTTL,
+    manifestPollMs,
     downloadTimeout
   };
 }

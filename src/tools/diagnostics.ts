@@ -7,6 +7,7 @@ import type { SkillLoader } from "../loader/index.js";
 import type { Config } from "../config.js";
 import { FOOTER_DIAGNOSTICS } from "../lib/protocol.js";
 import { withToolLogging, readRecentEvents, loggerActive, logDirPath } from "../lib/logger.js";
+import { readManifestMeta } from "../remote/github.js";
 
 const TREE_MARKER = ".codex-skills.tree.json";
 const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", "logs"]);
@@ -95,11 +96,17 @@ export function registerDiagnostics(
           ].join("\n")
         );
 
+        const meta = readManifestMeta(config);
+        const validated = meta.validatedAt
+          ? new Date(meta.validatedAt).toISOString()
+          : "never";
         sections.push(
           "## Manifest",
           [
             `- Skills indexed: ${totalSkills}`,
             `- Manifest age: ${manifestAge} (TTL ${Math.round(config.manifestTTL / 3600000)}h)`,
+            `- Last freshness check: ${validated} (poll every ${Math.round(config.manifestPollMs / 1000)}s)`,
+            `- ETag: ${meta.etag ? meta.etag.slice(0, 24) + "…" : "(none — next poll fetches full)"}`,
           ].join("\n")
         );
 

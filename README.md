@@ -259,7 +259,7 @@ output: 推荐技能列表 + 分类分组
 
 深度校验一个或多个技能的本地缓存完整性（逐文件大小核对，只读不下载）。
 
-``
+```
 input:  { names: "KrillinAI, videocut-skills" }
 output: cached/complete/local_path/files_total/files_missing/completed_at
 ```
@@ -268,7 +268,7 @@ output: cached/complete/local_path/files_total/files_missing/completed_at
 
 审计与排障：近期工具调用、近期错误（活动日志）、缓存统计、清单新鲜度、配置摘要。
 
-``
+```
 input:  { include_log?: true, log_lines?: 20 }
 output: Server / Manifest / Local skill cache / Recent errors / Recent tool calls
 ```
@@ -305,7 +305,8 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | `--http` | - | 启动 HTTP 模式 |
 | `--port` | `3456` | HTTP 端口 |
 | `--download-concurrency` | `16` | 技能文件并发下载数 |
-| `--manifest-ttl <秒>` | `86400` | 清单缓存有效期（0 = 永不刷新；设小值如 60 可让新技能更快出现） |
+| `--manifest-ttl <秒>` | `86400` | 清单缓存 TTL（0 = 永不按年龄刷新）。新技能可见性由下面的轮询负责 |
+| `--manifest-poll <秒>` | `300` | **清单新鲜度轮询间隔**：search/plan 调用时对权威源发条件请求（304 级开销），新集成技能最迟此时限内可被搜到；0 = 关闭。环境变量 `CODEX_SKILLS_MANIFEST_POLL_SECONDS` |
 | `--cn-mirror` | - | ⚠️ 已废弃（兼容保留）：网络加速现为自动回退链，此参数不再生效 |
 
 环境变量：`CODEX_SKILLS_DIR`（本地技能库路径）、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`。
@@ -321,7 +322,7 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | npx 首次运行较慢 | 首次需下载 npm 包 + 拉取清单，属正常；之后走缓存 |
 | 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
 | 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启，或设 `--manifest-ttl 60` 让清单自动高频刷新 |
-| 仓库新增了技能但搜不到 | 可能是 CDN 旧清单缓存所致：清单现在优先直连 GitHub 权威源；仍异常时删除 `.codex-skills-cache/skills_manifest.json` 再重启 |
+| 仓库新增了技能但搜不到 | v1.4.1 起 search/plan 每次调用先做节流条件轮询（默认 5 分钟一次，`--manifest-poll` 可调），新技能最迟一个轮询间隔内可见；read_skill 查无此名也会自动轮询复查。仍异常时 `search_skills(query, force_refresh=true)` 强刷，或删 `.codex-skills-cache/skills_manifest.json` 重启 |
 | `load_skill_file` 读大文件失败 | 单文件上限 500KB，属保护设计 |
 | GitHub API 限流 | 每个技能仅 2 次 API 调用，已缓存技能不再请求；未登录配额 60 次/小时 |
 | 工具列表里看不到 MCP | 客户端未重启，重启会话即可 |

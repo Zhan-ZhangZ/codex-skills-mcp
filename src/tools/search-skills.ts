@@ -21,6 +21,12 @@ export function registerSearchSkills(
     },
     async ({ query, category, limit, force_refresh }) =>
       withToolLogging("search_skills", { query, category, limit, force_refresh }, async () => {
+        // Throttled freshness poll (conditional GET): picks up newly integrated
+        // remote skills within --manifest-poll seconds instead of the 24h TTL.
+        if (typeof searchEngine.maybeRefreshManifest === "function") {
+          await searchEngine.maybeRefreshManifest();
+        }
+
         let results = searchEngine.search(query, { category, limit });
 
         // Auto-refresh if explicitly requested or if no results are found (might be a newly added skill)

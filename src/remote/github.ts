@@ -567,6 +567,39 @@ export async function initRemote(config: Config): Promise<void> {
   }
 }
 
+/** Sidecar recording manifest validation state for conditional polling. */
+interface ManifestMeta {
+  /** ETag of the last authoritative (direct) manifest response, if known */
+  etag?: string;
+  /** Last-Modified header value of the last direct response, if known */
+  lastModified?: string;
+  /** Epoch ms of the last freshness validation (poll, successful or not) */
+  validatedAt?: number;
+}
+
+const MANIFEST_META_FILE = ".codex-skills.manifest.meta.json";
+
+function manifestMetaPath(config: Config): string {
+  return join(config.skillsDir, MANIFEST_META_FILE);
+}
+
+export function readManifestMeta(config: Config): ManifestMeta {
+  try {
+    return JSON.parse(readFileSync(manifestMetaPath(config), "utf-8")) as ManifestMeta;
+  } catch {
+    return {};
+  }
+}
+
+function writeManifestMeta(config: Config, meta: ManifestMeta): void {
+  try {
+    mkdirSync(config.skillsDir, { recursive: true });
+    writeFileSync(manifestMetaPath(config), JSON.stringify(meta, null, 2), "utf-8");
+  } catch {
+    // best-effort
+  }
+}
+
 /**
  * Download the manifest file, or refresh it if stale (older than config.manifestTTL).
  */
@@ -601,9 +634,11 @@ export async function fetchManifest(config: Config): Promise<void> {
   // the direct connection is unavailable (accepting possible staleness there).
   const directUrl = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${manifestPath}`;
   let res: Response;
+  let viaDirect = true;
   try {
     res = await fetchWithAuth(directUrl, config.githubToken, 20000);
   } catch (directErr) {
+    viaDirect = false;
     console.error(
       `[codex-skills-mcp] Direct manifest fetch failed (${(directErr as Error).message}); falling back to mirror chain...`
     );
@@ -629,7 +664,101 @@ export async function fetchManifest(config: Config): Promise<void> {
 
   writeFileSync(config.manifestPath, text, "utf-8");
   writeSourceCache(config);
+  // Record validation meta. ETag/Last-Modified only from the authoritative
+  // direct source — mirror-sourced manifests carry no validators so the next
+  // conditional poll corrects them via a full 200 (fixes stale-mirror drift).
+  const meta = readManifestMeta(config);
+  if (viaDirect) {
+    meta.etag = res.headers.get("etag") ?? undefined;
+    meta.lastModified = res.headers.get("last-modified") ?? undefined;
+  } else {
+    delete meta.etag;
+    delete meta.lastModified;
+  }
+  meta.validatedAt = Date.now();
+  writeManifestMeta(config, meta);
+  logEvent("info", "manifest_refresh", {
+    detail: `startup/ttl refresh: ${skillCount} skills (${viaDirect ? "direct" : "mirror"})`,
+  });
   console.error(`[codex-skills-mcp] Manifest refreshed: ${skillCount} skills`);
+}
+
+/** In-process throttle so concurrent tool calls share one poll window. */
+let manifestPollInflight: Promise<boolean> | null = null;
+
+/**
+ * Throttled conditional freshness check against the authoritative GitHub raw
+ * URL (docs/IMPROVEMENT-MANIFEST-FRESHNESS.md §3). Runs at most once per
+ * config.manifestPollMs; 304 → no-op; 200 → replace manifest; failures are
+ * silent (search proceeds with the local index). Returns true when the
+ * manifest content changed and the search index should be rebuilt.
+ */
+export async function refreshManifestIfStale(config: Config): Promise<boolean> {
+  if (config.manifestPollMs === 0) return false;
+  if (manifestPollInflight) return manifestPollInflight;
+
+  const run = (async (): Promise<boolean> => {
+    const meta = readManifestMeta(config);
+    const now = Date.now();
+    if (meta.validatedAt && now - meta.validatedAt < config.manifestPollMs) {
+      return false; // validated recently — stay silent
+    }
+
+    const headers: Record<string, string> = {};
+    if (meta.etag) headers["If-None-Match"] = meta.etag;
+    else if (meta.lastModified) headers["If-Modified-Since"] = meta.lastModified;
+    if (config.githubToken) headers["Authorization"] = `Bearer ${config.githubToken}`;
+
+    const manifestPath = `${config.githubPath}/skills_manifest.json`;
+    const url = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${manifestPath}`;
+
+    try {
+      logEvent("info", "manifest_poll", { detail: meta.etag ? "conditional (etag)" : "full (no validator)" });
+      const res = await fetchWithTimeout(url, { headers }, 4000);
+
+      if (res.status === 304) {
+        writeManifestMeta(config, { ...meta, validatedAt: Date.now() });
+        return false;
+      }
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const text = await res.text();
+      let skillCount = 0;
+      try {
+        const parsed = JSON.parse(text);
+        if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("not a non-empty array");
+        skillCount = parsed.length;
+      } catch {
+        throw new Error("fetched manifest failed validation");
+      }
+
+      writeFileSync(config.manifestPath, text, "utf-8");
+      writeManifestMeta(config, {
+        etag: res.headers.get("etag") ?? undefined,
+        lastModified: res.headers.get("last-modified") ?? undefined,
+        validatedAt: Date.now(),
+      });
+      logEvent("info", "manifest_refresh", { detail: `poll: ${skillCount} skills (direct 200)` });
+      console.error(`[codex-skills-mcp] Manifest refreshed via poll: ${skillCount} skills`);
+      return true;
+    } catch (err) {
+      // Never break the search because of a poll failure; throttle anyway.
+      writeManifestMeta(config, { ...meta, validatedAt: Date.now() });
+      logEvent("warn", "manifest_poll_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
+  })();
+
+  manifestPollInflight = run;
+  try {
+    return await run;
+  } finally {
+    manifestPollInflight = null;
+  }
 }
 
 /** Per-skill fetch deduplication: prevents concurrent downloads of the same skill */

@@ -587,6 +587,29 @@ export class SkillSearchEngine {
   }
 
   /**
+   * Throttled freshness check (conditional GET) before searches. When the poll
+   * detects newer remote content it reloads the manifest and rebuilds this
+   * index in place, so long-lived server processes also see new skills.
+   * See docs/IMPROVEMENT-MANIFEST-FRESHNESS.md.
+   */
+  async maybeRefreshManifest(): Promise<boolean> {
+    if (!this.config || !this.config.isRemote) return false;
+    try {
+      const { refreshManifestIfStale } = await import("../remote/github.js");
+      const changed = await refreshManifestIfStale(this.config);
+      if (!changed) return false;
+      const { loadManifest } = await import("../config.js");
+      const manifest = loadManifest(this.config.manifestPath);
+      this.index = [];
+      this.buildIndex(manifest);
+      return true;
+    } catch (err) {
+      console.error("[codex-skills-mcp] Freshness poll failed:", err);
+      return false;
+    }
+  }
+
+  /**
    * Forces a refresh of the remote manifest cache and rebuilds the search index.
    * Returns true if a refresh was attempted, false if running in local mode.
    */

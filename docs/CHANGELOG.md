@@ -2,6 +2,22 @@
 
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
+## v1.4.1 — 清单新鲜度修复：条件轮询 + read_skill 自愈
+
+依据：docs/IMPROVEMENT-MANIFEST-FRESHNESS.md（2026-09-24 chubbyskills 集成事故，根因 R1–R5）
+
+| 改动 | 文件 | 对应根因 |
+|------|------|----------|
+| 新鲜度轮询配置（`--manifest-poll` / env，默认 300s，0=关） | src/config.ts | R1 |
+| meta 边车（etag/validatedAt）+ `refreshManifestIfStale()` 条件 GET（直连权威源、失败静默降级）+ `manifest_poll/refresh/poll_failed` 日志事件；镜像来源清单不带 etag，下次轮询自动纠偏 | src/remote/github.ts | R1/R4 |
+| `maybeRefreshManifest()`：轮询命中变更时原位重建索引，长驻进程也能看到新技能 | src/search/index.ts | R2 |
+| search_skills / plan_workflow 调用前轮询 | src/tools/search-skills.ts, plan-workflow.ts | R2/R3 |
+| read_skill 查无此名 → 轮询复查一次 + 报错给出 force_refresh 指引 | src/tools/read-skill.ts | R5 |
+| diagnostics 增列 last freshness check / etag / poll 配置 | src/tools/diagnostics.ts | 可观测 |
+| 事故复现→自动恢复端到端测试（毒化清单） | test/test_freshness.mjs | 验证 |
+
+验证：test_freshness.mjs 6/6（陈旧清单场景 search 命中、read_skill 自愈、日志留痕）；test_protocol.mjs 19/19 回归通过。
+
 ## v1.4.0 — Agent 行为修正：提示即合约 + 缓存可见 + 可审计
 
 依据：docs/IMPROVEMENT-PLAN.md（根因 R1–R6）

@@ -18,6 +18,11 @@ export function registerPlanWorkflow(
     },
     async ({ task_description }) =>
       withToolLogging("plan_workflow", { task_description }, async () => {
+        // Throttled freshness poll so newly integrated skills appear in plans
+        if (typeof searchEngine.maybeRefreshManifest === "function") {
+          await searchEngine.maybeRefreshManifest();
+        }
+
         // Use a broader search to find related skills
         const results = searchEngine.search(task_description, { limit: 15 });
 

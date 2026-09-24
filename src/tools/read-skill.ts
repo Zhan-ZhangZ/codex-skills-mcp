@@ -18,14 +18,22 @@ export function registerReadSkill(
     },
     async ({ name }, extra) =>
       withToolLogging("read_skill", { skill: name }, async () => {
-        const entry = searchEngine.findByName(name);
+        let entry = searchEngine.findByName(name);
+        if (!entry) {
+          // The local index may be stale (skill just integrated upstream).
+          // Run the throttled freshness poll once and re-lookup before failing.
+          if (typeof searchEngine.maybeRefreshManifest === "function") {
+            await searchEngine.maybeRefreshManifest();
+            entry = searchEngine.findByName(name);
+          }
+        }
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "read_skill", skill: name, error: "skill not found" });
           return {
             content: [
               {
                 type: "text" as const,
-                text: `Skill "${name}" not found. Use search_skills to find available skills.`,
+                text: `Skill "${name}" not found. The local skill index may be stale — call search_skills with force_refresh=true to reload the manifest, then retry read_skill("${name}").`,
               },
             ],
           };
