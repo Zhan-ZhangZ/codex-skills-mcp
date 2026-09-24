@@ -220,6 +220,42 @@ async function fetchRawWithFallback(config: Config, path: string, expectedSize?:
 }
 
 /**
+ * Authoritative-first fetch for REFRESHING files that already exist locally
+ * with a stale size. Mirrors can lag hours behind a fresh commit, and in a
+ * race the fastest (stale) mirror would keep rewriting old bytes, leaving the
+ * size mismatch forever ("missing" loop). Direct GitHub first; the mirror
+ * race remains as the fallback when direct is unreachable. Brand-new files
+ * keep using fetchRawWithFallback directly (speed wins there, no staleness
+ * risk for content that does not exist locally yet).
+ */
+async function fetchRawDirectFirst(config: Config, path: string, expectedSize?: number): Promise<Response> {
+  const url = `https://raw.githubusercontent.com/${config.githubRepo}/${config.githubBranch}/${path}`;
+  const headers: Record<string, string> = {};
+  if (config.githubToken) {
+    headers["Authorization"] = `Bearer ${config.githubToken}`;
+  }
+  const baseTimeout = config.downloadTimeout || 30000;
+  const dynamicTimeout = expectedSize && expectedSize > 5 * 1024 * 1024
+    ? Math.max(baseTimeout, Math.min(180000, Math.ceil(expectedSize / (300 * 1024)) * 1000))
+    : baseTimeout;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), dynamicTimeout);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res;
+  } catch (error) {
+    logEvent("warn", "refresh_direct_failed", {
+      detail: `${path}: ${error instanceof Error ? error.message : String(error)} — falling back to mirror race`,
+    });
+    return fetchRawWithFallback(config, path, expectedSize);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Build the remote repo path of a skill directory, e.g.
  * "codex-skills/00_全局大管家/12_学术论文与科研图表/nature-skills"
  */
@@ -539,9 +575,16 @@ async function downloadMissing(
 
   await runPool(missing, limit, async (file) => {
     const remotePath = tree.singleFileRemotePath ?? `${skillRemotePath}/${file.path}`;
-    const res = await fetchRawWithFallback(config, remotePath, file.size);
-    const buffer = Buffer.from(await res.arrayBuffer());
     const localFile = resolve(skillLocalPath, file.path);
+    // A file that exists locally with the wrong size is a REFRESH of updated
+    // upstream content: it must come from the authoritative source first,
+    // otherwise a lagging mirror keeps rewriting stale bytes and the refresh
+    // never converges (see docs/CHANGELOG.md v1.4.2). Brand-new files keep
+    // the fast mirror race.
+    const res = existsSync(localFile)
+      ? await fetchRawDirectFirst(config, remotePath, file.size)
+      : await fetchRawWithFallback(config, remotePath, file.size);
+    const buffer = Buffer.from(await res.arrayBuffer());
     mkdirSync(dirname(localFile), { recursive: true });
     writeFileSync(localFile, buffer);
     done += 1;

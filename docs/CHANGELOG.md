@@ -3,6 +3,20 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
+## v1.4.2 — 技能内容刷新走权威源（修复镜像滞后导致的"永久 missing"）
+
+现场：codexproject 推送 chubbyskills 修复后，缓存刷新出现"missing 1/106"死循环。字节级取证：
+GitHub 直连 12702B（新）vs jsDelivr 12336B（旧）vs 本地缓存 12336B（=镜像旧版）——
+`downloadMissing` 对**更新型文件**也走四镜像竞速，滞后的 jsDelivr 在 CN 最快、反复把旧字节写回，
+尺寸永与新树对齐不上。与 2026-09-24 清单事故 R4 同类（镜像污染），但发生在文件层。
+
+修复（src/remote/github.ts）：
+- 新增 `fetchRawDirectFirst`：直连 GitHub 优先（带鉴权/动态超时），直连不可用才退回镜像竞速，失败记 `refresh_direct_failed` 日志事件；
+- `downloadMissing` 分流：本地已存在的文件（=尺寸不符的**刷新**）走权威直连优先；全新文件保留竞速抢速度——速度与正确性各得其所。
+
+验证：live 复测 chubbyskills 刷新（当时镜像仍滞后），refresh 后本地字节=12702B 与权威一致，
+skill_status complete；test_protocol.mjs 回归通过。
+
 ### 验证结果 · 第三轮（chubbyskills 全链路实测 + 缺陷反哺，2026-09-24）
 
 不知情子代理对 chubbyskills（14 子技能路由包，冷缓存）执行真实知识库任务：建 vault → 导入本地文章 → 检索验证（含负对照）→ 生成证据简报。
