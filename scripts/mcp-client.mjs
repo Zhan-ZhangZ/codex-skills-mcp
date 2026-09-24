@@ -110,7 +110,10 @@ try {
     console.log(text || "(empty response)");
   }
   child.kill();
-  process.exit(0);
+  // Tool-level failures (e.g. zod argument validation) arrive as successful
+  // RPC results with isError=true — surface them through the exit code so
+  // calling scripts can detect failure. Found during E2E round 3.
+  process.exit(result?.isError ? 1 : 0);
 } catch (err) {
   clearTimeout(timer);
   console.error("[mcp-client] request failed:", err.message);

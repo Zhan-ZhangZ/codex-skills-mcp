@@ -2,6 +2,15 @@
 
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
+
+### 验证结果 · 第三轮（chubbyskills 全链路实测 + 缺陷反哺，2026-09-24）
+
+不知情子代理对 chubbyskills（14 子技能路由包，冷缓存）执行真实知识库任务：建 vault → 导入本地文章 → 检索验证（含负对照）→ 生成证据简报。
+
+- **协议链客观成立**：search(02:19:57) → plan(02:20:03) → read_skill(02:20:11) → **download 105/105 files(02:20:14)** → load_skill_file(子技能SKILL.md+README) → 2.5 分钟本地执行(init/import/search/brief) → skill_status(02:23:05)。
+- **任务结果独立复核**：vault 笔记含 frontmatter+SHA-256；brief 带证据编号/逐字摘录/行号/哈希；审计者重跑 search 命中一致；负对照「量子计算」正确返回无匹配。
+- **缺陷①（本仓库，已修）**：scripts/mcp-client.mjs 对 isError=true 的工具级失败仍 exit 0——校验错误是"成功的RPC+错误结果"，现按 exit 1 上抛（实测 bad-args=1 / good-args=0）。
+- **缺陷②③④（codexproject 技能侧，待修）**：doctor 引用的 tools/check_env.py 缺失；chubby.py init 相对 --config 路径时运行时目录落进技能缓存目录；brief 原文链接为依赖 macOS 符号链接的怪异相对路径。
 ## v1.4.1 — 清单新鲜度修复：条件轮询 + read_skill 自愈
 
 依据：docs/IMPROVEMENT-MANIFEST-FRESHNESS.md（2026-09-24 chubbyskills 集成事故，根因 R1–R5）
