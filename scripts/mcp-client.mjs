@@ -101,7 +101,21 @@ try {
   if (cmd === "instructions") {
     console.log(result?.instructions ?? "(no instructions returned)");
   } else if (cmd === "list") {
-    console.log(result?.tools?.map((t) => t.name).join("\n") ?? "(none)");
+    // Print tool signatures (required args plain, optional in [brackets]) so
+    // calling agents do not have to discover parameter names by trial and
+    // error. Found during E2E rounds 3-4: param-name guessing wasted calls.
+    const tools = result?.tools ?? [];
+    if (tools.length === 0) {
+      console.log("(none)");
+    }
+    for (const t of tools) {
+      const props = t.inputSchema?.properties ?? {};
+      const required = new Set(t.inputSchema?.required ?? []);
+      const args = Object.keys(props)
+        .map((p) => (required.has(p) ? p : "[" + p + "]"))
+        .join(", ");
+      console.log(t.name + "(" + args + ")");
+    }
   } else {
     const text = (result?.content ?? [])
       .filter((c) => c.type === "text")

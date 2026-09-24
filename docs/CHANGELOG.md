@@ -3,6 +3,15 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
+### 验证结果 · 第四轮（真实网络采集 + 参数签名反哺，2026-09-24）
+
+不知情子代理对 chubbyskills（已缓存，106 文件修复版）执行真实网络任务：采集用户提供的公众号文章 → 入库 → 检索 → 选题资料包。
+
+- **协议链客观成立**：plan(02:43:43) → search×3 → read_skill(02:43:58) → load_skill_file×3（README→wechat 子技能→kb 子技能，正确走完包路由链）→ 2m50s 本地执行（env 检查→setup→init→**真实网络 ingest**→search×4→brief→健康检查）→ skill_status(02:47:08)。
+- **采集真实有效**：文章《她的指尖，有图书馆守候的光》7322 字入 vault（schema v1 frontmatter 含 source/captured_at/run_id/source_hash）；审计者独立复检 `search "盲文"` 命中；brief 带证据编号/逐字摘录/行号/SHA-256；子代理还按 brief 内嵌任务生成了选题提案。
+- **缺陷⑤（本仓库，已修）**：`mcp-client.mjs list` 只打印工具名不打印参数签名，两轮 E2E 中子代理均靠 zod 报错试参数（浪费 3 次调用）。现 list 输出 `tool(必填, [可选])` 签名。
+- **缺陷⑥⑦（codexproject 技能侧，待修）**：`setup.sh` 在 Homebrew Python 下遇 PEP 668 直接失败、无 venv 回退；`chubby.py init` 不落 vault-template 骨架（子代理手动 `cp vault-template/.` 补齐）。
+
 ## v1.4.2 — 技能内容刷新走权威源（修复镜像滞后导致的"永久 missing"）
 
 现场：codexproject 推送 chubbyskills 修复后，缓存刷新出现"missing 1/106"死循环。字节级取证：
