@@ -17,6 +17,7 @@ export function registerListSkillFiles(
       path: z.string().optional().default("").describe("Subdirectory path within the skill (default: root)"),
       max_depth: z.number().optional().default(2).describe("Directory scan depth (default: 2)"),
     },
+    { readOnlyHint: true },
     async ({ skill_name, path, max_depth }) =>
       withToolLogging("list_skill_files", { skill: skill_name, path, max_depth }, async () => {
         const entry = searchEngine.findByName(skill_name);

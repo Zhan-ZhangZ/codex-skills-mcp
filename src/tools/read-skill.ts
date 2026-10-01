@@ -16,6 +16,7 @@ export function registerReadSkill(
     {
       name: z.string().describe("Exact skill name from search/plan results, e.g. 'MediaCrawler'"),
     },
+    { readOnlyHint: true },
     async ({ name }, extra) =>
       withToolLogging("read_skill", { skill: name }, async () => {
         let entry = searchEngine.findByName(name);

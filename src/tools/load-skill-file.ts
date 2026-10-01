@@ -16,6 +16,7 @@ export function registerLoadSkillFile(
       skill_name: z.string().describe("Skill name, e.g. 'MediaCrawler'"),
       file_path: z.string().describe("Relative path within the skill directory, e.g. 'README.md' or 'scripts/run.py'"),
     },
+    { readOnlyHint: true },
     async ({ skill_name, file_path }) =>
       withToolLogging("load_skill_file", { skill: skill_name, file: file_path }, async () => {
         const entry = searchEngine.findByName(skill_name);

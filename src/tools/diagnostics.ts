@@ -68,6 +68,7 @@ export function registerDiagnostics(
       include_log: z.boolean().optional().default(true).describe("Include recent activity-log entries (default: true)"),
       log_lines: z.number().optional().default(20).describe("Max log entries per section (default: 20)"),
     },
+    { readOnlyHint: true },
     async ({ include_log, log_lines }) =>
       withToolLogging("diagnostics", { include_log, log_lines }, async () => {
         const sections: string[] = [];

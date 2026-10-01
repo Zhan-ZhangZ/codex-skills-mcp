@@ -10,6 +10,7 @@ export function registerListCategories(
     "list_categories",
     "List all skill categories in the codex-skills library with their skill counts. Use it to get an overview of available domains before searching (agent protocol step 1 DISCOVER).",
     {},
+    { readOnlyHint: true },
     async () =>
       withToolLogging("list_categories", {}, async () => {
         const categories = searchEngine.getCategories();

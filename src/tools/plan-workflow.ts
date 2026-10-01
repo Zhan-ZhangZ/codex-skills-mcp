@@ -16,6 +16,7 @@ export function registerPlanWorkflow(
     {
       task_description: z.string().describe("Full description of the task to accomplish, e.g. '把技术博客文章转换成小红书图文并发布'"),
     },
+    { readOnlyHint: true },
     async ({ task_description }) =>
       withToolLogging("plan_workflow", { task_description }, async () => {
         // Throttled freshness poll so newly integrated skills appear in plans

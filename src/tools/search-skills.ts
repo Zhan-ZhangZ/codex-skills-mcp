@@ -19,6 +19,7 @@ export function registerSearchSkills(
       limit: z.number().optional().default(8).describe("Max number of results to return (default: 8)"),
       force_refresh: z.boolean().optional().describe("If true, forcefully refreshes the remote skills list cache. Use this when the user just integrated a new skill and it's not showing up."),
     },
+    { readOnlyHint: true },
     async ({ query, category, limit, force_refresh }) =>
       withToolLogging("search_skills", { query, category, limit, force_refresh }, async () => {
         // Throttled freshness poll (conditional GET): picks up newly integrated

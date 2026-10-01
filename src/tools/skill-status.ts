@@ -25,6 +25,7 @@ export function registerSkillStatus(
     {
       names: z.string().describe("Comma-separated exact skill names, e.g. 'KrillinAI, videocut-skills' (max 20)"),
     },
+    { readOnlyHint: true },
     async ({ names }) =>
       withToolLogging("skill_status", { names }, async () => {
         const requested = names

@@ -212,6 +212,7 @@ export function registerOpenAISettings(
     "refresh_skills_list",
     "Re-downloads the skills manifest from the remote source, picking up newly integrated " +
       "skills immediately. Read-only for local skill libraries (their manifest lives on disk).",
+    { readOnlyHint: true },
     async () => {
       if (typeof searchEngine.refreshManifest !== "function") {
         return {
