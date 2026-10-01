@@ -57,12 +57,22 @@ try {
   const ins = init?.instructions ?? "";
   assert(typeof ins === "string" && ins.length > 100, "instructions present and substantial");
   assert(ins.includes("MATERIALIZE") && ins.includes("EXECUTE"), "instructions contain the 5-step protocol");
+  const capExt = init?.capabilities?.extensions?.["openai/settings"];
+  assert(!!capExt && capExt.readTool === "settings.read" && capExt.updateTool === "settings.update",
+    "openai/settings capability advertised (extensions + experimental)");
 
-  // 2. tools/list — 8 tools, protocol-bearing descriptions
+  // 2. tools/list — 12 tools (8 core + 4 openai-extension), protocol-bearing descriptions
   console.log("\n[2] tools/list");
   const tools = (await request("tools/list"))?.tools ?? [];
   const names = tools.map((t) => t.name);
-  assert(tools.length === 8, "8 tools registered (got " + tools.length + ": " + names.join(",") + ")");
+  assert(tools.length === 12, "12 tools registered (got " + tools.length + ": " + names.join(",") + ")");
+  const CORE = ["search_skills", "list_categories", "read_skill", "load_skill_file", "list_skill_files", "plan_workflow", "skill_status", "diagnostics"];
+  assert(CORE.every((n) => names.includes(n)), "all 8 core tools intact");
+  assert(["settings.read", "settings.update", "refresh_skills_list", "search_mentions"].every((n) => names.includes(n)),
+    "4 openai-extension tools registered");
+  const mentions = tools.find((t) => t.name === "search_mentions");
+  assert(mentions?._meta?.["openai/extensions"]?.["mentions/search"] != null, "search_mentions advertises mentions/search");
+  assert(mentions?._meta?.ui?.visibility?.includes("app"), "search_mentions is app-visibility only");
   const readDesc = tools.find((t) => t.name === "read_skill")?.description ?? "";
   assert(/MANDATORY/.test(readDesc), "read_skill description says MANDATORY");
   assert(/COMPLETE skill/i.test(readDesc), "read_skill description mentions COMPLETE skill download");

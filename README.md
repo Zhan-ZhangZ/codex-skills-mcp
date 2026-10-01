@@ -273,6 +273,17 @@ input:  { include_log?: true, log_lines?: 20 }
 output: Server / Manifest / Local skill cache / Recent errors / Recent tool calls
 ```
 
+## OpenAI MCP Extensions（ChatGPT 原生集成 · Phase 1）
+
+基于 [openai/mcp-extensions](https://github.com/openai/mcp-extensions) 规范与官方 SDK 新增，详见 [docs/OPENAI-MCP-EXTENSIONS.md](docs/OPENAI-MCP-EXTENSIONS.md)：
+
+- **⚙️ `settings.read` / `settings.update`** — ChatGPT 插件详情页的原生设置面板（开关/数字控件）。配置项热生效、原子持久化到 `~/.codex-skills-mcp/settings.json`、重启后自动恢复。
+- **🔄 `refresh_skills_list`** — 设置页按钮型动作：立即刷新远端技能清单。
+- **💬 `search_mentions`** — ChatGPT composer 里 `@技能库` 直接 typeahead 搜索技能（对模型隐藏，仅宿主调用；Codex CLI 实测符合规范）。
+- **📄 `skill://{name}` 资源** — 提及的技能引用经 `resources/read` 解析为 SKILL.md（首读即物化），同时是后续官方 `io.modelcontextprotocol/skills` 扩展的 groundwork。
+
+> 兼容性：全部通过 MCP 标准扩展点（`_meta` / capability）实现，非 ChatGPT 宿主（Codex/Claude/Cursor 等）自动忽略，8 个核心工具行为零变化（回归测试覆盖）。
+
 ## 使用流程（示例）
 
 ```

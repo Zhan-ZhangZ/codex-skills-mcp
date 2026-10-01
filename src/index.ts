@@ -21,6 +21,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { createRequire } from "node:module";
 
 import { parseConfig, loadManifest } from "./config.js";
@@ -37,6 +38,8 @@ import { registerListSkillFiles } from "./tools/list-skill-files.js";
 import { registerPlanWorkflow } from "./tools/plan-workflow.js";
 import { registerSkillStatus } from "./tools/skill-status.js";
 import { registerDiagnostics } from "./tools/diagnostics.js";
+import { registerOpenAISettings, applyPersistedSettingsAtStartup } from "./openai/settings.js";
+import { registerOpenAIMentions } from "./openai/mentions.js";
 
 // Single source of truth for the version: read package.json instead of
 // hardcoding it here, so releasing a new version only requires one bump.
@@ -67,6 +70,14 @@ function createServer(
   registerSkillStatus(server, searchEngine, loader);
   registerDiagnostics(server, config, searchEngine, loader, PKG_VERSION);
 
+  // OpenAI MCP Extensions (Phase 1, server-side only — see
+  // docs/OPENAI-MCP-EXTENSIONS.md): structured settings + composer mentions.
+  // Additive metadata via standard MCP extension points; hosts that do not
+  // implement the openai/* extensions ignore them and keep working unchanged.
+  const openai = new OpenAIExtensions(server);
+  registerOpenAISettings(server, openai, config, searchEngine);
+  registerOpenAIMentions(server, openai, searchEngine, loader);
+
   return server;
 }
 
@@ -77,7 +88,7 @@ async function startStdio(
 ): Promise<void> {
   const server = createServer(config, searchEngine, loader);
 
-  console.error("[codex-skills-mcp] 8 tools registered, starting stdio server...");
+  console.error("[codex-skills-mcp] 12 tools registered (8 core + 4 openai-extension), starting stdio server...");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -190,7 +201,7 @@ async function startHTTP(
     });
   });
 
-  console.error("[codex-skills-mcp] 8 tools registered, starting HTTP server...");
+  console.error("[codex-skills-mcp] 12 tools registered (8 core + 4 openai-extension), starting HTTP server...");
 
   app.listen(port, () => {
     console.error(`[codex-skills-mcp] HTTP server running at http://localhost:${port}/mcp`);
@@ -206,6 +217,10 @@ async function main(): Promise<void> {
 
   // Parse configuration
   const config = parseConfig(args);
+
+  // Overlay user settings persisted via the openai/settings extension so
+  // they survive restarts and take effect before remote init / manifest fetch.
+  applyPersistedSettingsAtStartup(config);
 
   if (config.isRemote) {
     // Activity log lives under <cacheDir>/logs (remote mode only, so local
