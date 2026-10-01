@@ -167,6 +167,19 @@ try {
   check("mimeType text/markdown", rr.result?.contents?.[0]?.mimeType === "text/markdown");
   const hwRead = await rpc("resources/read", { uri: "skill://human-writing" });
   check("resources/read human-writing non-empty", (hwRead.result?.contents?.[0]?.text ?? "").length > 200);
+  // Supporting-file sub-path (what ChatGPT's model probed as README.md)
+  const sub = await rpc("resources/read", { uri: "skill://human-writing/README.md" });
+  const subText = sub.result?.contents?.[0]?.text ?? "";
+  check("sub-path skill://human-writing/README.md readable", subText.length > 100, { len: subText.length });
+  check("sub-path carries markdown mimeType", sub.result?.contents?.[0]?.mimeType === "text/markdown");
+  let subNf;
+  try {
+    await rpc("resources/read", { uri: "skill://human-writing/__nope__.txt" });
+    subNf = {};
+  } catch (e) {
+    subNf = { error: e };
+  }
+  check("missing sub-path file errors cleanly", !!subNf.error, subNf);
   let nf;
   try {
     await rpc("resources/read", { uri: "skill://__no_such_skill__" });

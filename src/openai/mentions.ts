@@ -66,6 +66,45 @@ export function registerOpenAIMentions(
     })
   );
 
+  // Supporting files within a skill (README.md, scripts/, references/...).
+  // Hosts/models naturally probe sub-paths like skill://<name>/README.md
+  // after reading a mention's SKILL.md; without this template those probes
+  // 404'd (-32602 "Resource not found"). {+path} spans nested directories.
+  server.registerResource(
+    "skill-file",
+    new ResourceTemplate("skill://{name}/{+path}", { list: undefined }),
+    {
+      description:
+        "A supporting file inside a codex-skills skill directory (README.md, " +
+        "scripts, configs, references). Reading materializes the skill if needed.",
+      mimeType: "text/plain",
+    },
+    async (uri, { name, path }) =>
+      withToolLogging("resources/read skill-file://", { skill: String(name), file: String(path) }, async () => {
+        const entry = searchEngine.findByName(String(name));
+        if (!entry) {
+          throw new Error(`Skill "${name}" not found.`);
+        }
+        // loadSkillFile handles remote fetch, path-traversal security and
+        // missing-file errors with clear messages.
+        const { content, size_bytes } = await loader.loadSkillFile(entry, String(path));
+        const mime = String(path).endsWith(".md")
+          ? "text/markdown"
+          : String(path).endsWith(".json")
+            ? "application/json"
+            : "text/plain";
+        return {
+          contents: [
+            {
+              uri: uri.href,
+              mimeType: mime,
+              text: `## ${name} / ${path} (${size_bytes} bytes)\n\n${content}`,
+            },
+          ],
+        };
+      })
+  );
+
   // Resolve skill:// URIs mentioned in the composer. Reading materializes the
   // skill (same code path as read_skill) and serves its SKILL.md.
   server.registerResource(
