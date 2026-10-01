@@ -39,36 +39,51 @@ export function registerOpenAIMentions(
   searchEngine: SkillSearchEngine,
   loader: SkillLoader
 ): void {
-  extensions.mentions.setHandler(async ({ query }) => {
-    // Reuse the same throttled freshness poll as search_skills so newly
-    // integrated skills show up in the typeahead as well.
-    if (typeof searchEngine.maybeRefreshManifest === "function") {
-      await searchEngine.maybeRefreshManifest();
-    }
+  extensions.mentions.setHandler(async ({ query }) =>
+    withToolLogging("search_mentions", { query }, async () => {
+      // Reuse the same throttled freshness poll as search_skills so newly
+      // integrated skills show up in the typeahead as well.
+      if (typeof searchEngine.maybeRefreshManifest === "function") {
+        await searchEngine.maybeRefreshManifest();
+      }
 
-    // The spec allows an empty query: the picker opens before the user
-    // types. Return default suggestions (most-used, then freshest) instead
-    // of an empty list so the mention target is never blank.
-    const entries: { name: string; description: string }[] = query.trim()
-      ? searchEngine.search(query, { limit: MENTION_LIMIT })
-      : searchEngine.defaultSuggestions(MENTION_LIMIT);
+      // The spec allows an empty query: the picker opens before the user
+      // types. Return default suggestions (most-used, then freshest) instead
+      // of an empty list so the mention target is never blank.
+      const entries: { name: string; description: string }[] = query.trim()
+        ? searchEngine.search(query, { limit: MENTION_LIMIT })
+        : searchEngine.defaultSuggestions(MENTION_LIMIT);
 
-    return {
-      items: entries.map((r) => ({
-        type: "resource_link" as const,
-        uri: `skill://${r.name}`,
-        name: r.name,
-        title: r.name,
-        description: r.description.substring(0, 160),
-      })),
-    };
-  });
+      return {
+        items: entries.map((r) => ({
+          type: "resource_link" as const,
+          uri: `skill://${r.name}`,
+          name: r.name,
+          title: r.name,
+          description: r.description.substring(0, 160),
+        })),
+      };
+    })
+  );
 
   // Resolve skill:// URIs mentioned in the composer. Reading materializes the
   // skill (same code path as read_skill) and serves its SKILL.md.
   server.registerResource(
     "skill",
-    new ResourceTemplate("skill://{name}", { list: undefined }),
+    new ResourceTemplate("skill://{name}", {
+      // The host's resource registry (and therefore @-mention reference
+      // resolution, e.g. mcp-resource://<server>/skill://<name> links) is
+      // built from resources/list — returning an empty list made mentioned
+      // skills unreadable in ChatGPT ("not in the available skills list").
+      list: async () => ({
+        resources: searchEngine.allSkills().map((entry) => ({
+          uri: `skill://${entry.name}`,
+          name: entry.name,
+          description: entry.description.substring(0, 120),
+          mimeType: "text/markdown",
+        })),
+      }),
+    }),
     {
       description:
         "A codex-skills skill. Reading returns its SKILL.md instructions " +

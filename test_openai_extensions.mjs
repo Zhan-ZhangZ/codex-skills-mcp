@@ -155,11 +155,18 @@ try {
 
   // 6. resources/read skill://
   const target = items[0]?.name ?? "office-docx";
+  const rl = await rpc("resources/list");
+  const rlResources = rl.result?.resources ?? [];
+  console.log("\n## 6. resources (list + read)");
+  check("resources/list returns the skill catalog", rlResources.length > 100, { count: rlResources.length });
+  check("catalog contains skill://human-writing", rlResources.some((r) => r.uri === "skill://human-writing"));
+  check("entries carry markdown mimeType", rlResources[0]?.mimeType === "text/markdown", rlResources[0]);
   const rr = await rpc("resources/read", { uri: `skill://${target}` });
   const text = rr.result?.contents?.[0]?.text ?? "";
-  console.log("\n## 6. resources/read skill://");
-  check("returns SKILL.md content", text.includes("---") || text.length > 500, { len: text.length, head: text.slice(0, 80) });
+  check(`resources/read ${target} returns SKILL.md`, text.includes("---") || text.length > 500, { len: text.length, head: text.slice(0, 80) });
   check("mimeType text/markdown", rr.result?.contents?.[0]?.mimeType === "text/markdown");
+  const hwRead = await rpc("resources/read", { uri: "skill://human-writing" });
+  check("resources/read human-writing non-empty", (hwRead.result?.contents?.[0]?.text ?? "").length > 200);
   let nf;
   try {
     await rpc("resources/read", { uri: "skill://__no_such_skill__" });

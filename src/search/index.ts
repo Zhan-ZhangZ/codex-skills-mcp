@@ -587,6 +587,15 @@ export class SkillSearchEngine {
   }
 
   /**
+   * All indexed skill entries (for MCP resources/list — the host builds its
+   * resource registry from this, which is what makes @-mention references
+   * resolvable in ChatGPT).
+   */
+  allSkills(): ManifestEntry[] {
+    return this.index.map((item) => item.entry);
+  }
+
+  /**
    * Default suggestions for empty typeahead queries (e.g. the ChatGPT
    * composer @-mention picker opens with an empty query before the user
    * types): most-used skills first, freshest manifest updates next, stable
