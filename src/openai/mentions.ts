@@ -149,12 +149,19 @@ export function registerOpenAIMentions(
           searchEngine.recordUsage(entry.name);
         }
 
+        // Self-describing hint so models reading this resource know where
+        // supporting files live (they otherwise probe sub-paths blind).
+        const hint =
+          `\n\n---\n> 📁 Supporting files for this skill (README.md, scripts/, ` +
+          `references/, ...) are readable as MCP resources: ` +
+          "`skill://" + entry.name + "/<relative-path>`.";
+
         return {
           contents: [
             {
               uri: uri.href,
               mimeType: "text/markdown",
-              text: result.instructions,
+              text: result.instructions + hint,
             },
           ],
         };
