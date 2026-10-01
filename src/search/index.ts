@@ -587,6 +587,26 @@ export class SkillSearchEngine {
   }
 
   /**
+   * Default suggestions for empty typeahead queries (e.g. the ChatGPT
+   * composer @-mention picker opens with an empty query before the user
+   * types): most-used skills first, freshest manifest updates next, stable
+   * name order last. Returns plain manifest entries with name/description.
+   */
+  defaultSuggestions(limit: number): ManifestEntry[] {
+    const entries = this.index.map((item) => item.entry);
+    entries.sort((a, b) => {
+      const ua = this.getUsage(a.name).reads;
+      const ub = this.getUsage(b.name).reads;
+      if (ua !== ub) return ub - ua;
+      const ta = a.updated_at ? Date.parse(a.updated_at) : 0;
+      const tb = b.updated_at ? Date.parse(b.updated_at) : 0;
+      if (ta !== tb) return tb - ta;
+      return a.name.localeCompare(b.name);
+    });
+    return entries.slice(0, limit);
+  }
+
+  /**
    * Throttled freshness check (conditional GET) before searches. When the poll
    * detects newer remote content it reloads the manifest and rebuilds this
    * index in place, so long-lived server processes also see new skills.

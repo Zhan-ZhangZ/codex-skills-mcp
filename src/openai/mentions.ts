@@ -46,10 +46,15 @@ export function registerOpenAIMentions(
       await searchEngine.maybeRefreshManifest();
     }
 
-    const results = searchEngine.search(query, { limit: MENTION_LIMIT });
+    // The spec allows an empty query: the picker opens before the user
+    // types. Return default suggestions (most-used, then freshest) instead
+    // of an empty list so the mention target is never blank.
+    const entries: { name: string; description: string }[] = query.trim()
+      ? searchEngine.search(query, { limit: MENTION_LIMIT })
+      : searchEngine.defaultSuggestions(MENTION_LIMIT);
 
     return {
-      items: results.map((r) => ({
+      items: entries.map((r) => ({
         type: "resource_link" as const,
         uri: `skill://${r.name}`,
         name: r.name,
