@@ -115,20 +115,25 @@ export function registerOpenAIMentions(
       // built from resources/list — returning an empty list made mentioned
       // skills unreadable in ChatGPT ("not in the available skills list").
       list: async () => ({
-        resources: searchEngine.allSkills().map((entry) => ({
-          uri: `skill://${entry.name}`,
-          name: entry.name,
-          description: entry.description.substring(0, 120),
-          mimeType: "text/markdown",
-        })),
+        // Deliberately description-free: hosts build their resource registry
+        // from this list and model-side enumeration output gets truncated
+        // around ~12k tokens with descriptions included (observed in
+        // ChatGPT). Details live in search_mentions items and resources/read;
+        // the registry only needs identity. Sorted most-used-first so any
+        // host-side truncation keeps the most valuable head.
+        resources: searchEngine
+          .defaultSuggestions(Number.MAX_SAFE_INTEGER)
+          .map((entry) => ({
+            uri: `skill://${entry.name}`,
+            name: entry.name,
+            mimeType: "text/markdown",
+          })),
       }),
     }),
-    {
-      description:
-        "A codex-skills skill. Reading returns its SKILL.md instructions " +
-        "(downloads the complete skill into the local cache on first read).",
-      mimeType: "text/markdown",
-    },
+    // No template description: the SDK merges it into every resources/list
+    // entry (199 × ~50 bytes); omitting keeps the catalog ~5k tokens, safely
+    // under the ~12k-token host truncation observed in ChatGPT.
+    { mimeType: "text/markdown" },
     async (uri, { name }) =>
       withToolLogging("resources/read skill://", { skill: String(name) }, async () => {
         let entry = searchEngine.findByName(String(name));
