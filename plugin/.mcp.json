@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codex-skills": {
+      "command": "node",
+      "args": ["/Users/zz/codex-skills-mcp/dist/index.js"],
+      "cwd": "/Users/zz/codex-skills-mcp"
+    }
+  }
+}
