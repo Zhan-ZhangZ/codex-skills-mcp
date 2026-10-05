@@ -182,10 +182,12 @@ try {
   const rl = await rpc("resources/list");
   const rlResources = rl.result?.resources ?? [];
   console.log("\n## 6. resources (list + read)");
-  check("resources/list pins butler first", rlResources[0]?.uri === "skill://00_codex_skills", rlResources[0]);
+  const skillEntries = rlResources.filter((r) => r.uri?.startsWith("skill://"));
+  check("resources/list pins butler first among skills", skillEntries[0]?.uri === "skill://00_codex_skills", skillEntries[0]);
+  check("app ui:// resource listed for host discovery", rlResources.some((r) => r.uri === "ui://codex-skills/app"));
   check("resources/list returns the skill catalog", rlResources.length > 100, { count: rlResources.length });
   check("catalog contains skill://human-writing", rlResources.some((r) => r.uri === "skill://human-writing"));
-  check("entries carry markdown mimeType", rlResources[0]?.mimeType === "text/markdown", rlResources[0]);
+  check("skill entries carry markdown mimeType", skillEntries[1]?.mimeType === "text/markdown", skillEntries[1]);
   const rr = await rpc("resources/read", { uri: `skill://${target}` });
   const text = rr.result?.contents?.[0]?.text ?? "";
   check(`resources/read ${target} returns SKILL.md`, text.includes("---") || text.length > 500, { len: text.length, head: text.slice(0, 80) });

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Codex Skills 技能库</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: light-dark(#fafafa, #171717);
+    color: light-dark(#1f1f1f, #ececec);
+    padding: 32px;
+  }
+  .card {
+    max-width: 460px; width: 100%;
+    border: 1px solid light-dark(#e5e5e5, #2e2e2e);
+    border-radius: 14px; padding: 32px;
+    background: light-dark(#ffffff, #1f1f1f);
+    text-align: center;
+  }
+  .grid { display: inline-grid; grid-template-columns: repeat(2, 22px); gap: 5px; margin-bottom: 20px; }
+  .grid span { width: 22px; height: 22px; border-radius: 5px; border: 1.6px solid currentColor; opacity: .85; }
+  h1 { font-size: 19px; font-weight: 650; margin-bottom: 8px; }
+  p { font-size: 13.5px; line-height: 1.75; opacity: .72; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: light-dark(#f0f0f0, #2a2a2a); padding: 2px 6px; border-radius: 5px; }
+  .badge { display: inline-block; margin-top: 18px; font-size: 11.5px; padding: 4px 10px; border-radius: 99px; border: 1px solid light-dark(#d4d4d4, #3a3a3a); opacity: .8; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+    <h1>Codex Skills 技能库</h1>
+    <p>MCP App 骨架已就位。此占位页由服务器作为 <code>ui://codex-skills/app</code> 资源提供；交互式浏览器（分类 · 搜索 · 技能详情）将在 Stage 2 由 Vite + ext-apps 构建替换。</p>
+    <p style="margin-top:10px">当前可用入口：<code>@</code> 提及 · <code>skill://</code> 资源 · 管家 <code>00_codex_skills</code></p>
+    <span class="badge">Stage 1 · placeholder</span>
+  </div>
+</body>
+</html>

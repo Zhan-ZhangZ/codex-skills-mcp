@@ -23,6 +23,12 @@ export interface Config {
   manifestPollMs: number;
   /** Base download timeout for skill files in milliseconds. Default: 30000 (30s). */
   downloadTimeout: number;
+  /**
+   * Option keys explicitly provided via CLI flags this run. Persisted user
+   * settings (~/.codex-skills-mcp/settings.json) must NOT override these —
+   * precedence is CLI > persisted settings > defaults.
+   */
+  explicitCli?: Set<string>;
 }
 
 /**
@@ -58,6 +64,16 @@ export function parseConfig(args: string[]): Config {
     return idx !== -1 && args[idx + 1] ? args[idx + 1] : undefined;
   };
   
+  const explicitCli = new Set<string>();
+  const markExplicit = (flag: string, key: string) => {
+    if (args.includes(flag)) explicitCli.add(key);
+  };
+  markExplicit("--cn-mirror", "cn_mirror");
+  markExplicit("--download-concurrency", "download_concurrency");
+  markExplicit("--download-timeout", "download_timeout_seconds");
+  markExplicit("--manifest-ttl", "manifest_ttl_hours");
+  markExplicit("--manifest-poll", "manifest_poll_seconds");
+
   const githubRepo = getArg("--github-repo") || "Zhan-ZhangZ/codexprojec";
   const githubBranch = getArg("--github-branch") || "main";
   const githubPath = getArg("--github-path") || "codex-skills";
@@ -166,6 +182,7 @@ export function parseConfig(args: string[]): Config {
   const downloadTimeout = downloadTimeoutSeconds * 1000;
 
   return { 
+    explicitCli,
     skillsDir, 
     manifestPath, 
     isRemote, 

@@ -125,6 +125,21 @@ function applyToConfig(config: Config, s: EffectiveSettings): void {
   config.manifestPollMs = s.manifest_poll_seconds * 1000;
 }
 
+/**
+ * Startup overlay only: persisted settings apply to fields the user did NOT
+ * set explicitly on the command line this run. Precedence: CLI > persisted
+ * settings > defaults. (Runtime settings.update still applies every field —
+ * it is an explicit user action after startup.)
+ */
+function applyPersistedSelective(config: Config, s: EffectiveSettings): void {
+  const ex = config.explicitCli ?? new Set<string>();
+  if (!ex.has("cn_mirror")) config.useCnMirror = s.cn_mirror;
+  if (!ex.has("download_concurrency")) config.downloadConcurrency = s.download_concurrency;
+  if (!ex.has("download_timeout_seconds")) config.downloadTimeout = s.download_timeout_seconds * 1000;
+  if (!ex.has("manifest_ttl_hours")) config.manifestTTL = Math.round(s.manifest_ttl_hours * 3_600_000);
+  if (!ex.has("manifest_poll_seconds")) config.manifestPollMs = s.manifest_poll_seconds * 1000;
+}
+
 /** Merge persisted overrides over config defaults. */
 function effective(config: Config, persisted: PersistedSettings): EffectiveSettings {
   const base = defaultsFromConfig(config);
@@ -148,7 +163,7 @@ function effective(config: Config, persisted: PersistedSettings): EffectiveSetti
  * startup (before remote init / manifest fetch) so restarts honor them.
  */
 export function applyPersistedSettingsAtStartup(config: Config): void {
-  applyToConfig(config, effective(config, loadPersisted()));
+  applyPersistedSelective(config, effective(config, loadPersisted()));
 }
 
 /**

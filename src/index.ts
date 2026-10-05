@@ -40,6 +40,7 @@ import { registerSkillStatus } from "./tools/skill-status.js";
 import { registerDiagnostics } from "./tools/diagnostics.js";
 import { registerOpenAISettings, applyPersistedSettingsAtStartup } from "./openai/settings.js";
 import { registerOpenAIMentions } from "./openai/mentions.js";
+import { registerCodexSkillsApp } from "./openai/app.js";
 
 // Single source of truth for the version: read package.json instead of
 // hardcoding it here, so releasing a new version only requires one bump.
@@ -78,6 +79,14 @@ function createServer(
   registerOpenAISettings(server, openai, config, searchEngine);
   registerOpenAIMentions(server, openai, config, searchEngine, loader);
 
+  // MCP App (Stage 1): sidebar entrypoints served from the bundled app.html.
+  // Self-disabling when the asset is absent — all other surfaces intact.
+  const appRegistered = registerCodexSkillsApp(server, searchEngine);
+  console.error(
+    `[codex-skills-mcp] ${12 + (appRegistered ? 2 : 0)} tools registered ` +
+      `(8 core + 4 openai-extension${appRegistered ? " + 2 app entrypoints" : ""})`
+  );
+
   return server;
 }
 
@@ -88,7 +97,7 @@ async function startStdio(
 ): Promise<void> {
   const server = createServer(config, searchEngine, loader);
 
-  console.error("[codex-skills-mcp] 12 tools registered (8 core + 4 openai-extension), starting stdio server...");
+  console.error("[codex-skills-mcp] starting stdio server...");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -201,7 +210,7 @@ async function startHTTP(
     });
   });
 
-  console.error("[codex-skills-mcp] 12 tools registered (8 core + 4 openai-extension), starting HTTP server...");
+  console.error("[codex-skills-mcp] starting HTTP server...");
 
   app.listen(port, () => {
     console.error(`[codex-skills-mcp] HTTP server running at http://localhost:${port}/mcp`);

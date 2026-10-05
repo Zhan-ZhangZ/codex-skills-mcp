@@ -11,4 +11,6 @@ await build({
     js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
   },
 });
-console.log("plugin/dist/server.js bundled");
+import { copyFileSync } from "node:fs";
+copyFileSync("assets/app.html", "plugin/dist/app.html");
+console.log("plugin/dist/server.js + app.html bundled");
