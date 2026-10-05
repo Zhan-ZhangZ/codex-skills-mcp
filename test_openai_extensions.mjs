@@ -153,14 +153,19 @@ try {
   check("items are skill:// resource_links", items.every((i) => i.type === "resource_link" && i.uri?.startsWith("skill://")), items.slice(0, 3));
   console.log(`    top mentions: ${items.slice(0, 5).map((i) => i.name).join(", ")}`);
 
-  // 5b. butler pinned in typeahead (Phase 2)
+  // 5b. butler placement (Phase 2, revised)
   const pinned = await callTool("search_mentions", { query: "" });
   const pinnedItems = pinned.result?.structuredContent?.items ?? [];
   check("empty query: butler pinned first", pinnedItems[0]?.name === "00_codex_skills", pinnedItems[0]);
   check("empty query: butler title flagged", (pinnedItems[0]?.title ?? "").includes("管家"), pinnedItems[0]?.title);
-  const anyQ = await callTool("search_mentions", { query: "视频 video" });
-  const anyItems = anyQ.result?.structuredContent?.items ?? [];
-  check("arbitrary query: butler still pinned first", anyItems[0]?.name === "00_codex_skills", anyItems[0]?.name);
+  const vidQ = await callTool("search_mentions", { query: "视频 video" });
+  const vidItems = vidQ.result?.structuredContent?.items ?? [];
+  check("unrelated query: butler NOT injected", !vidItems.some((i) => i.name === "00_codex_skills"), vidItems[0]?.name);
+  const guanQ = await callTool("search_mentions", { query: "管家" });
+  const guanItems = guanQ.result?.structuredContent?.items ?? [];
+  check("query 管家 finds butler (keyword match)", guanItems.some((i) => i.name === "00_codex_skills"), guanItems.slice(0, 3).map((i) => i.name));
+  const routerQ = await callTool("search_mentions", { query: "router" });
+  check("query router finds butler", (routerQ.result?.structuredContent?.items ?? []).some((i) => i.name === "00_codex_skills"));
   // search_skills (CLI surface) must remain butler-free
   const cliSearch = await callTool("search_skills", { query: "管家 router butler", limit: 8 });
   const cliText = (cliSearch.result?.content ?? []).map((c) => c.text).join("\n");

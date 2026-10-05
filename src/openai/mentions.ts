@@ -64,6 +64,20 @@ async function loadButlerSkillMd(config: Config): Promise<string> {
 }
 
 /**
+ * Whether the butler itself matches a typed query. The butler is outside the
+ * BM25 index (it is the entrance, not content), so typeahead matches it
+ * directly against its name/description — "管家", "router", "codex skills"
+ * all hit, "视频" does not.
+ */
+function butlerMatchesQuery(butler: { name: string; description: string }, query: string): boolean {
+  const haystack = `${butler.name} ${butler.description}`.toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  if (haystack.includes(q)) return true;
+  return q.split(/\s+/).filter(Boolean).some((t) => haystack.includes(t));
+}
+
+/**
  * Register the mentions handler and the skill:// resource template.
  */
 export function registerOpenAIMentions(
@@ -81,16 +95,15 @@ export function registerOpenAIMentions(
         await searchEngine.maybeRefreshManifest();
       }
 
-      // The spec allows an empty query: the picker opens before the user
-      // types. Return default suggestions (most-used, then freshest) instead
-      // of an empty list so the mention target is never blank.
-      const entries: { name: string; description: string }[] = query.trim()
+      // Butler placement: PINNED FIRST only on the empty query (picker just
+      // opened, nothing typed). Once the user searches, it appears only when
+      // the query actually matches it ("管家" / "router" / "codex skills") —
+      // no forced pinning inside search results.
+      const q = query.trim();
+      const entries: { name: string; description: string }[] = q
         ? searchEngine.search(query, { limit: MENTION_LIMIT })
         : searchEngine.defaultSuggestions(MENTION_LIMIT);
 
-      // The butler is PINNED as the first item on every typeahead response:
-      // it is the library entrance (Librarian Router), independent of what
-      // the user is typing. Regular results follow unchanged.
       const butler = searchEngine.getButlerEntry();
       const items: {
         type: "resource_link";
@@ -99,13 +112,13 @@ export function registerOpenAIMentions(
         title: string;
         description?: string;
       }[] = [];
-      if (butler) {
+      if (butler && (!q || butlerMatchesQuery(butler, q))) {
         items.push({
           type: "resource_link",
           uri: `skill://${butler.name}`,
           name: butler.name,
           title: `管家 · ${butler.name}`,
-          description: `【固定入口】${butler.description}`.substring(0, 180),
+          description: butler.description.substring(0, 180),
         });
       }
       for (const r of entries) {
