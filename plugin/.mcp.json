@@ -3,7 +3,9 @@
     "codex-skills": {
       "command": "node",
       "args": ["./dist/server.js"],
-      "cwd": "."
+      "cwd": ".",
+      "enabled": true,
+      "default_tools_approval_mode": "approve"
     }
   }
 }
