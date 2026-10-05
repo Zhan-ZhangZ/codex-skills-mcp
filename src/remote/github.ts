@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { resolve, dirname, join, basename } from "node:path";
 import type { Config, ManifestEntry } from "../config.js";
 import { logEvent } from "../lib/logger.js";
@@ -8,12 +8,26 @@ interface TreeFileEntry {
   path: string;
   /** File size in bytes (from the git tree API) — used to skip already-downloaded files */
   size: number;
+  /**
+   * Git blob SHA from the trees API. Enables content-level change detection:
+   * two versions of a file can share the same size, but never the same sha.
+   * Absent in legacy cache entries (pre-revalidation) — comparison then
+   * degrades to size-only.
+   */
+  sha?: string;
 }
 
 interface SkillTreeCache {
   version: 1;
   /** Set only when every file in `files` has been downloaded successfully */
   completedAt?: string;
+  /**
+   * When the file list was last validated against the remote tree.
+   * `manifestTTL` governs revalidation frequency; `manifestTTL === 0`
+   * disables it (legacy never-revalidate behavior). Absent in legacy
+   * entries — `completedAt` then serves as the one-time anchor.
+   */
+  validatedAt?: string;
   files: TreeFileEntry[];
   /** For single-file skills: absolute remote path to fetch (files.path is not prefixed) */
   singleFileRemotePath?: string;
@@ -38,6 +52,8 @@ interface CategoryTreeEntry {
   /** Path relative to the category dir, e.g. "paper-search/SKILL.md" */
   path: string;
   size: number;
+  /** Git blob SHA — propagated into per-skill tree caches on revalidation */
+  sha?: string;
 }
 
 interface CategoryTreeData {
@@ -309,6 +325,7 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
       .map((t: any) => ({
         path: t.path,
         size: typeof t.size === "number" ? t.size : 0,
+        sha: typeof t.sha === "string" ? t.sha : undefined,
       }));
 
     return { version: 1, files };
@@ -406,6 +423,7 @@ async function fetchCategoryTree(
     .map((t: any) => ({
       path: t.path,
       size: typeof t.size === "number" ? t.size : 0,
+      sha: typeof t.sha === "string" ? t.sha : undefined,
     }));
   console.error(
     `[codex-skills-mcp] Category tree cached: ${entries.length} files (${categoryPath})`
@@ -474,7 +492,11 @@ async function fetchSkillTreeFromCategory(
   const files: TreeFileEntry[] = [];
   for (const entryItem of data.entries) {
     if (entryItem.path.startsWith(prefix)) {
-      files.push({ path: entryItem.path.slice(prefix.length), size: entryItem.size });
+      files.push({
+        path: entryItem.path.slice(prefix.length),
+        size: entryItem.size,
+        sha: entryItem.sha,
+      });
     }
   }
   if (files.length > 0) {
@@ -485,7 +507,7 @@ async function fetchSkillTreeFromCategory(
   if (exact) {
     return {
       version: 1,
-      files: [{ path: basename(skillName), size: exact.size }],
+      files: [{ path: basename(skillName), size: exact.size, sha: exact.sha }],
       singleFileRemotePath: buildSkillRemotePath(config, `${categoryPath}/${skillName}`),
     };
   }
@@ -820,6 +842,138 @@ export async function refreshManifestIfStale(config: Config): Promise<boolean> {
 /** Per-skill fetch deduplication: prevents concurrent downloads of the same skill */
 const inflightFetches = new Map<string, Promise<void>>();
 
+/** In-memory backoff (10 min) after a failed revalidation: serve stale instead of hammering a dead network on every read. */
+const revalidateBackoff = new Map<string, number>();
+const REVALIDATE_BACKOFF_MS = 10 * 60 * 1000;
+
+function inRevalidateBackoff(relPath: string): boolean {
+  return Date.now() < (revalidateBackoff.get(relPath) ?? 0);
+}
+
+/**
+ * Whether a completed skill's tree cache may be served without contacting the
+ * remote. `manifestTTL === 0` disables revalidation entirely (legacy
+ * never-revalidate behavior, zero overhead). Legacy entries without
+ * `validatedAt` use `completedAt` as a one-time anchor.
+ */
+function isTreeValidationFresh(cached: SkillTreeCache, config: Config, relPath: string): boolean {
+  if (config.manifestTTL === 0) return true;
+  if (inRevalidateBackoff(relPath)) return true;
+  const anchor = cached.validatedAt ?? cached.completedAt ?? null;
+  if (!anchor) return false;
+  const age = Date.now() - Date.parse(anchor);
+  return Number.isFinite(age) && age <= config.manifestTTL;
+}
+
+/**
+ * Re-list the skill's remote tree (category cache first — 2 conditional API
+ * calls per category per TTL window, shared by every skill in it) and sync:
+ * download new/size-changed/sha-changed files, remove upstream-deleted ones,
+ * then rewrite the tree marker with fresh shas and a new validatedAt.
+ * Degrades gracefully: on any failure the cached version is served and a
+ * 10-minute backoff suppresses retry storms.
+ */
+async function revalidateSkillTree(
+  config: Config,
+  entry: ManifestEntry,
+  relPath: string,
+  skillLocalPath: string,
+  cacheFile: string,
+  onProgress?: ProgressCallback
+): Promise<void> {
+  const skillName = basename(skillLocalPath);
+  try {
+    const remote =
+      (await fetchSkillTreeFromCategory(config, entry)) ??
+      (await fetchSkillTree(config, relPath));
+    if (!remote.files || remote.files.length === 0) {
+      throw new Error("remote tree returned no files");
+    }
+    const remoteTree: SkillTreeCache = { ...remote, source: cacheSource(config) };
+
+    let oldFiles: TreeFileEntry[] = [];
+    try {
+      const old = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
+      if (sameSource(old.source, config) && Array.isArray(old.files)) oldFiles = old.files;
+    } catch {
+      // unreadable marker → treat as no prior knowledge
+    }
+    const oldByPath = new Map(oldFiles.map((f) => [f.path, f]));
+    const remotePaths = new Set(remoteTree.files.map((f) => f.path));
+
+    let changed = 0;
+    let removed = 0;
+    for (const rf of remoteTree.files) {
+      const of = oldByPath.get(rf.path);
+      const sizeChanged = !!of && of.size !== rf.size;
+      // sha-level detection catches same-size content edits that size checks miss
+      const shaChanged = !!of && !!rf.sha && !!of.sha && of.sha !== rf.sha;
+      if (!of || sizeChanged || shaChanged) {
+        changed++;
+        // Unlink changed files: downloadMissing's size-based skip would
+        // otherwise leave same-size sha-changed files stale on disk.
+        if (of && (sizeChanged || shaChanged)) {
+          const local = resolve(skillLocalPath, rf.path);
+          if (existsSync(local)) unlinkSync(local);
+        }
+      }
+    }
+    for (const of of oldFiles) {
+      if (!remotePaths.has(of.path)) {
+        const local = resolve(skillLocalPath, of.path);
+        if (existsSync(local)) {
+          unlinkSync(local);
+          removed++;
+        }
+      }
+    }
+
+    await downloadMissing(config, relPath, remoteTree, skillLocalPath, onProgress);
+
+    const now = new Date().toISOString();
+    writeFileSync(
+      cacheFile,
+      JSON.stringify({ ...remoteTree, completedAt: now, validatedAt: now }, null, 2),
+      "utf-8"
+    );
+    revalidateBackoff.delete(relPath);
+
+    if (changed > 0 || removed > 0) {
+      logEvent("info", "skill_revalidated", {
+        skill: skillName,
+        detail: JSON.stringify({ changed, removed }),
+      });
+      console.error(
+        `[codex-skills-mcp] Skill "${skillName}" updated from remote: ${changed} file(s) changed, ${removed} removed`
+      );
+    }
+  } catch (error: any) {
+    revalidateBackoff.set(relPath, Date.now() + REVALIDATE_BACKOFF_MS);
+    console.error(
+      `[codex-skills-mcp] Tree revalidation failed for "${skillName}" (${error?.message ?? error}); serving cached version`
+    );
+    logEvent("warn", "skill_revalidate_failed", { skill: skillName, error: String(error?.message ?? error) });
+  }
+}
+
+/** Run `fn` under the per-skill inflight lock (deduplicates concurrent callers). */
+async function runExclusively(relPath: string, fn: () => Promise<void>): Promise<void> {
+  const existing = inflightFetches.get(relPath);
+  if (existing) {
+    await existing;
+    return;
+  }
+  const promise = (async () => {
+    try {
+      await fn();
+    } finally {
+      inflightFetches.delete(relPath);
+    }
+  })();
+  inflightFetches.set(relPath, promise);
+  await promise;
+}
+
 /**
  * Ensure a skill's directory is downloaded and cached.
  *
@@ -829,6 +983,10 @@ const inflightFetches = new Map<string, Promise<void>>();
  * - A `.codex-skills.tree.json` marker records the file list + completion state,
  *   so an interrupted download resumes on the next call instead of being
  *   silently treated as complete.
+ * - Completed caches are REVALIDATED against the remote tree once
+ *   `manifestTTL` expires: content-level (sha) changes, added files and
+ *   upstream deletions are all picked up; `manifestTTL === 0` keeps the
+ *   legacy never-revalidate behavior.
  * - Concurrent calls for the same skill are deduplicated via a promise lock.
  */
 export async function ensureSkillFetched(
@@ -842,36 +1000,39 @@ export async function ensureSkillFetched(
 
   // Fast path: fully downloaded in a previous run (sync check, no lock needed)
   if (existsSync(cacheFile)) {
+    let cached: SkillTreeCache | null = null;
     try {
-      const cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
-      // Only trust the cache when it belongs to the configured remote source
-      if (sameSource(cached.source, config) && cached.completedAt && Array.isArray(cached.files)) {
-        if (areFilesUpToDate(cached, skillLocalPath)) {
-          return;
-        }
-      }
+      cached = JSON.parse(readFileSync(cacheFile, "utf-8")) as SkillTreeCache;
     } catch {
-      // Corrupted — fall through to locked fetch
+      cached = null; // corrupted — fall through to locked fetch
+    }
+    // Only trust the cache when it belongs to the configured remote source
+    if (
+      cached &&
+      sameSource(cached.source, config) &&
+      cached.completedAt &&
+      Array.isArray(cached.files)
+    ) {
+      const filesOk = areFilesUpToDate(cached, skillLocalPath);
+      if (filesOk && isTreeValidationFresh(cached, config, relPath)) {
+        return; // hot: complete, intact, validated within TTL
+      }
+      if (!filesOk && isTreeValidationFresh(cached, config, relPath)) {
+        // Local damage, but the recorded list is trusted-fresh: repair from it
+        await downloadMissing(config, relPath, cached, skillLocalPath, onProgress);
+        return;
+      }
+      // Validation stale (± local damage): re-list and sync against remote
+      await runExclusively(relPath, () =>
+        revalidateSkillTree(config, entry, relPath, skillLocalPath, cacheFile, onProgress)
+      );
+      return;
     }
   }
 
-  // Dedup: if another call is already fetching this skill, wait for it
-  const existing = inflightFetches.get(relPath);
-  if (existing) {
-    await existing;
-    return;
-  }
-
-  const fetchPromise = (async () => {
-    try {
-      await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
-    } finally {
-      inflightFetches.delete(relPath);
-    }
-  })();
-
-  inflightFetches.set(relPath, fetchPromise);
-  await fetchPromise;
+  await runExclusively(relPath, () =>
+    doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile, onProgress)
+  );
 }
 
 /** Inner fetch logic, called under dedup lock */

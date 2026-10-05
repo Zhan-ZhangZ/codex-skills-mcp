@@ -59,3 +59,17 @@
 - **MCP App 前端**（侧边栏技能库浏览器 / 线程面板 / 文件处理器）：需按 [ext-apps](https://github.com/modelcontextprotocol/ext-apps) 协议新建 UI 工程并走 ChatGPT 插件分发，是独立立项量级。
 - **官方 `io.modelcontextprotocol/skills` 扩展**（`skills/list` + `skills/get` + manifest 摘要）：本次新增的 `skill://` 资源模板已是其 groundwork。
 - OpenAI form elicitation（增强表单/缩略图选择）。
+
+## 缓存重验证（staleness 修复，Phase 2 附带）
+
+**缺陷**（2026-10-05 实测发现）：已缓存技能的快路径只做本地比对（本地文件 vs tree.json 里下载时刻的记录），永不询问远端——内容变更、同文件大小变更、**甚至新增文件**都检测不到；本地损坏时的"修复"也按旧清单补齐旧内容。仅新增**技能**（manifest 层）能被看到。
+
+**修复**（三层）：
+
+1. `TreeFileEntry`/`CategoryTreeEntry` 记录 git blob **sha**（同大小内容变更也可检测；比对用旧记录 sha vs 新远端 sha，无需本地哈希）。
+2. `SkillTreeCache` 增加 `validatedAt`；快路径在 `manifestTTL` 过期后触发**重验证**：经类目树缓存（2 次条件调用/类目/TTL 窗口，全类目共享）重取远端清单 → diff → 下载新增/变更文件（sha 变更的先 unlink 以绕过同大小跳过）→ 删除上游已移除文件 → 重写 tree.json。
+3. 降级策略：重验证失败**不阻断读取**（照常服务缓存版），10 分钟内存退避防止网络故障时每次读取都打超时。`manifestTTL = 0` 完全关闭重验证（回到旧行为、零开销），设置面板 `Cache TTL (hours)` 可调。
+
+迁移：legacy tree.json 无 `validatedAt` 时以 `completedAt` 为一次性锚点；首次重验证后写入 sha 与 validatedAt。legacy 类目缓存无 sha 的窗口期（≤1h TTL）内 sha 比对退化为 size 级。
+
+**验证**（`test_revalidation.mjs`，真实缓存+真实仓库）：A 过期自愈（字节数对齐 tree.json 权威记录）；B TTL=0 关闭；C 同尺寸污染+sha 篡改被检测并复原。另：协议 24/24、扩展套件、freshness 6/6 零回归。

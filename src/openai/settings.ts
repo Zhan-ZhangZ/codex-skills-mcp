@@ -76,8 +76,9 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
   },
   manifest_ttl_hours: {
     schema: SCHEMAS.manifest_ttl_hours,
-    title: "Manifest cache TTL (hours)",
-    description: "How long the skills manifest stays fresh (0 = never auto-refresh, max 168).",
+    title: "Cache TTL (hours)",
+    description:
+      "How long the skills manifest AND cached skill file trees stay trusted before revalidation against the remote (0 = never, max 168). Lower = upstream content changes picked up sooner.",
   },
   manifest_poll_seconds: {
     schema: SCHEMAS.manifest_poll_seconds,
