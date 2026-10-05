@@ -185,6 +185,7 @@ try {
   const butlerRead = await rpc("resources/read", { uri: "skill://00_codex_skills" });
   const butlerText = butlerRead.result?.contents?.[0]?.text ?? "";
   check("butler readable via skill:// (root SKILL.md)", butlerText.includes("Librarian Router") && butlerText.includes("Golden Rules"), { len: butlerText.length, head: butlerText.slice(0, 60) });
+  check("butler carries MCP host note (auto-materialize uncached skills)", butlerText.includes("MCP host note") && butlerText.includes("resources/read skill://<name>"), undefined);
   check("butler is single file, not library dump", butlerText.length < 20000, { len: butlerText.length });
   // Supporting-file sub-path (what ChatGPT's model probed as README.md)
   const sub = await rpc("resources/read", { uri: "skill://human-writing/README.md" });

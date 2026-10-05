@@ -211,12 +211,26 @@ export function registerOpenAIMentions(
             throw new Error("Butler skill (00_codex_skills) missing from manifest.");
           }
           const text = await loadButlerSkillMd(config);
+          // Host-compatibility note: the butler's gates were written for
+          // filesystem hosts (view_file / reading skills_manifest.json). In
+          // MCP hosts this teaches it the resource path, so UNCACHED skills
+          // routed by Gate 2/3 auto-materialize instead of failing on a
+          // shell cat of a nonexistent local file.
+          const note =
+            "\n\n---\n\n" +
+            "> 🔌 **MCP host note** (appended by the codex-skills server):\n" +
+            "> - Read ANY skill — cached or not — via `resources/read skill://<name>`; " +
+            "first read auto-downloads (materializes) the complete skill. " +
+            "Supporting files: `skill://<name>/<relative-path>`.\n" +
+            "> - Prefer `search_skills` / `search_mentions` over reading " +
+            "skills_manifest.json directly: same index, BM25-ranked, Chinese-friendly.\n" +
+            "> - Local cache root when shell access is available: `~/.codex-skills-cache/`.\n";
           return {
             contents: [
               {
                 uri: uri.href,
                 mimeType: "text/markdown",
-                text,
+                text: text + note,
               },
             ],
           };
