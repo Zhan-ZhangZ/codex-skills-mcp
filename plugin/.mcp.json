@@ -1,8 +1,9 @@
 {
   "mcpServers": {
     "codex-skills": {
-      "command": "npx",
-      "args": ["-y", "codex-skills-mcp@beta"]
+      "command": "node",
+      "args": ["./dist/server.js"],
+      "cwd": "."
     }
   }
 }
