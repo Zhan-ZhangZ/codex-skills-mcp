@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "codex-skills",
+  "version": "0.1.0",
+  "description": "Browse, search, and load 199+ on-demand expert skills.",
+  "author": { "name": "Zhan-ZhangZ" },
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Codex Skills 技能库",
+        "shortDescription": "199+ 按需专家技能库",
+        "longDescription": "Browse categories, search the library, preview SKILL.md, and pick expert skills for the conversation. Skills download automatically on first use.",
+        "developerName": "Zhan-ZhangZ",
+        "category": "Productivity",
+        "capabilities": ["Interactive", "Read"],
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg",
+        "defaultPrompt": ["@Codex Skills 搜索技能"]
+      }
+    }
+  }
+}
