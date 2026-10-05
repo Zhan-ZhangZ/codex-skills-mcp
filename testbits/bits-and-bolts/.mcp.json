@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "bits-and-bolts": {
+      "command": "node",
+      "args": ["./dist/server.js"],
+      "cwd": "."
+    }
+  }
+}

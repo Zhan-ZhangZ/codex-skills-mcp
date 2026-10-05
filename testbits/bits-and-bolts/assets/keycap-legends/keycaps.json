@@ -1,0 +1,194 @@
+[
+  {
+    "slug": "bug",
+    "name": "Bug",
+    "units": 1,
+    "source": "bug.svg"
+  },
+  {
+    "slug": "openai",
+    "name": "OpenAI",
+    "units": 1,
+    "source": "openai.svg"
+  },
+  {
+    "slug": "terminal",
+    "name": "Terminal",
+    "units": 1,
+    "source": "terminal.svg"
+  },
+  {
+    "slug": "download",
+    "name": "Download",
+    "units": 1,
+    "source": "download.svg"
+  },
+  {
+    "slug": "trash",
+    "name": "Trash",
+    "units": 1,
+    "source": "trash.svg"
+  },
+  {
+    "slug": "compose",
+    "name": "New task",
+    "units": 1,
+    "source": "compose.svg"
+  },
+  {
+    "slug": "pointer",
+    "name": "Pointer",
+    "units": 1,
+    "source": "pointer.svg"
+  },
+  {
+    "slug": "star",
+    "name": "Star",
+    "units": 1,
+    "source": "star.svg"
+  },
+  {
+    "slug": "diff",
+    "name": "Diff",
+    "units": 1,
+    "source": "diff.svg"
+  },
+  {
+    "slug": "play",
+    "name": "Play",
+    "units": 1,
+    "source": "play.svg"
+  },
+  {
+    "slug": "pull-request-draft",
+    "name": "Draft pull request",
+    "units": 1,
+    "source": "pull-request-draft.svg"
+  },
+  {
+    "slug": "branch",
+    "name": "Branch",
+    "units": 1,
+    "source": "branch.svg"
+  },
+  {
+    "slug": "pull-request",
+    "name": "Pull request",
+    "units": 1,
+    "source": "pull-request.svg"
+  },
+  {
+    "slug": "merge",
+    "name": "Merge",
+    "units": 1,
+    "source": "merge.svg"
+  },
+  {
+    "slug": "paint",
+    "name": "Paint",
+    "units": 1,
+    "source": "paint.svg"
+  },
+  {
+    "slug": "flask",
+    "name": "Flask",
+    "units": 1,
+    "source": "flask.svg"
+  },
+  {
+    "slug": "confetti",
+    "name": "Confetti",
+    "units": 1,
+    "source": "confetti.svg"
+  },
+  {
+    "slug": "clock",
+    "name": "Clock",
+    "units": 1,
+    "source": "clock.svg"
+  },
+  {
+    "slug": "brain",
+    "name": "Brain",
+    "units": 1,
+    "source": "brain.svg"
+  },
+  {
+    "slug": "brain-outline",
+    "name": "Brain outline",
+    "units": 1,
+    "source": "brain-outline.svg"
+  },
+  {
+    "slug": "fast",
+    "name": "Fast",
+    "units": 1,
+    "source": "fast.svg"
+  },
+  {
+    "slug": "approve",
+    "name": "Approve",
+    "units": 1,
+    "source": "approve.svg"
+  },
+  {
+    "slug": "reject",
+    "name": "Reject",
+    "units": 1,
+    "source": "reject.svg"
+  },
+  {
+    "slug": "worktree",
+    "name": "Worktree",
+    "units": 1,
+    "source": "worktree.svg"
+  },
+  {
+    "slug": "settings",
+    "name": "Settings",
+    "units": 1,
+    "source": "settings.svg"
+  },
+  {
+    "slug": "folder-plus",
+    "name": "Add folder",
+    "units": 1,
+    "source": "folder-plus.svg"
+  },
+  {
+    "slug": "cloud-upload",
+    "name": "Cloud upload",
+    "units": 1,
+    "source": "cloud-upload.svg"
+  },
+  {
+    "slug": "apps",
+    "name": "Apps",
+    "units": 1,
+    "source": "apps.svg"
+  },
+  {
+    "slug": "yolo",
+    "name": "Yolo",
+    "units": 1,
+    "source": "yolo.svg"
+  },
+  {
+    "slug": "yeet",
+    "name": "Yeet",
+    "units": 1,
+    "source": "yeet.svg"
+  },
+  {
+    "slug": "microphone",
+    "name": "Microphone",
+    "units": 2,
+    "source": "microphone.svg"
+  },
+  {
+    "slug": "codex",
+    "name": "Codex",
+    "units": 1,
+    "source": "codex.svg"
+  }
+]
