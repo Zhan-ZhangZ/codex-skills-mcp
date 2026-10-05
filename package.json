@@ -18,7 +18,7 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
-    "build:plugin": "esbuild dist/index.js --bundle --platform=node --format=esm --outfile=plugin/dist/server.js --external=express --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\""
+    "build:plugin": "node scripts/build-plugin.mjs"
   },
   "keywords": [
     "mcp",
