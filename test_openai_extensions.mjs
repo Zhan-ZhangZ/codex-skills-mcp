@@ -166,6 +166,12 @@ try {
   check("query 管家 finds butler (keyword match)", guanItems.some((i) => i.name === "00_codex_skills"), guanItems.slice(0, 3).map((i) => i.name));
   const routerQ = await callTool("search_mentions", { query: "router" });
   check("query router finds butler", (routerQ.result?.structuredContent?.items ?? []).some((i) => i.name === "00_codex_skills"));
+  // IME composition intermediates must never yield an empty picker
+  for (const ime of ["guanj", "guan", "管jia", "zzzz"]) {
+    const r = await callTool("search_mentions", { query: ime });
+    const n = (r.result?.structuredContent?.items ?? []).length;
+    check(`IME intermediate "${ime}" non-empty (${n})`, n > 0);
+  }
   // search_skills (CLI surface) must remain butler-free
   const cliSearch = await callTool("search_skills", { query: "管家 router butler", limit: 8 });
   const cliText = (cliSearch.result?.content ?? []).map((c) => c.text).join("\n");

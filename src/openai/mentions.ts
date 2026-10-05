@@ -131,6 +131,24 @@ export function registerOpenAIMentions(
         });
       }
 
+      // Never answer a non-empty query with an empty list. IME composition
+      // (double-pinyin etc.) sends intermediate romanized queries like
+      // "guan"/"管jia" that match nothing; an empty response made the host's
+      // composer cancel the mention session and drop the @ chip (observed in
+      // ChatGPT desktop). Fall back to usage-ranked suggestions so the
+      // picker stays populated until real characters commit.
+      if (q && items.length === 0) {
+        for (const r of searchEngine.defaultSuggestions(5)) {
+          items.push({
+            type: "resource_link",
+            uri: `skill://${r.name}`,
+            name: r.name,
+            title: r.name,
+            description: r.description.substring(0, 160),
+          });
+        }
+      }
+
       return { items };
     })
   );
