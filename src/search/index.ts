@@ -226,6 +226,7 @@ const NON_WORD_RE = /[^\w\u4e00-\u9fff\s]/g;
 
 export class SkillSearchEngine {
   private index: IndexEntry[] = [];
+  private butlerEntry?: ManifestEntry;
   private categories: Map<string, number> = new Map();
   private docFrequencies: Map<string, number> = new Map();
   private avgFieldLen: Record<FieldName, number> = {
@@ -332,7 +333,13 @@ export class SkillSearchEngine {
     };
 
     for (const entry of manifest) {
-      if (entry.name === "00_codex_skills") continue;
+      // The butler (00_codex_skills) is the library ENTRANCE, not searchable
+      // content: keep it out of the BM25 index (search_skills unchanged),
+      // but retain the manifest entry for pinned mention/resource surfaces.
+      if (entry.name === "00_codex_skills") {
+        this.butlerEntry = entry;
+        continue;
+      }
 
       let leadingWords = this.extractLeadingWords(entry.description);
       // Fallback pseudo-leading words if the description has none
@@ -584,6 +591,14 @@ export class SkillSearchEngine {
   findByName(name: string): ManifestEntry | undefined {
     const nameLower = name.toLowerCase();
     return this.index.find((item) => item.entry.name.toLowerCase() === nameLower)?.entry;
+  }
+
+  /**
+   * The butler entry (00_codex_skills) — excluded from the search index by
+   * design, but exposed for pinned mention/resource surfaces.
+   */
+  getButlerEntry(): ManifestEntry | undefined {
+    return this.butlerEntry;
   }
 
   /**

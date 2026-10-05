@@ -72,11 +72,11 @@ function createServer(
 
   // OpenAI MCP Extensions (Phase 1, server-side only — see
   // docs/OPENAI-MCP-EXTENSIONS.md): structured settings + composer mentions.
-  // Additive metadata via standard MCP extension points; hosts that do not
-  // implement the openai/* extensions ignore them and keep working unchanged.
+  // Phase 2: the butler (00_codex_skills) is pinned as the fixed entrance in
+  // the @ mention typeahead and the resource catalog.
   const openai = new OpenAIExtensions(server);
   registerOpenAISettings(server, openai, config, searchEngine);
-  registerOpenAIMentions(server, openai, searchEngine, loader);
+  registerOpenAIMentions(server, openai, config, searchEngine, loader);
 
   return server;
 }

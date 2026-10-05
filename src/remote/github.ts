@@ -610,6 +610,19 @@ export async function initRemote(config: Config): Promise<void> {
   }
 }
 
+/**
+ * Fetch the repository-root SKILL.md of the butler skill (00_codex_skills).
+ * Single-file fetch with the usual direct→CDN→mirror fallback chain; never
+ * materializes the whole library root.
+ */
+export async function fetchRootSkillMd(config: Config): Promise<string> {
+  const res = await fetchRawWithFallback(config, `${config.githubPath}/SKILL.md`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch root SKILL.md: HTTP ${res.status}`);
+  }
+  return res.text();
+}
+
 /** Sidecar recording manifest validation state for conditional polling. */
 interface ManifestMeta {
   /** ETag of the last authoritative (direct) manifest response, if known */

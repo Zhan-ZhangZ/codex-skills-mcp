@@ -22,7 +22,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { OpenAIExtensions } from "@openai/mcp-extensions/server";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
+import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
@@ -30,12 +33,43 @@ import { withToolLogging } from "../lib/logger.js";
 /** Max items returned by mention typeahead (picker ergonomics). */
 const MENTION_LIMIT = 10;
 
+/** The butler (Librarian Router) skill — the fixed entrance to the library. */
+const BUTLER_NAME = "00_codex_skills";
+
+/**
+ * Load the butler's root SKILL.md as a SINGLE FILE. The butler's
+ * relative_path is "./" (the repository root), so materializing it as a
+ * regular skill would download the entire library — instead we serve only
+ * the root SKILL.md: from the skills dir when present, otherwise a one-file
+ * remote fetch that is cached for subsequent reads.
+ */
+async function loadButlerSkillMd(config: Config): Promise<string> {
+  const cached = join(config.skillsDir, "SKILL.md");
+  if (existsSync(cached)) {
+    return readFileSync(cached, "utf-8");
+  }
+  if (!config.isRemote) {
+    throw new Error(
+      "Butler SKILL.md not found next to skills_manifest.json (local mode expects a repository checkout)."
+    );
+  }
+  const { fetchRootSkillMd } = await import("../remote/github.js");
+  const text = await fetchRootSkillMd(config);
+  try {
+    writeFileSync(cached, text, "utf-8");
+  } catch {
+    // Cache write is best-effort; serving the text matters more.
+  }
+  return text;
+}
+
 /**
  * Register the mentions handler and the skill:// resource template.
  */
 export function registerOpenAIMentions(
   server: McpServer,
   extensions: OpenAIExtensions,
+  config: Config,
   searchEngine: SkillSearchEngine,
   loader: SkillLoader
 ): void {
@@ -54,15 +88,37 @@ export function registerOpenAIMentions(
         ? searchEngine.search(query, { limit: MENTION_LIMIT })
         : searchEngine.defaultSuggestions(MENTION_LIMIT);
 
-      return {
-        items: entries.map((r) => ({
-          type: "resource_link" as const,
+      // The butler is PINNED as the first item on every typeahead response:
+      // it is the library entrance (Librarian Router), independent of what
+      // the user is typing. Regular results follow unchanged.
+      const butler = searchEngine.getButlerEntry();
+      const items: {
+        type: "resource_link";
+        uri: string;
+        name: string;
+        title: string;
+        description?: string;
+      }[] = [];
+      if (butler) {
+        items.push({
+          type: "resource_link",
+          uri: `skill://${butler.name}`,
+          name: butler.name,
+          title: `管家 · ${butler.name}`,
+          description: `【固定入口】${butler.description}`.substring(0, 180),
+        });
+      }
+      for (const r of entries) {
+        items.push({
+          type: "resource_link",
           uri: `skill://${r.name}`,
           name: r.name,
           title: r.name,
           description: r.description.substring(0, 160),
-        })),
-      };
+        });
+      }
+
+      return { items };
     })
   );
 
@@ -119,15 +175,26 @@ export function registerOpenAIMentions(
         // from this list and model-side enumeration output gets truncated
         // around ~12k tokens with descriptions included (observed in
         // ChatGPT). Details live in search_mentions items and resources/read;
-        // the registry only needs identity. Sorted most-used-first so any
-        // host-side truncation keeps the most valuable head.
-        resources: searchEngine
-          .defaultSuggestions(Number.MAX_SAFE_INTEGER)
-          .map((entry) => ({
-            uri: `skill://${entry.name}`,
-            name: entry.name,
-            mimeType: "text/markdown",
-          })),
+        // the registry only needs identity. The butler is pinned first as
+        // the library entrance, then skills sorted most-used-first.
+        resources: [
+          ...(searchEngine.getButlerEntry()
+            ? [
+                {
+                  uri: `skill://${BUTLER_NAME}`,
+                  name: BUTLER_NAME,
+                  mimeType: "text/markdown",
+                },
+              ]
+            : []),
+          ...searchEngine
+            .defaultSuggestions(Number.MAX_SAFE_INTEGER)
+            .map((entry) => ({
+              uri: `skill://${entry.name}`,
+              name: entry.name,
+              mimeType: "text/markdown",
+            })),
+        ],
       }),
     }),
     // No template description: the SDK merges it into every resources/list
@@ -136,6 +203,25 @@ export function registerOpenAIMentions(
     { mimeType: "text/markdown" },
     async (uri, { name }) =>
       withToolLogging("resources/read skill://", { skill: String(name) }, async () => {
+        // The butler lives at the repository root: serve its single SKILL.md
+        // instead of materializing the entire library as one "skill".
+        if (String(name) === BUTLER_NAME) {
+          const butler = searchEngine.getButlerEntry();
+          if (!butler) {
+            throw new Error("Butler skill (00_codex_skills) missing from manifest.");
+          }
+          const text = await loadButlerSkillMd(config);
+          return {
+            contents: [
+              {
+                uri: uri.href,
+                mimeType: "text/markdown",
+                text,
+              },
+            ],
+          };
+        }
+
         let entry = searchEngine.findByName(String(name));
         if (!entry) {
           if (typeof searchEngine.maybeRefreshManifest === "function") {

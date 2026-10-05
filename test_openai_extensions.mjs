@@ -153,11 +153,25 @@ try {
   check("items are skill:// resource_links", items.every((i) => i.type === "resource_link" && i.uri?.startsWith("skill://")), items.slice(0, 3));
   console.log(`    top mentions: ${items.slice(0, 5).map((i) => i.name).join(", ")}`);
 
+  // 5b. butler pinned in typeahead (Phase 2)
+  const pinned = await callTool("search_mentions", { query: "" });
+  const pinnedItems = pinned.result?.structuredContent?.items ?? [];
+  check("empty query: butler pinned first", pinnedItems[0]?.name === "00_codex_skills", pinnedItems[0]);
+  check("empty query: butler title flagged", (pinnedItems[0]?.title ?? "").includes("管家"), pinnedItems[0]?.title);
+  const anyQ = await callTool("search_mentions", { query: "视频 video" });
+  const anyItems = anyQ.result?.structuredContent?.items ?? [];
+  check("arbitrary query: butler still pinned first", anyItems[0]?.name === "00_codex_skills", anyItems[0]?.name);
+  // search_skills (CLI surface) must remain butler-free
+  const cliSearch = await callTool("search_skills", { query: "管家 router butler", limit: 8 });
+  const cliText = (cliSearch.result?.content ?? []).map((c) => c.text).join("\n");
+  check("search_skills unchanged (no butler)", !cliText.includes("00_codex_skills"), cliText.slice(0, 80));
+
   // 6. resources/read skill://
-  const target = items[0]?.name ?? "office-docx";
+  const target = items.find((i) => i.name !== "00_codex_skills")?.name ?? "office-docx";
   const rl = await rpc("resources/list");
   const rlResources = rl.result?.resources ?? [];
   console.log("\n## 6. resources (list + read)");
+  check("resources/list pins butler first", rlResources[0]?.uri === "skill://00_codex_skills", rlResources[0]);
   check("resources/list returns the skill catalog", rlResources.length > 100, { count: rlResources.length });
   check("catalog contains skill://human-writing", rlResources.some((r) => r.uri === "skill://human-writing"));
   check("entries carry markdown mimeType", rlResources[0]?.mimeType === "text/markdown", rlResources[0]);
@@ -167,6 +181,11 @@ try {
   check("mimeType text/markdown", rr.result?.contents?.[0]?.mimeType === "text/markdown");
   const hwRead = await rpc("resources/read", { uri: "skill://human-writing" });
   check("resources/read human-writing non-empty", (hwRead.result?.contents?.[0]?.text ?? "").length > 200);
+  // Butler read: single root SKILL.md (Librarian Router), never a full-library fetch
+  const butlerRead = await rpc("resources/read", { uri: "skill://00_codex_skills" });
+  const butlerText = butlerRead.result?.contents?.[0]?.text ?? "";
+  check("butler readable via skill:// (root SKILL.md)", butlerText.includes("Librarian Router") && butlerText.includes("Golden Rules"), { len: butlerText.length, head: butlerText.slice(0, 60) });
+  check("butler is single file, not library dump", butlerText.length < 20000, { len: butlerText.length });
   // Supporting-file sub-path (what ChatGPT's model probed as README.md)
   const sub = await rpc("resources/read", { uri: "skill://human-writing/README.md" });
   const subText = sub.result?.contents?.[0]?.text ?? "";

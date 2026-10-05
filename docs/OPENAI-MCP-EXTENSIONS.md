@@ -4,6 +4,15 @@
 > 上游规范：https://github.com/openai/mcp-extensions (spec §Structured Settings, §Composer At-Mentions)
 > SDK：[`@openai/mcp-extensions`](https://www.npmjs.com/package/@openai/mcp-extensions) `^0.1.0`
 
+## Phase 2 增补（分支 `feat/butler-pinned-mention-phase2`）
+
+**目标**：@ 提及后无论搜索什么，管家技能（`00_codex_skills`，Librarian Router）固定置顶出现且可读取。
+
+- **固定置顶**：`search_mentions` 的 items 永远以 `skill://00_codex_skills` 开头（title 标注"管家"），与查询词无关；空查询时位于默认推荐之前。
+- **资源目录收录**：`resources/list` 首条为管家，保证宿主资源注册表可解析其 `mcp-resource://` 引用。
+- **单文件读取**：`skill://00_codex_skills` 只服务仓库根目录的 SKILL.md（本地直接读；远程单文件拉取 `fetchRootSkillMd`，含 direct→CDN→镜像回退链，首次拉取后缓存到 `<cacheDir>/SKILL.md`）。绝不物化整个库根目录（管家的 `relative_path` 为 `./`，常规物化语义不适用）。
+- **索引与 CLI 零变化**：管家仍不进 BM25 索引（`searchEngine.getButlerEntry()` 单独持有），`search_skills`/`plan_workflow` 行为不变——管家保持"入口"定位，只在提及/资源面出现。
+
 ## 升级内容
 
 本项目按 openai/mcp-extensions 规范新增了 **4 个工具 + 1 类资源 + 1 个能力声明**，全部通过 MCP 标准扩展机制（`_meta` / `capabilities.extensions` / `capabilities.experimental`）实现：
