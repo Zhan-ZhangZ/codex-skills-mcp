@@ -256,3 +256,19 @@ main (v1.5.0-beta.1, 不动)
   }]
 }
 ```
+
+---
+
+## 实测记录
+
+### Stage 0（2026-10-06，tag plugin-stage-0）
+- 根因链复盘：npx 绑定 → 启用层假设 → 捆绑分发 → `.gitignore dist/` 吞产物 → 终因「根 plugin.json 带 agent-plugins $schema → Codex 只读便携 mcp.json（已在 e39ab00 误删）→ 0 MCP 静默跳过」
+- 最终修复：便携 `mcp.json`（`$schema` + `type: stdio`）恢复，隔离复现验证（残缺文件立即报 missing field '$schema'；正确文件探针进程被拉起、cwd=插件缓存目录）
+- 用户实测：添加市场 → 安装 → @ 提及 → MCP 工具可用 ✅
+
+### Stage 1（2026-10-06，tag plugin-stage-1，插件 0.2.0）
+- 交付：app.ts（ui:// 资源 + skills.library/tray 入口）、占位 app.html、捆绑包含 app.html
+- 顺手修复：CLI > 持久化设置 > 默认 优先级（settings.json 覆盖 --manifest-ttl 0 的缺陷，explicitCli 追踪）
+- 用户实测（截图 08.45.11）：侧边栏入口出现并选中、全屏渲染占位卡、主题跟随 ✅
+- 遗留：入口图标为宿主回退样式（工具 _meta 未带 icons），Stage 2 顺带修
+- 回归：协议 25/25、扩展、重验证三套全绿
