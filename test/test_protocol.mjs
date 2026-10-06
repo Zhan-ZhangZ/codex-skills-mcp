@@ -65,12 +65,12 @@ try {
   console.log("\n[2] tools/list");
   const tools = (await request("tools/list"))?.tools ?? [];
   const names = tools.map((t) => t.name);
-  assert(tools.length === 15, "15 tools registered (got " + tools.length + ": " + names.join(",") + ")");
+  assert(tools.length === 16, "16 tools registered incl. app entrypoints + app-facing tools (got " + tools.length + ": " + names.join(",") + ")");
   const CORE = ["search_skills", "list_categories", "read_skill", "load_skill_file", "list_skill_files", "plan_workflow", "skill_status", "diagnostics"];
   assert(CORE.every((n) => names.includes(n)), "all 8 core tools intact");
   assert(["settings.read", "settings.update", "refresh_skills_list", "search_mentions"].every((n) => names.includes(n)),
     "4 openai-extension tools registered");
-  assert(["skills.library", "skills.browse", "skills.query"].every((n) => names.includes(n)) && !names.includes("skills.tray"), "MCP App tools registered (library dual-entrypoint, tray merged)");
+  assert(["skills.library", "skills.tray", "skills.browse", "skills.query"].every((n) => names.includes(n)), "MCP App tools registered");
   const mentions = tools.find((t) => t.name === "search_mentions");
   assert(mentions?._meta?.["openai/extensions"]?.["mentions/search"] != null, "search_mentions advertises mentions/search");
   assert(mentions?._meta?.ui?.visibility?.includes("app"), "search_mentions is app-visibility only");

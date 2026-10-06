@@ -38319,10 +38319,7 @@ function registerCodexSkillsApp(server, searchEngine, loader) {
         text: html,
         _meta: {
           "openai/ui": {
-            // Inline-first: opening from a conversation renders in the
-            // right-side panel (thread context) instead of a new fullscreen
-            // page; fullscreen stays available via the expand control.
-            preferredDisplayMode: "inline",
+            preferredDisplayMode: "fullscreen",
             availableDisplayModes: ["inline", "fullscreen"]
           }
         }
@@ -38348,10 +38345,13 @@ function registerCodexSkillsApp(server, searchEngine, loader) {
     title: "\u6280\u80FD\u5E93 Codex Skills",
     description: "Open the skill library browser (199+ on-demand expert skills, 15 categories) fullscreen from the sidebar. Search, preview SKILL.md, and pick skills for the conversation.",
     annotations: readonly2,
-    _meta: {
-      ...ui([{ type: "global" }, { type: "thread" }]),
-      icons: [ICON]
-    }
+    _meta: { ...ui([{ type: "global" }]), icons: [ICON] }
+  }, async () => ({ content: [], structuredContent: initialData() }));
+  K3(server, "skills.tray", {
+    title: "\u6280\u80FD\u6258\u76D8 Skill Tray",
+    description: "Open a compact skill panel beside this conversation \u2014 search the library and drop skills into the chat without leaving the thread.",
+    annotations: readonly2,
+    _meta: { ...ui([{ type: "thread" }]), icons: [ICON] }
   }, async () => ({ content: [], structuredContent: initialData() }));
   K3(server, "skills.browse", {
     title: "Browse skill library",
@@ -38415,7 +38415,7 @@ function registerCodexSkillsApp(server, searchEngine, loader) {
       }
     };
   });
-  console.error("[codex-skills-mcp] MCP App registered: skills.library (global+thread entrypoints), skills.browse/query (app-facing)");
+  console.error("[codex-skills-mcp] MCP App registered: skills.library (global), skills.tray (thread), skills.browse/query (app-facing)");
   return true;
 }
 
