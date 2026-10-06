@@ -84,7 +84,10 @@ export function registerCodexSkillsApp(
         text: html,
         _meta: {
           "openai/ui": {
-            preferredDisplayMode: "fullscreen",
+            // Inline-first: opening from a conversation renders in the
+            // right-side panel (thread context) instead of a new fullscreen
+            // page; fullscreen stays available via the expand control.
+            preferredDisplayMode: "inline",
             availableDisplayModes: ["inline", "fullscreen"],
           },
         },
