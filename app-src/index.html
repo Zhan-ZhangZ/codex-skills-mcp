@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codex Skills 技能库</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font: 14px var(--font-sans, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif);
+      background: var(--color-background-primary, #fafafa);
+      color: var(--color-text-primary, #1f1f1f);
+      min-height: 100vh; padding: 20px;
+    }
+    [hidden] { display: none !important; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    h1 { font-size: 18px; font-weight: 650; flex: 1; }
+    .muted { opacity: .65; font-size: 12px; }
+    button, input {
+      font: inherit; border: 1px solid var(--color-border-primary, #c9c9c9);
+      border-radius: 9px; padding: 8px 12px;
+      background: var(--color-background-secondary, #fff); color: inherit;
+    }
+    button { cursor: var(--cursor-interaction, pointer); }
+    button:hover:not(:disabled) { border-color: #5296c6; }
+    button:disabled { opacity: .45; cursor: default; }
+    #search { width: 100%; margin-bottom: 14px; }
+    #cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 9px; margin-bottom: 18px; }
+    .cat {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 11px 13px; border-radius: 10px; text-align: left;
+      border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff);
+    }
+    .cat b { font-weight: 600; font-size: 13.5px; }
+    #cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 9px; }
+    .card {
+      padding: 12px 13px; border-radius: 10px; text-align: left;
+      border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .card b { font-size: 13.5px; font-weight: 600; }
+    .card p { font-size: 12px; line-height: 1.5; opacity: .72;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .badge {
+      align-self: flex-start; font-size: 10.5px; padding: 2px 8px; border-radius: 99px;
+      border: 1px solid var(--color-border-primary, #ccc);
+    }
+    .badge.on { border-color: #3d9a50; color: #3d9a50; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+    #detail pre {
+      white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.65;
+      padding: 14px; border-radius: 10px; border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff); max-height: 55vh; overflow: auto;
+    }
+    footer { margin-top: 16px; font-size: 12px; opacity: .6; display: flex; justify-content: space-between; gap: 10px; }
+    #status { overflow-wrap: anywhere; }
+  </style>
+</head>
+  <body>
+    <header>
+      <button id="back" hidden>← 返回</button>
+      <h1 id="heading">Codex Skills 技能库</h1>
+      <span class="muted" id="count"></span>
+    </header>
+
+    <input id="search" placeholder="搜索技能（中英文、功能描述…）" />
+
+    <section id="home">
+      <p class="muted" style="margin-bottom:10px">常用技能</p>
+      <div id="cards" style="margin-bottom:18px"></div>
+      <p class="muted" style="margin-bottom:10px">全部分类</p>
+      <div id="cats"></div>
+    </section>
+
+    <section id="list" hidden>
+      <div id="cards-list"></div>
+    </section>
+
+    <section id="detail" hidden>
+      <div class="toolbar">
+        <span class="badge" id="d-cached">未缓存</span>
+        <span style="flex:1"></span>
+        <button id="d-attach">加入对话</button>
+      </div>
+      <pre id="d-md">加载中…</pre>
+    </section>
+
+    <footer><span id="status">连接中…</span><span id="ctx"></span></footer>
+    <!-- APP_SCRIPT -->
+  </body>
+</html>

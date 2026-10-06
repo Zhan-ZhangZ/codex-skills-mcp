@@ -1,43 +1,96 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Codex Skills 技能库</title>
-<style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    background: light-dark(#fafafa, #171717);
-    color: light-dark(#1f1f1f, #ececec);
-    padding: 32px;
-  }
-  .card {
-    max-width: 460px; width: 100%;
-    border: 1px solid light-dark(#e5e5e5, #2e2e2e);
-    border-radius: 14px; padding: 32px;
-    background: light-dark(#ffffff, #1f1f1f);
-    text-align: center;
-  }
-  .grid { display: inline-grid; grid-template-columns: repeat(2, 22px); gap: 5px; margin-bottom: 20px; }
-  .grid span { width: 22px; height: 22px; border-radius: 5px; border: 1.6px solid currentColor; opacity: .85; }
-  h1 { font-size: 19px; font-weight: 650; margin-bottom: 8px; }
-  p { font-size: 13.5px; line-height: 1.75; opacity: .72; }
-  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: light-dark(#f0f0f0, #2a2a2a); padding: 2px 6px; border-radius: 5px; }
-  .badge { display: inline-block; margin-top: 18px; font-size: 11.5px; padding: 4px 10px; border-radius: 99px; border: 1px solid light-dark(#d4d4d4, #3a3a3a); opacity: .8; }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codex Skills 技能库</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font: 14px var(--font-sans, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif);
+      background: var(--color-background-primary, #fafafa);
+      color: var(--color-text-primary, #1f1f1f);
+      min-height: 100vh; padding: 20px;
+    }
+    [hidden] { display: none !important; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    h1 { font-size: 18px; font-weight: 650; flex: 1; }
+    .muted { opacity: .65; font-size: 12px; }
+    button, input {
+      font: inherit; border: 1px solid var(--color-border-primary, #c9c9c9);
+      border-radius: 9px; padding: 8px 12px;
+      background: var(--color-background-secondary, #fff); color: inherit;
+    }
+    button { cursor: var(--cursor-interaction, pointer); }
+    button:hover:not(:disabled) { border-color: #5296c6; }
+    button:disabled { opacity: .45; cursor: default; }
+    #search { width: 100%; margin-bottom: 14px; }
+    #cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 9px; margin-bottom: 18px; }
+    .cat {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 11px 13px; border-radius: 10px; text-align: left;
+      border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff);
+    }
+    .cat b { font-weight: 600; font-size: 13.5px; }
+    #cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 9px; }
+    .card {
+      padding: 12px 13px; border-radius: 10px; text-align: left;
+      border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff);
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .card b { font-size: 13.5px; font-weight: 600; }
+    .card p { font-size: 12px; line-height: 1.5; opacity: .72;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .badge {
+      align-self: flex-start; font-size: 10.5px; padding: 2px 8px; border-radius: 99px;
+      border: 1px solid var(--color-border-primary, #ccc);
+    }
+    .badge.on { border-color: #3d9a50; color: #3d9a50; }
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+    #detail pre {
+      white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.65;
+      padding: 14px; border-radius: 10px; border: 1px solid var(--color-border-primary, #ddd);
+      background: var(--color-background-secondary, #fff); max-height: 55vh; overflow: auto;
+    }
+    footer { margin-top: 16px; font-size: 12px; opacity: .6; display: flex; justify-content: space-between; gap: 10px; }
+    #status { overflow-wrap: anywhere; }
+  </style>
 </head>
-<body>
-  <div class="card">
-    <div class="grid" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-    <h1>Codex Skills 技能库</h1>
-    <p>MCP App 骨架已就位。此占位页由服务器作为 <code>ui://codex-skills/app</code> 资源提供；交互式浏览器（分类 · 搜索 · 技能详情）将在 Stage 2 由 Vite + ext-apps 构建替换。</p>
-    <p style="margin-top:10px">当前可用入口：<code>@</code> 提及 · <code>skill://</code> 资源 · 管家 <code>00_codex_skills</code></p>
-    <span class="badge">Stage 1 · placeholder</span>
-  </div>
-</body>
+  <body>
+    <header>
+      <button id="back" hidden>← 返回</button>
+      <h1 id="heading">Codex Skills 技能库</h1>
+      <span class="muted" id="count"></span>
+    </header>
+
+    <input id="search" placeholder="搜索技能（中英文、功能描述…）" />
+
+    <section id="home">
+      <p class="muted" style="margin-bottom:10px">常用技能</p>
+      <div id="cards" style="margin-bottom:18px"></div>
+      <p class="muted" style="margin-bottom:10px">全部分类</p>
+      <div id="cats"></div>
+    </section>
+
+    <section id="list" hidden>
+      <div id="cards-list"></div>
+    </section>
+
+    <section id="detail" hidden>
+      <div class="toolbar">
+        <span class="badge" id="d-cached">未缓存</span>
+        <span style="flex:1"></span>
+        <button id="d-attach">加入对话</button>
+      </div>
+      <pre id="d-md">加载中…</pre>
+    </section>
+
+    <footer><span id="status">连接中…</span><span id="ctx"></span></footer>
+    <script>"use strict";(()=>{function C(){let e=0,t=new Map,a=new Map,c=new Map,o=r=>window.parent.postMessage({jsonrpc:"2.0",...r},"*"),m=async r=>{if(r.source!==window.parent||r.data?.jsonrpc!=="2.0")return;let n=r.data;if(!n.method&&n.id!=null){let d=t.get(n.id);if(!d)return;t.delete(n.id),clearTimeout(d.timer),n.error?d.reject(new Error(n.error.message)):d.resolve(n.result)}else if(n.method&&n.id!=null){let d=a.get(n.method);if(!d){o({id:n.id,error:{code:-32601,message:`Unsupported app method: ${n.method}`}});return}try{o({id:n.id,result:await d(n.params??{})})}catch(u){o({id:n.id,error:{code:-32603,message:u instanceof Error?u.message:String(u)}})}}else if(n.method)for(let d of c.get(n.method)??[])d(n.params??{})};return window.addEventListener("message",m),{request(r,n={},d=15e3){if(window.parent===window)return Promise.reject(new Error(`Open this app in an MCP host to use ${r}`));let u=++e;return new Promise((k,f)=>{let T=setTimeout(()=>{t.delete(u),f(new Error(`${r} timed out`))},d);t.set(u,{resolve:$=>k($),reject:f,timer:T}),o({id:u,method:r,params:n})})},notify(r,n={}){o({method:r,params:n})},handle(r,n){a.set(r,n)},on(r,n){return c.has(r)||c.set(r,new Set),c.get(r).add(n),()=>{c.get(r)?.delete(n)}},dispose(){window.removeEventListener("message",m);for(let r of t.values())clearTimeout(r.timer),r.reject(new Error("App disposed"));t.clear(),a.clear(),c.clear()}}}var s=e=>document.getElementById(e),h=C(),l={view:"home",category:"",query:"",detail:null},i=e=>s("status").textContent=e;async function w(e,t){let a=await h.request("tools/call",{name:e,arguments:t},3e4);if(a?.isError)throw new Error(`tool ${e} failed`);return a?.structuredContent??{}}async function b(e){let a=(await h.request("resources/read",{uri:`skill://${encodeURIComponent(e)}`},6e4))?.contents?.[0]?.text;if(typeof a!="string")throw new Error("SKILL.md unreadable");return a.length>6e3?a.slice(0,6e3)+`
+\u2026\uFF08\u9884\u89C8\u622A\u65AD\uFF09`:a}function q(e){let t=document.createElement("button");t.className="card";let a=document.createElement("b");a.textContent=e.name;let c=document.createElement("p");c.textContent=e.description;let o=document.createElement("span");return o.className="badge"+(e.cached?" on":""),o.textContent=e.cached?"\u5DF2\u7F13\u5B58":"\u6309\u9700\u4E0B\u8F7D",t.append(a,c,o),t.onclick=()=>L(e),t}function y(e,t){e.textContent="",t.forEach(a=>e.appendChild(q(a)))}function g(e){l.view=e,s("home").hidden=e!=="home",s("list").hidden=e!=="category"&&e!=="search",s("detail").hidden=e!=="detail",s("back").hidden=e==="home",s("heading").textContent=e==="category"?l.category:e==="search"?`\u641C\u7D22\u201C${l.query}\u201D`:e==="detail"?l.detail?.name??"\u6280\u80FD\u8BE6\u60C5":"Codex Skills \u6280\u80FD\u5E93",window.scrollTo(0,0)}async function p(){g("home"),i("\u52A0\u8F7D\u4E2D\u2026");try{let e=await w("skills.browse",{});s("count").textContent=`${e.totalSkills} \u6280\u80FD`,y(s("cards"),e.top??[]);let t=e.categories??[],a=s("cats");a.textContent="",t.forEach(c=>{let o=document.createElement("button");o.className="cat";let m=document.createElement("b");m.textContent=c.name;let r=document.createElement("span");r.className="muted",r.textContent=`${c.skill_count} \u4E2A`,o.append(m,r),o.onclick=()=>x(c.name),a.appendChild(o)}),i("\u5C31\u7EEA")}catch(e){i(`\u52A0\u8F7D\u5931\u8D25: ${e?.message??e}\uFF08\u70B9\u51FB\u91CD\u8BD5\uFF09`)}}async function x(e){l.category=e,g("category"),i("\u52A0\u8F7D\u4E2D\u2026");try{let t=await w("skills.browse",{category:e});s("count").textContent=`${t.skills?.length??0} \u4E2A`,y(s("cards-list"),t.skills??[]),i("\u5C31\u7EEA")}catch(t){i(`\u52A0\u8F7D\u5931\u8D25: ${t?.message??t}`)}}async function S(e){l.query=e,g("search"),i("\u641C\u7D22\u4E2D\u2026");try{let t=await w("skills.query",{query:e,limit:24});s("count").textContent=`${t.results?.length??0} \u7ED3\u679C`,y(s("cards-list"),t.results??[]),i("\u5C31\u7EEA")}catch(t){i(`\u641C\u7D22\u5931\u8D25: ${t?.message??t}`)}}async function L(e){l.detail=e,g("detail"),s("count").textContent="",s("d-cached").textContent=e.cached?"\u5DF2\u7F13\u5B58":"\u672A\u7F13\u5B58",s("d-cached").className="badge"+(e.cached?" on":""),s("d-md").textContent="\u52A0\u8F7D\u4E2D\u2026",i("");try{s("d-md").textContent=await b(e.name)}catch(t){s("d-md").textContent=`\u8BFB\u53D6\u5931\u8D25\uFF1A${t?.message??t}`}}s("d-attach").onclick=async()=>{let e=l.detail?.name;if(e)try{await h.request("ui/update-model-context",{content:[{type:"text",text:`\u5DF2\u9009\u62E9\u6280\u80FD: ${e}`}]},15e3),i(`\u5DF2\u5C06\u300C${e}\u300D\u52A0\u5165\u5BF9\u8BDD\u4E0A\u4E0B\u6587`)}catch(t){i(`\u52A0\u5165\u5931\u8D25: ${t?.message??t}`)}};s("back").onclick=()=>l.view==="detail"&&l.category?x(l.category):p();var E;s("search").addEventListener("input",e=>{let t=e.target.value.trim();if(clearTimeout(E),!t){p();return}E=setTimeout(()=>S(t),300)});s("status").addEventListener("click",()=>{(s("status").textContent??"").includes("\u5931\u8D25")&&p()});p();})();
+</script>
+  </body>
 </html>

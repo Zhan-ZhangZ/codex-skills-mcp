@@ -81,7 +81,7 @@ function createServer(
 
   // MCP App (Stage 1): sidebar entrypoints served from the bundled app.html.
   // Self-disabling when the asset is absent — all other surfaces intact.
-  const appRegistered = registerCodexSkillsApp(server, searchEngine);
+  const appRegistered = registerCodexSkillsApp(server, searchEngine, loader);
   console.error(
     `[codex-skills-mcp] ${12 + (appRegistered ? 2 : 0)} tools registered ` +
       `(8 core + 4 openai-extension${appRegistered ? " + 2 app entrypoints" : ""})`

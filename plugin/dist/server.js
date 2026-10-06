@@ -38289,6 +38289,12 @@ function N3(Z, $, J, X, V) {
 
 // dist/openai/app.js
 var APP_URI = "ui://codex-skills/app";
+var ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.33" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>';
+var ICON = {
+  src: "data:image/svg+xml," + encodeURIComponent(ICON_SVG),
+  mimeType: "image/svg+xml",
+  sizes: ["any"]
+};
 function loadAppHtml() {
   const here = dirname3(fileURLToPath(import.meta.url));
   for (const p2 of [resolve5(here, "../app.html"), resolve5(here, "app.html")]) {
@@ -38299,7 +38305,7 @@ function loadAppHtml() {
   }
   return null;
 }
-function registerCodexSkillsApp(server, searchEngine) {
+function registerCodexSkillsApp(server, searchEngine, loader) {
   const html = loadAppHtml();
   if (!html) {
     console.error("[codex-skills-mcp] app.html not found next to the server \u2014 MCP App entrypoints disabled; tools/mentions/resources continue normally.");
@@ -38323,33 +38329,93 @@ function registerCodexSkillsApp(server, searchEngine) {
   const initialData = () => {
     const categories = searchEngine.getCategories();
     const totalSkills = categories.reduce((s, c) => s + c.skill_count, 0);
-    return {
-      page: "library",
-      categories,
-      totalSkills,
-      butler: "00_codex_skills"
-    };
+    return { page: "library", categories, totalSkills, butler: "00_codex_skills" };
   };
   const readonly2 = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+  const appOnly = {
+    ...readonly2,
+    _meta: { ui: { visibility: ["app"] } }
+  };
+  const ui = (entrypoints) => ({
+    ui: { resourceUri: APP_URI },
+    "openai/ui": { entrypoints },
+    "openai/iconStyle": "monochrome"
+  });
   K3(server, "skills.library", {
     title: "\u6280\u80FD\u5E93 Codex Skills",
     description: "Open the skill library browser (199+ on-demand expert skills, 15 categories) fullscreen from the sidebar. Search, preview SKILL.md, and pick skills for the conversation.",
     annotations: readonly2,
-    _meta: {
-      ui: { resourceUri: APP_URI },
-      "openai/ui": { entrypoints: [{ type: "global" }] }
-    }
+    _meta: { ...ui([{ type: "global" }]), icons: [ICON] }
   }, async () => ({ content: [], structuredContent: initialData() }));
   K3(server, "skills.tray", {
     title: "\u6280\u80FD\u6258\u76D8 Skill Tray",
     description: "Open a compact skill panel beside this conversation \u2014 search the library and drop skills into the chat without leaving the thread.",
     annotations: readonly2,
-    _meta: {
-      ui: { resourceUri: APP_URI },
-      "openai/ui": { entrypoints: [{ type: "thread" }] }
-    }
+    _meta: { ...ui([{ type: "thread" }]), icons: [ICON] }
   }, async () => ({ content: [], structuredContent: initialData() }));
-  console.error("[codex-skills-mcp] MCP App registered: skills.library (global), skills.tray (thread)");
+  K3(server, "skills.browse", {
+    title: "Browse skill library",
+    description: "App-facing: category overview or a category's skill list.",
+    inputSchema: external_exports.object({
+      category: external_exports.string().optional().describe("Category name to list; omit for the home view")
+    }),
+    ...appOnly
+  }, async ({ category }) => {
+    if (!category) {
+      const categories = searchEngine.getCategories();
+      return {
+        content: [],
+        structuredContent: {
+          view: "home",
+          categories,
+          totalSkills: categories.reduce((s, c) => s + c.skill_count, 0),
+          top: searchEngine.defaultSuggestions(8).map((e) => ({ name: e.name, description: e.description, cached: loader.isCached(e) }))
+        }
+      };
+    }
+    const all = searchEngine.allSkills().filter((e) => e.category === category);
+    return {
+      content: [],
+      structuredContent: {
+        view: "category",
+        category,
+        skills: all.map((e) => ({
+          name: e.name,
+          description: e.description,
+          cached: loader.isCached(e)
+        }))
+      }
+    };
+  });
+  K3(server, "skills.query", {
+    title: "Search skill library",
+    description: "App-facing: BM25 search over name/aliases/keywords/description.",
+    inputSchema: external_exports.object({
+      query: external_exports.string().min(1),
+      limit: external_exports.number().int().min(1).max(30).optional()
+    }),
+    ...appOnly
+  }, async ({ query, limit }) => {
+    const results = searchEngine.search(query, { limit: limit ?? 20 });
+    return {
+      content: [],
+      structuredContent: {
+        view: "search",
+        query,
+        results: results.map((r2) => {
+          const entry = searchEngine.findByName(r2.name);
+          return {
+            name: r2.name,
+            description: r2.description,
+            category: r2.category,
+            score: r2.score,
+            cached: entry ? loader.isCached(entry) : false
+          };
+        })
+      }
+    };
+  });
+  console.error("[codex-skills-mcp] MCP App registered: skills.library (global), skills.tray (thread), skills.browse/query (app-facing)");
   return true;
 }
 
@@ -38374,7 +38440,7 @@ function createServer(config2, searchEngine, loader) {
   const openai = new OpenAIExtensions(server);
   registerOpenAISettings(server, openai, config2, searchEngine);
   registerOpenAIMentions(server, openai, config2, searchEngine, loader);
-  const appRegistered = registerCodexSkillsApp(server, searchEngine);
+  const appRegistered = registerCodexSkillsApp(server, searchEngine, loader);
   console.error(`[codex-skills-mcp] ${12 + (appRegistered ? 2 : 0)} tools registered (8 core + 4 openai-extension${appRegistered ? " + 2 app entrypoints" : ""})`);
   return server;
 }
