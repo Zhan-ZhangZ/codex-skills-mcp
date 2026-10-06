@@ -122,21 +122,10 @@ export function registerCodexSkillsApp(
         "categories) fullscreen from the sidebar. Search, preview SKILL.md, " +
         "and pick skills for the conversation.",
       annotations: readonly,
-      _meta: { ...ui([{ type: "global" }]), icons: [ICON] },
-    },
-    async () => ({ content: [], structuredContent: initialData() })
-  );
-
-  registerAppTool(
-    server,
-    "skills.tray",
-    {
-      title: "技能托盘 Skill Tray",
-      description:
-        "Open a compact skill panel beside this conversation — search the " +
-        "library and drop skills into the chat without leaving the thread.",
-      annotations: readonly,
-      _meta: { ...ui([{ type: "thread" }]), icons: [ICON] },
+      _meta: {
+        ...ui([{ type: "global" }, { type: "thread" }]),
+        icons: [ICON],
+      },
     },
     async () => ({ content: [], structuredContent: initialData() })
   );
@@ -220,8 +209,8 @@ export function registerCodexSkillsApp(
   );
 
   console.error(
-    "[codex-skills-mcp] MCP App registered: skills.library (global), " +
-      "skills.tray (thread), skills.browse/query (app-facing)"
+    "[codex-skills-mcp] MCP App registered: skills.library " +
+      "(global+thread entrypoints), skills.browse/query (app-facing)"
   );
   return true;
 }
