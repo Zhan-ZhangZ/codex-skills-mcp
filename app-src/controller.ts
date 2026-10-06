@@ -19,6 +19,17 @@ const state = {
 
 const status = (m: string) => ($("status").textContent = m);
 
+let mode: "inline" | "fullscreen" = "inline";
+async function setMode(next: "inline" | "fullscreen") {
+  mode = next;
+  $("mode").textContent = next === "inline" ? "⛶" : "⧉";
+  try {
+    await transport.request("ui/request-display-mode", { mode }, 10000);
+  } catch {
+    /* host may not support mode switching; stay usable */
+  }
+}
+
 async function call(name: string, args: Record<string, unknown>) {
   const r = (await transport.request(
     "tools/call",
@@ -145,18 +156,38 @@ $("d-attach").onclick = async () => {
 $("back").onclick = () =>
   state.view === "detail"
     ? (state.category ? showCategory(state.category) : showHome())
-    : showHome();
+    : $("mode").onclick = () => setMode(mode === "inline" ? "fullscreen" : "inline");
+
+// Entry opened fullscreen from the sidebar? Collapse into the right-side
+// panel so the conversation stays primary — the user's preferred form.
+setMode("inline");
+showHome();
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 $("search").addEventListener("input", (ev) => {
   const q = (ev.target as HTMLInputElement).value.trim();
   clearTimeout(searchTimer);
-  if (!q) { showHome(); return; }
+  if (!q) { $("mode").onclick = () => setMode(mode === "inline" ? "fullscreen" : "inline");
+
+// Entry opened fullscreen from the sidebar? Collapse into the right-side
+// panel so the conversation stays primary — the user's preferred form.
+setMode("inline");
+showHome(); return; }
   searchTimer = setTimeout(() => runSearch(q), 300);
 });
 
 $("status").addEventListener("click", () => {
-  if (($("status").textContent ?? "").includes("失败")) showHome();
+  if (($("status").textContent ?? "").includes("失败")) $("mode").onclick = () => setMode(mode === "inline" ? "fullscreen" : "inline");
+
+// Entry opened fullscreen from the sidebar? Collapse into the right-side
+// panel so the conversation stays primary — the user's preferred form.
+setMode("inline");
+showHome();
 });
 
+$("mode").onclick = () => setMode(mode === "inline" ? "fullscreen" : "inline");
+
+// Entry opened fullscreen from the sidebar? Collapse into the right-side
+// panel so the conversation stays primary — the user's preferred form.
+setMode("inline");
 showHome();
