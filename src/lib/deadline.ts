@@ -14,8 +14,9 @@
  *    timeouts. The download KEEPS RUNNING in the background and writes
  *    into the cache; the next read_skill call resumes from it and usually
  *    returns complete.
- *  - hard deadline (default 300s, everyone): absolute guard against
- *    pathological hangs.
+ *  - hard deadline (default 285s, everyone): absolute guard against
+ *    pathological hangs, and deliberately below common 300s client
+ *    timeouts (e.g. Codex) so our partial response always lands first.
  */
 
 export class DownloadDeadlineExceeded extends Error {

@@ -11,7 +11,6 @@ export interface Config {
   githubBranch?: string;
   githubPath: string;
   githubToken?: string;
-  useCnMirror: boolean;
   /**
    * Route downloads through the official CN acceleration endpoint
    * (gh.251716.xyz — a self-hosted read-only reverse proxy of
@@ -39,7 +38,10 @@ export interface Config {
   /**
    * Hard absolute deadline for any single download call, in ms, regardless
    * of progress opt-in. Guards against pathological networks hanging a
-   * call forever. Default 300s. 0 = disabled.
+   * call forever. Default 285s — deliberately UNDER common client request
+   * timeouts (e.g. Codex uses 300s) so our structured partial-progress
+   * response always arrives BEFORE the client would kill the call.
+   * 0 = disabled.
    */
   hardDeadlineMs: number;
   downloadConcurrency: number;
@@ -98,7 +100,6 @@ export function parseConfig(args: string[]): Config {
   const markExplicit = (flag: string, key: string) => {
     if (args.includes(flag)) explicitCli.add(key);
   };
-  markExplicit("--cn-mirror", "cn_mirror");
   markExplicit("--no-official-mirror", "official_mirror");
   markExplicit("--no-hedge", "hedge");
   markExplicit("--soft-deadline-seconds", "soft_deadline_seconds");
@@ -177,7 +178,6 @@ export function parseConfig(args: string[]): Config {
     process.exit(1);
   }
 
-  const useCnMirror = args.includes("--cn-mirror");
   const useOfficialMirror = !args.includes("--no-official-mirror");
   const hedgeEnabled = !args.includes("--no-hedge");
 
@@ -186,7 +186,9 @@ export function parseConfig(args: string[]): Config {
   const softArg = getArg("--soft-deadline-seconds");
   const softDeadlineMs = softArg !== undefined ? parseInt(softArg, 10) * 1000 : 55 * 1000;
   const hardArg = getArg("--hard-deadline-seconds");
-  const hardDeadlineMs = hardArg !== undefined ? parseInt(hardArg, 10) * 1000 : 300 * 1000;
+  // 285s default: just under common 300s client timeouts (e.g. Codex) so
+  // our partial response wins the race against the client giving up.
+  const hardDeadlineMs = hardArg !== undefined ? parseInt(hardArg, 10) * 1000 : 285 * 1000;
 
   // Manifest cache TTL (default: 24 hours). --manifest-ttl <seconds> or 0 to disable.
   const ttlArg = getArg("--manifest-ttl");
@@ -233,7 +235,6 @@ export function parseConfig(args: string[]): Config {
     githubBranch, 
     githubPath, 
     githubToken,
-    useCnMirror,
     useOfficialMirror,
     hedgeEnabled,
     softDeadlineMs,

@@ -32,7 +32,6 @@ import { logEvent } from "../lib/logger.js";
 
 /** Effective (persisted-override) settings shape exposed to the host UI. */
 export interface EffectiveSettings {
-  cn_mirror: boolean;
   download_concurrency: number;
   download_timeout_seconds: number;
   manifest_ttl_hours: number;
@@ -47,7 +46,6 @@ const SETTINGS_PATH = join(SETTINGS_DIR, "settings.json");
 
 /** Zod schemas per field — single source for validation and type inference. */
 const SCHEMAS = {
-  cn_mirror: z.boolean(),
   download_concurrency: z.number().int().min(1).max(64),
   download_timeout_seconds: z.number().int().min(5).max(300),
   manifest_ttl_hours: z.number().int().min(0).max(168),
@@ -58,12 +56,6 @@ const VALUES_SCHEMA = z.object(SCHEMAS).strict();
 
 /** Field definitions shared by read/update validation (single source). */
 const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof EffectiveSettings]; title: string; description?: string }> = {
-  cn_mirror: {
-    schema: SCHEMAS.cn_mirror,
-    title: "Use CN mirror (ghproxy)",
-    description:
-      "Route remote skill downloads through the China mirror. Only affects remote mode fetching.",
-  },
   download_concurrency: {
     schema: SCHEMAS.download_concurrency,
     title: "Download concurrency",
@@ -91,7 +83,13 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
 function loadPersisted(): PersistedSettings {
   try {
     if (!existsSync(SETTINGS_PATH)) return {};
-    return JSON.parse(readFileSync(SETTINGS_PATH, "utf-8")) as PersistedSettings;
+    const data = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8")) as Record<string, unknown>;
+    // Migration: "cn_mirror" was a dead flag (parsed but never consumed by
+    // any download logic) removed in 1.5.0-beta.3. Strip it from legacy
+    // files so it disappears on the next persist instead of lingering in
+    // the settings UI as a misleading no-op toggle.
+    delete data.cn_mirror;
+    return data as PersistedSettings;
   } catch (err) {
     console.error(`[codex-skills-mcp] Could not read settings file, using defaults: ${err}`);
     return {};
@@ -108,7 +106,6 @@ function persist(partial: PersistedSettings): void {
 /** Config-derived defaults for every field. */
 function defaultsFromConfig(config: Config): EffectiveSettings {
   return {
-    cn_mirror: config.useCnMirror,
     download_concurrency: config.downloadConcurrency,
     download_timeout_seconds: Math.round(config.downloadTimeout / 1000),
     manifest_ttl_hours: Math.round(config.manifestTTL / 3_600_000),
@@ -118,7 +115,6 @@ function defaultsFromConfig(config: Config): EffectiveSettings {
 
 /** Push effective settings back onto the live Config (read at call time). */
 function applyToConfig(config: Config, s: EffectiveSettings): void {
-  config.useCnMirror = s.cn_mirror;
   config.downloadConcurrency = s.download_concurrency;
   config.downloadTimeout = s.download_timeout_seconds * 1000;
   config.manifestTTL = Math.round(s.manifest_ttl_hours * 3_600_000);
@@ -133,7 +129,6 @@ function applyToConfig(config: Config, s: EffectiveSettings): void {
  */
 function applyPersistedSelective(config: Config, s: EffectiveSettings): void {
   const ex = config.explicitCli ?? new Set<string>();
-  if (!ex.has("cn_mirror")) config.useCnMirror = s.cn_mirror;
   if (!ex.has("download_concurrency")) config.downloadConcurrency = s.download_concurrency;
   if (!ex.has("download_timeout_seconds")) config.downloadTimeout = s.download_timeout_seconds * 1000;
   if (!ex.has("manifest_ttl_hours")) config.manifestTTL = Math.round(s.manifest_ttl_hours * 3_600_000);
@@ -187,7 +182,6 @@ export function registerOpenAISettings(
         kind: "group",
         title: "Downloads & cache",
         items: [
-          { kind: "property", property: "cn_mirror" },
           { kind: "property", property: "download_concurrency" },
           { kind: "property", property: "download_timeout_seconds" },
           { kind: "property", property: "manifest_ttl_hours" },
