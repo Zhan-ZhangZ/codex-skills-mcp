@@ -12,6 +12,36 @@ export interface Config {
   githubPath: string;
   githubToken?: string;
   useCnMirror: boolean;
+  /**
+   * Route downloads through the official CN acceleration endpoint
+   * (gh.251716.xyz — a self-hosted read-only reverse proxy of
+   * raw.githubusercontent.com). Disable with --no-official-mirror.
+   * See README "Official acceleration" for the disclosure.
+   */
+  useOfficialMirror: boolean;
+  /**
+   * Hedged download strategy: fire the official endpoint first, and only
+   * join the public nodes into the race if it has not succeeded within
+   * HEDGE_DELAY_MS (see remote/github.ts). Avoids wasting the official
+   * node's narrow uplink pipe on guaranteed-loser race traffic while
+   * keeping instant public fallback. Disable with --no-hedge.
+   */
+  hedgeEnabled: boolean;
+  /**
+   * Soft overall deadline for read_skill/load_skill_file downloads, in ms.
+   * Applies ONLY when the client did not opt into progress notifications
+   * (no progressToken): the tool then returns a partial-progress response
+   * just before typical client timeouts (~60s) instead of being killed
+   * mid-flight. The download keeps running in the background; the next
+   * call resumes from the cache. Default 55s. 0 = disabled.
+   */
+  softDeadlineMs: number;
+  /**
+   * Hard absolute deadline for any single download call, in ms, regardless
+   * of progress opt-in. Guards against pathological networks hanging a
+   * call forever. Default 300s. 0 = disabled.
+   */
+  hardDeadlineMs: number;
   downloadConcurrency: number;
   /** Manifest cache TTL in milliseconds. Default 24 hours. 0 = never refresh. */
   manifestTTL: number;
@@ -69,6 +99,10 @@ export function parseConfig(args: string[]): Config {
     if (args.includes(flag)) explicitCli.add(key);
   };
   markExplicit("--cn-mirror", "cn_mirror");
+  markExplicit("--no-official-mirror", "official_mirror");
+  markExplicit("--no-hedge", "hedge");
+  markExplicit("--soft-deadline-seconds", "soft_deadline_seconds");
+  markExplicit("--hard-deadline-seconds", "hard_deadline_seconds");
   markExplicit("--download-concurrency", "download_concurrency");
   markExplicit("--download-timeout", "download_timeout_seconds");
   markExplicit("--manifest-ttl", "manifest_ttl_hours");
@@ -144,6 +178,15 @@ export function parseConfig(args: string[]): Config {
   }
 
   const useCnMirror = args.includes("--cn-mirror");
+  const useOfficialMirror = !args.includes("--no-official-mirror");
+  const hedgeEnabled = !args.includes("--no-hedge");
+
+  // Soft/hard overall call deadlines (seconds; 0 disables). Soft applies
+  // only to clients without a progressToken — see read-skill.ts.
+  const softArg = getArg("--soft-deadline-seconds");
+  const softDeadlineMs = softArg !== undefined ? parseInt(softArg, 10) * 1000 : 55 * 1000;
+  const hardArg = getArg("--hard-deadline-seconds");
+  const hardDeadlineMs = hardArg !== undefined ? parseInt(hardArg, 10) * 1000 : 300 * 1000;
 
   // Manifest cache TTL (default: 24 hours). --manifest-ttl <seconds> or 0 to disable.
   const ttlArg = getArg("--manifest-ttl");
@@ -191,6 +234,10 @@ export function parseConfig(args: string[]): Config {
     githubPath, 
     githubToken,
     useCnMirror,
+    useOfficialMirror,
+    hedgeEnabled,
+    softDeadlineMs,
+    hardDeadlineMs,
     downloadConcurrency,
     manifestTTL,
     manifestPollMs,

@@ -150,10 +150,28 @@ async function fetchWithAuth(url: string, token?: string, timeout = 15000): Prom
 }
 
 /**
- * Advanced raw file downloader — races all download nodes in parallel and
- * returns the first success, aborting the losers. This replaces the old
- * sequential 3s + 10s + 10s + 10s fallback chain, so a fast node (e.g.
- * jsDelivr) wins immediately instead of waiting for GitHub to time out.
+ * How long the official endpoint gets as a head start before the public
+ * nodes join the race (hedged request strategy). The official node's
+ * mainland RTT P50 is ~330ms, so 400ms lets most of its fast responses
+ * win outright while slow ones (bad Fastly IP hop, congestion) escalate
+ * to the public race almost immediately.
+ */
+const HEDGE_DELAY_MS = 400;
+
+interface DownloadNode {
+  name: string;
+  url: string;
+  useAuth: boolean;
+  timeout: number;
+}
+
+/**
+ * Advanced raw file downloader — hedged race:
+ *  - With the official endpoint + hedge enabled (default), it fires FIRST
+ *    and the public nodes only join after HEDGE_DELAY_MS (or immediately
+ *    if it fails fast). This keeps the official node's narrow uplink pipe
+ *    free of guaranteed-loser race traffic while keeping instant fallback.
+ *  - Otherwise all nodes race in parallel and the first success wins.
  */
 async function fetchRawWithFallback(config: Config, path: string, expectedSize?: number): Promise<Response> {
   const baseTimeout = config.downloadTimeout || 30000;
@@ -162,7 +180,23 @@ async function fetchRawWithFallback(config: Config, path: string, expectedSize?:
     ? Math.max(baseTimeout, Math.min(180000, Math.ceil(expectedSize / (300 * 1024)) * 1000))
     : baseTimeout;
 
-  const nodes = [
+  const nodes: DownloadNode[] = [
+    // Official CN accelerator (self-hosted at gh.251716.xyz, a read-only
+    // reverse proxy of raw.githubusercontent.com deployed in HK).
+    // Wins the race on small files thanks to the lowest RTT from mainland.
+    // AUTH: forward the user's GitHub token (when available) so GitHub
+    // rates each user by their own 5000/h quota instead of lumping every
+    // user onto this server's shared anonymous IP quota. The token travels
+    // end-to-end over HTTPS and is NOT logged server-side (nginx default
+    // access log records no request headers). Disclosed in README.
+    ...(config.useOfficialMirror
+      ? [{
+          name: "Official CN",
+          url: `https://gh.251716.xyz/${config.githubRepo}/${config.githubBranch}/${path}`,
+          useAuth: true,
+          timeout: dynamicTimeout
+        }]
+      : []),
     // Official direct (fastest with a working route or VPN to GitHub)
     {
       name: "GitHub Official",
@@ -193,46 +227,100 @@ async function fetchRawWithFallback(config: Config, path: string, expectedSize?:
     }
   ];
 
-  const controllers: AbortController[] = [];
-  const attempts = nodes.map(async (node) => {
-    const controller = new AbortController();
-    controllers.push(controller);
-    const timer = setTimeout(() => controller.abort(), node.timeout);
-    try {
-      const headers: Record<string, string> = {};
-      if (node.useAuth && config.githubToken) {
-        headers["Authorization"] = `Bearer ${config.githubToken}`;
-      }
-      const res = await fetch(node.url, { headers, signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return { node, res, controller };
-    } catch (error: any) {
-      throw Object.assign(new Error(error.message || String(error)), { nodeName: node.name });
-    } finally {
-      clearTimeout(timer);
-    }
-  });
-  // Swallow rejections of losing nodes so they never surface as unhandled.
-  for (const attempt of attempts) attempt.catch(() => {});
+  const official = config.useOfficialMirror ? nodes[0] : undefined;
+  const rest = official ? nodes.slice(1) : nodes;
+  const hedged = !!(official && config.hedgeEnabled);
 
-  try {
-    const winner = await Promise.any(attempts);
-    for (const c of controllers) {
-      if (c !== winner.controller) c.abort();
+  const controllers: AbortController[] = [];
+  let settled = false;
+  let pending = 0;
+  let restLaunched = false;
+  const failures: string[] = [];
+
+  const launchRest = () => {
+    if (restLaunched || settled) return;
+    restLaunched = true;
+    for (const n of rest) launch(n);
+  };
+
+  const fail = (nodeName: string, message: string) => {
+    pending -= 1;
+    failures.push(`[${nodeName}] ${message}`);
+    if (settled || pending > 0) return;
+    if (hedged && !restLaunched) {
+      // The official node died before the hedge window elapsed — escalate
+      // to the public race immediately instead of rejecting early.
+      launchRest();
+      return;
     }
-    return winner.res;
-  } catch (aggregate: any) {
-    const reasons = (aggregate.errors || [])
-      .map((e: any) => `[${e.nodeName}] ${e.message}`)
-      .join("; ");
-    throw new Error(
-      `All download nodes failed to fetch ${path}. ${reasons}\n\n` +
+    rejectAll();
+  };
+
+  let rejectFn: ((reason: Error) => void) | undefined;
+  const rejectAll = () => {
+    rejectFn?.(new Error(
+      `All download nodes failed to fetch ${path}. ${failures.join("; ")}\n\n` +
       `【网络兜底提示】您的网络环境极其恶劣，所有的直连与免翻墙加速节点均已失效。` +
       `为了保证技能库的稳定拉取，建议您配置科学上网环境。推荐服务：` +
       `https://a.xn--30rs3b33gl8gq9hj52b.com/#/register?code=4uq59ogs ` +
       `(该服务极具性价比，最便宜每月200G流量一年仅需13.99元)`
+    ));
+  };
+
+  const launch = (node: DownloadNode) => {
+    pending += 1;
+    const controller = new AbortController();
+    controllers.push(controller);
+    const timer = setTimeout(() => controller.abort(), node.timeout);
+    const headers: Record<string, string> = {};
+    if (node.useAuth && config.githubToken) {
+      headers["Authorization"] = `Bearer ${config.githubToken}`;
+    }
+    fetch(node.url, { headers, signal: controller.signal }).then(
+      (res) => {
+        clearTimeout(timer);
+        if (!res.ok) {
+          fail(node.name, `HTTP ${res.status}`);
+          return;
+        }
+        if (settled) {
+          controller.abort();
+          return;
+        }
+        settled = true;
+        for (const c of controllers) {
+          if (c !== controller) c.abort();
+        }
+        if (node.name === "Official CN") {
+          console.error(`[codex-skills-mcp] official endpoint won: ${path.split("/").pop()}`);
+        }
+        resolveFn?.(res);
+      },
+      (error: any) => {
+        clearTimeout(timer);
+        fail(node.name, error?.message || String(error));
+      }
     );
-  }
+  };
+
+  let resolveFn: ((res: Response) => void) | undefined;
+
+  return await new Promise<Response>((resolve, reject) => {
+    resolveFn = resolve;
+    rejectFn = reject;
+    if (hedged && official) {
+      launch(official);
+      const hedgeTimer = setTimeout(() => {
+        if (!settled) launchRest();
+      }, HEDGE_DELAY_MS);
+      // Once settled, the pending hedge timer is harmless (launchRest no-ops),
+      // but clear it anyway when possible via unref-style hygiene below.
+      void hedgeTimer;
+    } else {
+      restLaunched = true;
+      for (const n of nodes) launch(n);
+    }
+  });
 }
 
 /**

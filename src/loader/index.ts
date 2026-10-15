@@ -60,6 +60,14 @@ export class SkillLoader {
     this.skillsDir = config.skillsDir;
   }
 
+  /** Download deadline settings for the tool layer (read_skill etc.). */
+  get downloadDeadlines(): { softDeadlineMs: number; hardDeadlineMs: number } {
+    return {
+      softDeadlineMs: this.config.softDeadlineMs,
+      hardDeadlineMs: this.config.hardDeadlineMs,
+    };
+  }
+
   /** Lazy-load remote module only when needed */
   private async ensureRemoteFetched(
     entry: ManifestEntry,

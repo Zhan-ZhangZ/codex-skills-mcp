@@ -4,6 +4,7 @@ import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { FOOTER_READ } from "../lib/protocol.js";
 import { withToolLogging, logEvent } from "../lib/logger.js";
+import { raceDownloadDeadline, DownloadDeadlineExceeded } from "../lib/deadline.js";
 
 export function registerReadSkill(
   server: McpServer,
@@ -53,8 +54,25 @@ export function registerReadSkill(
         };
 
         try {
-          const result = await loader.readSkill(entry, (done, total, message) =>
-            sendProgress(done, total, message)
+          // Deadline strategy: clients WITH a progressToken keep receiving
+          // progress notifications that reset their timeout, so they only
+          // need the hard guard. Clients WITHOUT one typically enforce a
+          // 60s request timeout and would kill the call silently — give
+          // them the soft deadline (default 55s) so the model always gets
+          // a structured response telling it to re-call and resume.
+          const hasProgressToken = progressToken !== undefined;
+          const { softDeadlineMs, hardDeadlineMs } = loader.downloadDeadlines;
+          const deadlineMs = hasProgressToken
+            ? hardDeadlineMs
+            : Math.min(softDeadlineMs || Infinity, hardDeadlineMs || Infinity);
+          const deadlineKind: "soft" | "hard" = hasProgressToken ? "hard" : "soft";
+
+          const result = await raceDownloadDeadline(
+            loader.readSkill(entry, (done, total, message) =>
+              sendProgress(done, total, message)
+            ),
+            deadlineMs === Infinity ? 0 : deadlineMs,
+            deadlineKind
           );
 
           // Record usage for personalized search ranking
@@ -141,6 +159,30 @@ export function registerReadSkill(
             ],
           };
         } catch (err) {
+          if (err instanceof DownloadDeadlineExceeded) {
+            // Deadline hit — the download CONTINUES in the background and
+            // keeps writing into the cache. Report precise progress and an
+            // explicit resume instruction so the model never sits blind.
+            const cache = loader.cacheState(entry);
+            const total = cache.filesTotal || 0;
+            const have = total - (cache.filesMissing?.length ?? total);
+            logEvent("info", "download_deadline", {
+              tool: "read_skill",
+              skill: entry.name,
+              detail: `${err.kind} deadline, ${have}/${total} files`,
+            });
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text:
+                    `⏳ Skill "${entry.name}" is still downloading: ${have}/${total} files on disk (${Math.round((have / Math.max(total, 1)) * 100)}%).\n\n` +
+                    `The download continues in the background and resumes automatically — nothing is lost.\n\n` +
+                    `**NEXT STEP: re-call read_skill("${entry.name}") now.** It returns instantly once the remaining files land; for very large skills you may need to re-call a few times (each call tops up the cache).`,
+                },
+              ],
+            };
+          }
           // Record the failure so search ranking can demote unreliable skills
           if (typeof searchEngine.recordFailure === "function") {
             searchEngine.recordFailure(entry.name);
