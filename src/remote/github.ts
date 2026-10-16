@@ -5,6 +5,7 @@ import type { Config, ManifestEntry } from "../config.js";
 import { parseManifest } from "../config.js";
 import { logEvent } from "../lib/logger.js";
 import { DownloadHedger } from "./hedging.js";
+import { runHttpRequest, type HttpRequestContext } from "./http-budget.js";
 import { fetchRemoteManifest, type ManifestCacheSnapshot, type ManifestValidators } from "./manifest-fetch.js";
 
 interface TreeFileEntry {
@@ -187,51 +188,78 @@ interface ResponseIntegrity {
   maxBytes: number;
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000, expected?: TreeFileEntry, integrity?: ResponseIntegrity): Promise<Response> {
+interface TransportContext extends HttpRequestContext {
+  downloadConcurrency: number;
+}
+
+function transportContext(config: Config, kind: HttpRequestContext["kind"], path: string): TransportContext {
+  return { kind, group: operationKey(config, path), downloadConcurrency: config.downloadConcurrency };
+}
+
+async function fetchWithTimeout(
+  url: string, options: RequestInit, timeout: number, expected: TreeFileEntry | undefined,
+  integrity: ResponseIntegrity | undefined, context: TransportContext,
+): Promise<Response> {
   const controller = new AbortController();
   const onAbort = () => controller.abort(options.signal?.reason);
   if (options.signal?.aborted) onAbort();
   else options.signal?.addEventListener("abort", onAbort, { once: true });
+  // Start before admission: queued attempts consume the same existing deadline.
   const id = setTimeout(() => controller.abort(new Error(`Request timed out after ${timeout}ms`)), timeout);
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    if (!res.ok || !res.body) {
-      await res.body?.cancel();
-      if (res.ok && integrity) throw new Error(`Empty response for ${url}`);
-      if (res.ok && expected && expected.size !== 0) throw new Error(`Empty response for ${expected.path}`);
-      if (res.ok && expected?.sha) {
-        const sha = createHash("sha1").update("blob 0").update(Buffer.from([0])).digest("hex");
-        if (sha !== expected.sha.toLowerCase()) throw new Error(`Git blob SHA mismatch for ${expected.path}`);
+    return await runHttpRequest({ ...context, signal: controller.signal }, async () => {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      if (controller.signal.aborted) {
+        await res.body?.cancel().catch(() => {});
+        controller.signal.throwIfAborted();
       }
-      return new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
-    }
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    const reader = res.body.getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > (expected?.size ?? integrity?.maxBytes ?? 64 * 1024 * 1024)) throw new Error(`Unexpected response size for ${url}: ${size} bytes`);
-        chunks.push(value);
+      if (!res.ok || !res.body) {
+        await res.body?.cancel();
+        if (res.ok && integrity) throw new Error(`Empty response for ${url}`);
+        if (res.ok && expected && expected.size !== 0) throw new Error(`Empty response for ${expected.path}`);
+        if (res.ok && expected?.sha) {
+          const sha = createHash("sha1").update("blob 0").update(Buffer.from([0])).digest("hex");
+          if (sha !== expected.sha.toLowerCase()) throw new Error(`Git blob SHA mismatch for ${expected.path}`);
+        }
+        return new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
       }
-    } catch (error) {
-      void reader.cancel(error).catch(() => {});
-      throw error;
-    } finally { reader.releaseLock(); }
-    const body = Buffer.concat(chunks, size);
-    if (integrity && createHash("sha256").update(body).digest("hex") !== integrity.sha256) {
-      throw new Error(`SHA-256 mismatch for ${url}`);
-    }
-    if (expected) {
-      if (size !== expected.size) throw new Error(`Size mismatch for ${expected.path}: expected ${expected.size}, received ${size}`);
-      if (expected.sha) {
-        const sha = createHash("sha1").update(`blob ${size}\0`).update(body).digest("hex");
-        if (sha !== expected.sha.toLowerCase()) throw new Error(`Git blob SHA mismatch for ${expected.path}`);
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = res.body.getReader();
+      let cancellation: Promise<void> | undefined;
+      const cancelBody = (reason: unknown) => cancellation ??= reader.cancel(reason).catch(() => {});
+      const onBodyAbort = () => { void cancelBody(controller.signal.reason); };
+      controller.signal.addEventListener("abort", onBodyAbort, { once: true });
+      try {
+        while (true) {
+          controller.signal.throwIfAborted();
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > (expected?.size ?? integrity?.maxBytes ?? 64 * 1024 * 1024)) throw new Error(`Unexpected response size for ${url}: ${size} bytes`);
+          chunks.push(value);
+        }
+        controller.signal.throwIfAborted();
+      } catch (error) {
+        await cancelBody(error);
+        throw error;
+      } finally {
+        controller.signal.removeEventListener("abort", onBodyAbort);
+        reader.releaseLock();
       }
-    }
-    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+      const body = Buffer.concat(chunks, size);
+      if (integrity && createHash("sha256").update(body).digest("hex") !== integrity.sha256) {
+        throw new Error(`SHA-256 mismatch for ${url}`);
+      }
+      if (expected) {
+        if (size !== expected.size) throw new Error(`Size mismatch for ${expected.path}: expected ${expected.size}, received ${size}`);
+        if (expected.sha) {
+          const sha = createHash("sha1").update(`blob ${size}\0`).update(body).digest("hex");
+          if (sha !== expected.sha.toLowerCase()) throw new Error(`Git blob SHA mismatch for ${expected.path}`);
+        }
+      }
+      return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+    }, context.downloadConcurrency);
   } catch (error) {
     if (controller.signal.aborted) throw controller.signal.reason;
     throw error;
@@ -241,18 +269,14 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
   }
 }
 
-/**
- * Fetch with optional auth token
- */
-async function fetchWithAuth(url: string, token?: string, timeout = 15000): Promise<Response> {
+/** Fetch API metadata with optional auth under the shared transport budget. */
+async function fetchWithAuth(
+  url: string, token: string | undefined, timeout: number, context: TransportContext,
+): Promise<Response> {
   const headers: Record<string, string> = {};
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-  const res = await fetchWithTimeout(url, { headers }, timeout);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
-  }
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetchWithTimeout(url, { headers }, timeout, undefined, undefined, context);
+  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status} ${res.statusText}`);
   return res;
 }
 
@@ -265,7 +289,10 @@ interface DownloadNode {
 const downloadHedger = new DownloadHedger();
 
 /** Race verified responses without delaying the original fallback schedule. */
-async function fetchRawWithFallback(config: Config, path: string, expected?: TreeFileEntry, integrity?: ResponseIntegrity): Promise<Response> {
+async function fetchRawWithFallback(
+  config: Config, path: string, expected?: TreeFileEntry, integrity?: ResponseIntegrity,
+  context = transportContext(config, "metadata", path),
+): Promise<Response> {
   const expectedSize = expected?.size;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   const encodedBranch = encodeURIComponent(config.githubBranch ?? "main");
@@ -321,7 +348,7 @@ async function fetchRawWithFallback(config: Config, path: string, expected?: Tre
   }, async (node, signal, remainingMs) => {
     const headers: Record<string, string> = {};
     if (node.useAuth && config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
-    const response = await fetchWithTimeout(node.url, { headers, signal }, remainingMs, expected, integrity);
+    const response = await fetchWithTimeout(node.url, { headers, signal }, remainingMs, expected, integrity, context);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response;
   });
@@ -339,7 +366,7 @@ async function fetchRawWithFallback(config: Config, path: string, expected?: Tre
  * race remains as the fallback when direct is unreachable. Brand-new files
  * keep using the mirror race, whose size and SHA checks reject stale bytes.
  */
-async function fetchRawDirectFirst(config: Config, path: string, expected?: TreeFileEntry): Promise<Response> {
+async function fetchRawDirectFirst(config: Config, path: string, expected: TreeFileEntry, context: TransportContext): Promise<Response> {
   const headers: Record<string, string> = {};
   if (config.githubToken) headers["Authorization"] = `Bearer ${config.githubToken}`;
   const baseTimeout = config.downloadTimeout || 30000;
@@ -348,23 +375,23 @@ async function fetchRawDirectFirst(config: Config, path: string, expected?: Tree
     ? Math.max(baseTimeout, Math.min(180000, Math.ceil(size / (300 * 1024)) * 1000))
     : baseTimeout;
   try {
-    const res = await fetchWithTimeout(rawUrl(config, path), { headers }, timeout, expected);
+    const res = await fetchWithTimeout(rawUrl(config, path), { headers }, timeout, expected, undefined, context);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res;
   } catch (error) {
     logEvent("warn", "refresh_direct_failed", {
       detail: `${path}: ${error instanceof Error ? error.message : String(error)} — falling back to mirror race`,
     });
-    return fetchRawWithFallback(config, path, expected);
+    return fetchRawWithFallback(config, path, expected, undefined, context);
   }
 }
 
 /** Recover catalog-pinned bytes after a mutable branch advances. */
-async function fetchCatalogFile(config: Config, path: string, file: TreeFileEntry): Promise<Response> {
+async function fetchCatalogFile(config: Config, path: string, file: TreeFileEntry, context: TransportContext): Promise<Response> {
   try {
     // The catalog pins the exact blob: a validated mirror is authoritative
     // for these bytes, including updates. Avoid a serial direct-only timeout.
-    return await fetchRawWithFallback(config, path, file);
+    return await fetchRawWithFallback(config, path, file, undefined, context);
   } catch (rawError) {
     if (!file.sha) throw rawError;
     const headers: Record<string, string> = { Accept: "application/vnd.github.raw+json" };
@@ -372,7 +399,7 @@ async function fetchCatalogFile(config: Config, path: string, file: TreeFileEntr
     try {
       const response = await fetchWithTimeout(
         `https://api.github.com/repos/${config.githubRepo}/git/blobs/${file.sha}`,
-        { headers }, config.downloadTimeout || 30000, file,
+        { headers }, config.downloadTimeout || 30000, file, undefined, context,
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       logEvent("info", "file_blob_fallback", { detail: path });
@@ -450,7 +477,7 @@ async function fetchSkillTreeFromFileIndex(
     const remotePath = buildSkillRemotePath(config, index.path);
     const response = await fetchRawWithFallback(config, remotePath, undefined, {
       sha256: index.sha256, maxBytes: MAX_CATALOG_BYTES,
-    });
+    }, transportContext(config, "metadata", entry.relative_path));
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = Buffer.from(await response.arrayBuffer());
     if (data.byteLength === 0 || data.byteLength > MAX_CATALOG_BYTES) {
@@ -487,7 +514,7 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
   const contentsRes = await fetchWithAuth(
     `${apiBase}contents/${parentRemotePath.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(config.githubBranch ?? "main")}`,
     config.githubToken,
-    20000
+    20000, transportContext(config, "metadata", relPath)
   );
   const contents = (await contentsRes.json()) as any;
 
@@ -511,7 +538,7 @@ async function fetchSkillTree(config: Config, relPath: string): Promise<SkillTre
     const treeRes = await fetchWithAuth(
       `${apiBase}git/trees/${dir.sha}?recursive=1`,
       config.githubToken,
-      60000
+      60000, transportContext(config, "metadata", relPath)
     );
     const tree = (await treeRes.json()) as any;
     if (tree.truncated) {
@@ -598,7 +625,7 @@ async function fetchCategoryTree(
   const contentsRes = await fetchWithAuth(
     `${apiBase}contents/${parentRemotePath.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(config.githubBranch ?? "main")}`,
     config.githubToken,
-    20000
+    20000, transportContext(config, "metadata", `category:${categoryPath}`)
   );
   const contents = (await contentsRes.json()) as any;
   const dir = (Array.isArray(contents) ? contents : []).find(
@@ -611,7 +638,7 @@ async function fetchCategoryTree(
   const treeRes = await fetchWithAuth(
     `${apiBase}git/trees/${dir.sha}?recursive=1`,
     config.githubToken,
-    60000
+    60000, transportContext(config, "metadata", `category:${categoryPath}`)
   );
   const tree = (await treeRes.json()) as any;
   if (tree.truncated) {
@@ -824,6 +851,7 @@ async function downloadMissing(
   });
   const startedAt = Date.now();
   const limit = Math.max(1, config.downloadConcurrency);
+  const context = transportContext(config, "data", relPath);
   let done = 0;
 
   const staged: Array<{ temporary: string; target: string }> = [];
@@ -837,10 +865,10 @@ async function downloadMissing(
       // never converges (see docs/CHANGELOG.md v1.4.2). Brand-new files keep
       // the fast mirror race.
       const res = tree.fileIndexSha256 && file.sha
-        ? await fetchCatalogFile(config, remotePath, file)
+        ? await fetchCatalogFile(config, remotePath, file, context)
         : existsSync(localFile)
-        ? await fetchRawDirectFirst(config, remotePath, file)
-        : await fetchRawWithFallback(config, remotePath, file);
+        ? await fetchRawDirectFirst(config, remotePath, file, context)
+        : await fetchRawWithFallback(config, remotePath, file, undefined, context);
       const buffer = Buffer.from(await res.arrayBuffer());
       mkdirSync(dirname(localFile), { recursive: true });
       if (options.transactional) {

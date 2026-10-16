@@ -5,6 +5,10 @@
 
 ## 1.5.0-beta.6 — 轻量预览与下载路由复用（开发版，尚未发布）
 
+- `read_skill` 保留完整根说明，目录/子技能导航改为有界分页；`list_skill_files` 支持全量检索、路径限定和签名 cursor，所有嵌套子技能可达。
+- 子技能 front matter 使用 YAML parser 解析，修正引号和 folded/literal 描述；本地摘要缓存加速热读且编辑失效。
+- 文件、元数据和 manifest 共享进程级 HTTP admission（默认 88，数据上限 80，manifest 专属保留 4），排队计入 deadline，慢取消不提前释放名额。
+- 新增只读源库 payload 审计与真实 stdio 导航基准；Journal `read_skill` 结果从约 2.07 MB 降至约 20 KB，根说明仍完整。
 - 资源预览保留完整物化，使用 `readInstructions` 跳过目录、子技能和依赖扫描；10,851 文件 fixture 预览 p50 从 810.446ms 降至 138.029ms。完整 `read_skill` 的结构输出保持。
 - 下载调度拆成可测试的 `DownloadHedger`，复用已验证 winner，同时保留原默认节点和 400ms 后备时间；增加路由 TTL/容量、共同 race deadline、取消清理与并发路由版本保护。
 - 保留 SHA/长度校验、token 域隔离、`--no-hedge` 全竞速；补齐零字节无正文响应的 Git blob SHA 检查。

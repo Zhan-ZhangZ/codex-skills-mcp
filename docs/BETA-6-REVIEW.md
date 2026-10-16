@@ -112,3 +112,39 @@ node scripts/check-remote-catalog.mjs --force-manifest-raw-failure --expected-ma
 - 热读仍有同步的逐文件存在/大小/权限检查。异步摘要读取改善响应让出执行权，但没有消除这段同步成本；小样本事件循环观测不是延迟上限保证。
 - 已有有效同源清单的镜像降级问题已通过权威双通道与缓存保护处理；无有效缓存时的镜像引导仍可能旧。没有依据条目数、catalog 数量或时间戳猜测版本先后；未来版本标识仍需独立设计。
 - 真实 ChatGPT 宿主视觉验收仍待执行；现有验收覆盖前端 DOM、MCP 协议和打包产物。
+
+
+## 第三轮：有界导航、完整检索与共享 HTTP 预算
+
+时间：2026-10-17。仍为 `1.5.0-beta.6` 开发版，未发布。基线是已推送的 `25f42d6` 构建；比较源库为本地 `codexproject/codex-skills`，客户端通过真实 stdio 传输调用同一个 `Awesome-Journal-Skills`。
+
+### 行为变化
+
+- `read_skill` 继续强制完整物化并原样返回根 `SKILL.md`；目录与子技能只返回有界预览。每页最多 100 项，且导航条目渲染预算为 12 KiB（标题、续页说明和结构化元数据不计入该预算）。
+- `list_skill_files` 不新增工具，扩展 `view/path/query/limit/cursor`：`view=sub_skills` 会检索全部嵌套深度，query 先过滤完整名称、路径和完整描述，再分页；`view=files` 保持 `max_depth` 语义。
+- 分页游标是进程内 HMAC 签名的偏移量，不保存快照。修订摘要绑定来源/缓存/技能、实际 catalog、路径、查询、深度和全部完整 rows；重启、换源、修订、过滤条件或本地内容变化都会要求从第一页重启。
+- 子技能元数据改用成熟 YAML parser 仅解析 front matter，正确处理引号、folded/literal 描述，不再把正文标题或 `>`/`|` 标记当成描述。本地摘要缓存按 inode/size/mtime/ctime 绑定，避免每次重复解析，同时保留本地编辑失效。
+- 文件、catalog/tree/Contents 元数据和 manifest 共享进程级 HTTP admission。默认总容量 88：数据请求上限 80，元数据保留 8，其中 manifest 专属保留 4；并发配置高于 16 时按最高有效并发扩容到最多 328，不把多个技能的容量相加。名额覆盖 fetch、完整 body 读取、取消和校验，排队时间计入原 deadline，并按技能/来源轮转。
+- `diagnostics` 新增 HTTP admission 的容量、active/queued 和分类计数，只暴露计数，不暴露 URL、路径或凭据。
+
+### 实测
+
+| 指标（Awesome-Journal-Skills，真实 stdio） | `25f42d6` 基线 | 当前 | 变化 |
+|---|---:|---:|---:|
+| `read_skill` 首次结果 JSON | 2,067,825 B | 20,146 B | -99.0% |
+| `read_skill` 首次耗时 | 543 ms | 436 ms | -19.7% |
+| `read_skill` 热读中位数 | 273 ms | 209 ms | -23.4% |
+| `list_skill_files` 文件页 JSON | 293,311 B | 3,217 B | -98.9% |
+| `list_skill_files` 文件页中位耗时 | 38 ms | 40 ms | 基本持平 |
+| 子技能完整检索结果 JSON | 不支持 | 13,105 B | 新能力 |
+
+当前子技能检索中位 200 ms：它必须遍历 4,166 个嵌套 `SKILL.md` 并覆盖完整描述，基线的 `list_skill_files` 没有该能力，因此这不是同类耗时对比。根说明最大 63,979 B，全部保留；导航只截断名称/描述标签。
+
+完整数据和基线摘要见 `docs/benchmarks/beta7-navigation-stdio.json`。新的只读源库审计脚本默认输出 25 个最大 payload 与全库汇总，当前跟踪报告约 64 KiB；`--full` 可按需生成全量 291 项报告。审计确认 8,346 个子技能可返回，旧深度/跳过规则遗漏为 0，YAML block/quote 伪描述为 0；报告见 `docs/benchmarks/skill-payload-audit.json`。
+
+### 验证与边界
+
+- 新增导航纯函数、loader 视图、工具接续、HTTP admission 单元/公共 API 集成回归。
+- 验证了全部页无重复/漏项、12 KiB 预算、UTF-8 码点截断、末项查询、完整描述超出显示摘要仍可检索、篡改/过期 cursor、源/内容/filter/depth 失效、`read_skill` cursor 在 `list_skill_files` 继续、本地编辑失效和 16 个工具数量不变。
+- 模拟传输下三个并发技能的峰值从 240 路数据请求降至 80；慢取消不会提前释放名额，SHA mismatch 会释放且不物化字节。
+- 边界：101 个超过 500 KiB 的辅助文本文档仍需后续设计显式 chunk/range 读取；共享 HTTP 预算的真实公网耗时还未测量；本记录不代表 npm 发布。

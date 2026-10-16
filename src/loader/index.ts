@@ -1,11 +1,13 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
-import { join, relative, extname, basename, dirname, isAbsolute, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { join, relative, resolve, extname, basename, dirname, isAbsolute, sep } from "node:path";
 import type { ManifestEntry, Config } from "../config.js";
 import type { ProgressCallback, SkillMaterialization } from "../remote/github.js";
 import { readSkillCacheState, isSkillCachedLight, consumeSkillMaterialization, peekSkillMaterialization, type SkillCacheState } from "../remote/github.js";
 import { resolveWithin } from "../lib/paths.js";
+import { parse as parseYaml } from "yaml";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -37,6 +39,25 @@ export interface ReadSkillResult {
   dependencies: SkillDependencies;
   /** The state verified by this materialization, reused by the tool response. */
   cache?: SkillCacheState;
+  /** Shared with readNavigation; excludes credentials and pagination filters. */
+  navigationIdentity: string;
+}
+
+export interface SkillNavigationOptions {
+  view: "files" | "sub_skills";
+  path?: string;
+  /** File-tree depth only; subskill discovery always covers the whole subtree. */
+  maxDepth?: number;
+}
+
+export interface SkillNavigationResult extends SkillStructure {
+  identity: string;
+  cache: SkillCacheState;
+}
+
+interface StructureOptions {
+  view?: SkillNavigationOptions["view"];
+  path?: string;
 }
 
 export interface ReadInstructionsResult {
@@ -86,11 +107,29 @@ function contained(root: string, path: string): boolean {
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
+function metadataSummary(content: string): Record<string, unknown> | null {
+  // Parse only the opening YAML front matter. Searching the whole document
+  // made body headings and examples look like metadata.
+  const match = /^---\r?\n([\S\s]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+  if (!match) return null;
+  try {
+    const value = parseYaml(match[1]);
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function scalar(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.replace(/[\r\n\t ]+/g, " ").trim() : null;
+}
+
 function summary(content: string, folder: string): Pick<SubSkillInfo, "name" | "description"> {
-  const name = content.match(/^---[\s\S]*?name:\s*(.+?)$/m)?.[1].trim() ?? folder;
-  const description = content.match(/^---[\s\S]*?description:\s*(.+?)$/m)?.[1].trim() ?? "";
-  // Copy small captured strings so a cache entry does not retain a whole large
-  // SKILL.md through V8 substring backing storage.
+  const metadata = metadataSummary(content);
+  const name = scalar(metadata?.name) ?? folder;
+  const description = scalar(metadata?.description) ?? "";
+  // Copy parsed strings so a cache entry cannot retain a whole SKILL.md through
+  // a large V8 substring backing buffer.
   return { name: Buffer.from(name).toString(), description: Buffer.from(description).toString() };
 }
 
@@ -162,6 +201,67 @@ export class SkillLoader {
     return this.readMaterialized(entry, true, onProgress);
   }
 
+  /** Read one navigation view without reading root instructions or dependencies. */
+  async readNavigation(entry: ManifestEntry, options: SkillNavigationOptions): Promise<SkillNavigationResult> {
+    if (options.view !== "files" && options.view !== "sub_skills") throw new Error("Invalid navigation view");
+    const maxDepth = options.maxDepth ?? 2;
+    if (!Number.isInteger(maxDepth) || maxDepth < 0 || maxDepth > 8) throw new Error("maxDepth must be an integer from 0 to 8");
+    const skillPath = this.resolveSkillPath(entry);
+    // Reject traversal before starting any remote materialization. Resolving
+    // again after it completes also checks newly created symlink ancestors.
+    const normalized = relative(skillPath, resolveWithin(skillPath, options.path ?? "")).split(sep).join("/");
+    const selection: StructureOptions = { view: options.view, path: normalized };
+    if (!this.config.isRemote) {
+      await this.requireNavigationDirectory(skillPath, normalized);
+      const structure = await this.localStructure(skillPath, maxDepth, selection);
+      return { ...structure, cache: this.cacheState(entry), identity: this.navigationIdentity(entry, skillPath) };
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const receipt = await this.ensureRemoteFetched(entry);
+      const prepared = peekSkillMaterialization(this.config, entry, receipt);
+      if (!prepared) continue;
+      await this.requireNavigationDirectory(prepared.cache.localPath, normalized);
+      const structure = prepared.cache.complete
+        ? await this.catalogStructure(prepared.cache.localPath, prepared.files, this.summarySourceKey(prepared.cache.localPath), maxDepth, selection)
+        : await this.localStructure(prepared.cache.localPath, maxDepth, selection);
+      const verified = consumeSkillMaterialization(this.config, entry, receipt);
+      if (verified) return { ...structure, cache: verified.cache,
+        identity: this.navigationIdentity(entry, verified.cache.localPath, verified.files) };
+    }
+    throw new Error("Skill cache changed during the read. Retry to read a consistent materialization.");
+  }
+
+  private async requireNavigationDirectory(skillPath: string, path: string): Promise<void> {
+    const target = resolveWithin(skillPath, path);
+    let info;
+    try { info = await this.fileReads.run(() => stat(target)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`Path not found: ${path || "."}`);
+      throw error;
+    }
+    if (!info.isDirectory()) throw new Error(`Path is not a directory: ${path}`);
+  }
+
+  private summarySourceKey(skillPath: string): string {
+    return JSON.stringify([skillPath, this.config.githubRepo, this.config.githubBranch, this.config.githubPath]);
+  }
+
+  private navigationIdentity(entry: ManifestEntry, skillPath: string, files?: readonly CatalogFile[]): string {
+    const actualRevision = files ? createHash("sha256") : undefined;
+    if (files) {
+      for (const file of [...files].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0)) {
+        actualRevision!.update(JSON.stringify([file.path, file.size, file.sha ?? null, file.mode ?? null]) + "\n");
+      }
+    }
+    // The paging layer additionally hashes all returned rows, so local edits
+    // invalidate cursors without retaining snapshots or tokens in the loader.
+    return createHash("sha256").update(JSON.stringify([
+      "skill-navigation-v1", resolve(this.skillsDir), resolve(this.config.manifestPath),
+      resolve(skillPath), entry.name, this.config.isRemote,
+      this.config.isRemote ? [this.config.githubRepo, this.config.githubBranch, this.config.githubPath] : null,
+      entry.file_index?.sha256 ?? null, actualRevision?.digest("hex") ?? "local",
+    ])).digest("hex");
+  }
+
   private async rootInstructions(skillPath: string, entry: ManifestEntry): Promise<string> {
     const target = resolveWithin(skillPath, "SKILL.md");
     try { return await this.fileReads.run(() => readFile(target, "utf8")); } catch (error) {
@@ -179,7 +279,8 @@ export class SkillLoader {
       const instructions = await this.rootInstructions(skillPath, entry);
       const structure = includeStructure ? await this.localStructure(skillPath) : empty();
       const dependencies = includeStructure ? this.detectDependencies(skillPath) : { language: "markdown-only" };
-      return { instructions, structure, dependencies, cache: this.cacheState(entry) };
+      return { instructions, structure, dependencies, cache: this.cacheState(entry),
+        navigationIdentity: includeStructure ? this.navigationIdentity(entry, skillPath) : "" };
     }
     // Asynchronous file reads can overlap a repair or source change. Inspect
     // the receipt first, but consume it only after the entire response is read.
@@ -188,7 +289,7 @@ export class SkillLoader {
       const prepared = peekSkillMaterialization(this.config, entry, receipt);
       if (!prepared) continue;
       const skillPath = prepared.cache.localPath;
-      const sourceKey = JSON.stringify([skillPath, this.config.githubRepo, this.config.githubBranch, this.config.githubPath]);
+      const sourceKey = this.summarySourceKey(skillPath);
       const instructions = await this.rootInstructions(skillPath, entry);
       const structure = includeStructure
         ? prepared.cache.complete
@@ -197,29 +298,34 @@ export class SkillLoader {
         : empty();
       const dependencies = includeStructure ? this.detectDependencies(skillPath) : { language: "markdown-only" };
       const verified = consumeSkillMaterialization(this.config, entry, receipt);
-      if (verified) return { instructions, structure, dependencies, cache: verified.cache };
+      if (verified) return { instructions, structure, dependencies, cache: verified.cache,
+        navigationIdentity: includeStructure ? this.navigationIdentity(entry, skillPath, verified.files) : "" };
     }
     throw new Error("Skill cache changed during the read. Retry to read a consistent materialization.");
   }
 
   /** Build only the displayed tree from an already validated materialization. */
   private async catalogStructure(
-    skillPath: string, files: readonly CatalogFile[], sourceKey: string, maxDepth = 2
+    skillPath: string, files: readonly CatalogFile[], sourceKey: string, maxDepth = 2, options: StructureOptions = {}
   ): Promise<SkillStructure> {
     type Tree = Map<string, FileNode & { entries?: Tree }>;
     const tree: Tree = new Map();
     const candidates: CatalogFile[] = [];
+    const includeFiles = options.view !== "sub_skills";
+    const includeSkills = options.view !== "files";
+    const prefix = options.path ? `${options.path}/` : "";
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
-      const parts = file.path.split("/");
+      if (prefix && !file.path.startsWith(prefix)) continue;
+      const parts = file.path.slice(prefix.length).split("/");
       const parents = parts.slice(0, -1);
-      // findSubSkills historically includes hidden directories and depth five,
-      // while the displayed file tree hides dotfiles and stops at depth two.
-      if (parts.at(-1) === "SKILL.md" && parents.length > 0 && parents.length <= 5 &&
+      // Hidden subskills are discoverable at every depth. A selected subtree
+      // includes its own SKILL.md, while the library skill root is excluded.
+      if (includeSkills && parts.at(-1) === "SKILL.md" && (parents.length > 0 || !!prefix) &&
           parents.every((name) => !SKIP_NAMES.has(name))) candidates.push(file);
 
       let current = tree;
-      for (let depth = 0; depth < parts.length && depth <= maxDepth; depth++) {
+      for (let depth = 0; includeFiles && depth < parts.length && depth <= maxDepth; depth++) {
         const name = parts[depth];
         if (SKIP_NAMES.has(name) || (name.startsWith(".") && name !== ".env.example")) break;
         if (depth === parts.length - 1) {
@@ -249,9 +355,26 @@ export class SkillLoader {
       }
       return left.length - right.length;
     });
-    const root = await this.fileReads.run(() => realpath(skillPath));
+    const root = candidates.length ? await this.fileReads.run(() => realpath(skillPath)) : skillPath;
     const subSkills = await Promise.all(candidates.map((file) => this.catalogSummary(root, file, sourceKey)));
     return { files: toNodes(tree), sub_skills: subSkills.filter((item): item is SubSkillInfo => item !== null) };
+  }
+
+  private cacheSummary(key: string, value: Pick<SubSkillInfo, "name" | "description">): void {
+    const bytes = Buffer.byteLength(key) + Buffer.byteLength(value.name) + Buffer.byteLength(value.description);
+    if (bytes > SUMMARY_CACHE_BYTES) return;
+    const previous = this.summaries.get(key);
+    if (previous) {
+      this.summaryBytes -= previous.bytes;
+      this.summaries.delete(key);
+    }
+    this.summaries.set(key, { value, bytes });
+    this.summaryBytes += bytes;
+    while (this.summaries.size > SUMMARY_CACHE_ENTRIES || this.summaryBytes > SUMMARY_CACHE_BYTES) {
+      const oldest = this.summaries.keys().next().value!;
+      this.summaryBytes -= this.summaries.get(oldest)!.bytes;
+      this.summaries.delete(oldest);
+    }
   }
 
   private async catalogSummary(skillPath: string, file: CatalogFile, sourceKey: string): Promise<SubSkillInfo | null> {
@@ -279,20 +402,7 @@ export class SkillLoader {
       if (!contained(skillPath, target)) return null;
       const content = await this.fileReads.run(() => readFile(target, "utf8"));
       const value = summary(content, basename(path));
-      if (key) {
-        const bytes = Buffer.byteLength(key) + Buffer.byteLength(value.name) + Buffer.byteLength(value.description);
-        if (bytes <= SUMMARY_CACHE_BYTES) {
-          const previous = this.summaries.get(key);
-          if (previous) { this.summaryBytes -= previous.bytes; this.summaries.delete(key); }
-          this.summaries.set(key, { value, bytes });
-          this.summaryBytes += bytes;
-          while (this.summaries.size > SUMMARY_CACHE_ENTRIES || this.summaryBytes > SUMMARY_CACHE_BYTES) {
-            const oldest = this.summaries.keys().next().value!;
-            this.summaryBytes -= this.summaries.get(oldest)!.bytes;
-            this.summaries.delete(oldest);
-          }
-        }
-      }
+      if (key) this.cacheSummary(key, value);
       return { ...value, path };
     } catch {
       // Match the old scanner's handling of files removed during a read.
@@ -301,28 +411,48 @@ export class SkillLoader {
   }
 
   /** Local checkouts remain editable: inspect the actual tree on every read. */
-  private async localStructure(skillPath: string, maxDepth = 2): Promise<SkillStructure> {
+  private async localStructure(skillPath: string, maxDepth = 2, options: StructureOptions = {}): Promise<SkillStructure> {
     const root = await this.fileReads.run(() => realpath(skillPath));
+    const start = await this.fileReads.run(() => realpath(resolveWithin(skillPath, options.path ?? "")));
+    if (!contained(root, start)) throw new Error("Path traversal detected: symlink leaves its directory");
+    const includeFiles = options.view !== "sub_skills";
+    const includeSkills = options.view !== "files";
+    const sourceKey = this.summarySourceKey(root);
     const readSummary = async (directory: string): Promise<SubSkillInfo | null> => {
       try {
         const target = await this.fileReads.run(() => realpath(join(directory, "SKILL.md")));
         if (!contained(root, target)) return null;
+        const before = await this.fileReads.run(() => stat(target, { bigint: true }));
+        const key = JSON.stringify([sourceKey, target, before.dev.toString(), before.ino.toString(), before.size.toString(), before.mtimeNs.toString(), before.ctimeNs.toString()]);
+        const cached = this.summaries.get(key);
+        if (cached) {
+          this.summaries.delete(key);
+          this.summaries.set(key, cached);
+          return { ...cached.value, path: relative(root, directory).split(sep).join("/") };
+        }
         const content = await this.fileReads.run(() => readFile(target, "utf8"));
-        return { ...summary(content, basename(directory)), path: relative(root, directory) };
+        const value = summary(content, basename(directory));
+        // If metadata changed while reading, do not cache under the old key; the
+        // next scan must read the edited bytes.
+        const after = await this.fileReads.run(() => stat(target, { bigint: true }));
+        if (after.mtimeNs === before.mtimeNs && after.ctimeNs === before.ctimeNs &&
+            after.size === before.size) this.cacheSummary(key, value);
+        return { ...value, path: relative(root, directory).split(sep).join("/") };
       } catch { return null; }
     };
     const walk = async (directory: string, depth: number, visible: boolean): Promise<SkillStructure> => {
       try {
         const canonical = await this.fileReads.run(() => realpath(directory));
         if (!contained(root, canonical)) return { files: [], sub_skills: [] };
-        const entries = await this.fileReads.run(() => readdir(canonical, { withFileTypes: true }));
+        const entries = (await this.fileReads.run(() => readdir(canonical, { withFileTypes: true })))
+          .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
         const results = await Promise.all(entries.map(async (entry): Promise<SkillStructure> => {
           if (SKIP_NAMES.has(entry.name)) return { files: [], sub_skills: [] };
-          const show = visible && (!entry.name.startsWith(".") || entry.name === ".env.example");
+          const show = includeFiles && visible && (!entry.name.startsWith(".") || entry.name === ".env.example");
           if (entry.isDirectory()) {
             const child = join(canonical, entry.name);
-            const own = depth <= 4 ? await readSummary(child) : null;
-            const below = depth < Math.max(maxDepth, 4)
+            const own = includeSkills ? await readSummary(child) : null;
+            const below = includeSkills || (show && depth < maxDepth)
               ? await walk(child, depth + 1, show && depth < maxDepth)
               : { files: [], sub_skills: [] };
             const node: FileNode = { name: entry.name, type: "directory",
@@ -340,7 +470,10 @@ export class SkillLoader {
         return { files: results.flatMap((result) => result.files), sub_skills: results.flatMap((result) => result.sub_skills) };
       } catch { return { files: [], sub_skills: [] }; }
     };
-    return walk(root, 0, true);
+    const own = includeSkills && start !== root ? await readSummary(start) : null;
+    const result = await walk(start, 0, true);
+    if (own) result.sub_skills.unshift(own);
+    return result;
   }
 
   /**

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Config, ManifestEntry } from "../config.js";
 import { parseManifest } from "../config.js";
+import { runHttpRequest } from "./http-budget.js";
 
 export type ManifestEndpoint = "raw" | "contents";
 
@@ -109,11 +110,13 @@ async function responseText(response: Response, signal: AbortSignal): Promise<st
   if (!response.body) return "";
   const length = Number(response.headers.get("content-length"));
   if (Number.isFinite(length) && length > MAX_MANIFEST_BYTES) {
-    void response.body.cancel().catch(() => {});
+    await response.body.cancel().catch(() => {});
     throw new Error("Manifest response exceeds the 64 MiB limit");
   }
   const reader = response.body.getReader();
-  const cancel = () => { void reader.cancel(signal.reason).catch(() => {}); };
+  let cancellation: Promise<void> | undefined;
+  const cancelBody = (reason: unknown) => cancellation ??= reader.cancel(reason).catch(() => {});
+  const cancel = () => { void cancelBody(signal.reason); };
   signal.addEventListener("abort", cancel, { once: true });
   if (signal.aborted) cancel();
   const chunks: Uint8Array[] = [];
@@ -130,7 +133,7 @@ async function responseText(response: Response, signal: AbortSignal): Promise<st
     signal.throwIfAborted();
     return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size));
   } catch (error) {
-    void reader.cancel(error).catch(() => {});
+    await cancelBody(error);
     throw error;
   } finally {
     signal.removeEventListener("abort", cancel);
@@ -141,39 +144,42 @@ async function responseText(response: Response, signal: AbortSignal): Promise<st
 async function fetchCandidate(
   candidate: Candidate, config: Config, cache: ValidCache | undefined, signal: AbortSignal,
 ): Promise<ManifestFetchResult> {
-  const endpoint = candidate.endpoint;
-  const validator = endpoint ? cache?.validators[endpoint] : undefined;
-  const headers: Record<string, string> = {};
-  if (endpoint && config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
-  if (endpoint === "contents") headers.Accept = "application/vnd.github.raw+json";
-  if (validator?.etag) headers["If-None-Match"] = validator.etag;
-  else if (validator?.lastModified) headers["If-Modified-Since"] = validator.lastModified;
-  const response = await fetch(candidate.url, { headers, signal });
-  if (signal.aborted) void response.body?.cancel().catch(() => {});
-  signal.throwIfAborted();
-  if (response.status === 304 || !response.ok) {
-    void response.body?.cancel().catch(() => {});
-    if (response.status !== 304) throw new Error(`HTTP ${response.status}`);
-    if (!endpoint || !cache || !validator) throw new Error("Unexpected 304 without a matching endpoint and cached body");
-    return { text: cache.text, entries: cache.entries, source: endpoint, notModified: true,
-      validators: { ...cache.validators, [endpoint]: { ...validator,
-        etag: response.headers.get("etag") ?? validator.etag,
-        lastModified: response.headers.get("last-modified") ?? validator.lastModified,
-      } } };
-  }
-  const text = await responseText(response, signal);
-  const entries = parseText(text);
-  const sha256 = digest(text);
-  const validators: ManifestValidators = cache?.sha256 === sha256 ? { ...cache.validators } : {};
-  if (endpoint) {
-    // A full response replaces this endpoint's validators, including removing
-    // obsolete ones when the server no longer sends either header.
-    delete validators[endpoint];
-    const etag = response.headers.get("etag") ?? undefined;
-    const lastModified = response.headers.get("last-modified") ?? undefined;
-    if (etag || lastModified) validators[endpoint] = { url: candidate.url, bodySha256: sha256, etag, lastModified };
-  }
-  return { text, entries, source: endpoint ?? "mirror", notModified: false, validators };
+  const group = JSON.stringify([config.manifestPath, config.githubRepo, config.githubBranch ?? "main", config.githubPath]);
+  return runHttpRequest({ kind: "manifest", group, signal }, async () => {
+    const endpoint = candidate.endpoint;
+    const validator = endpoint ? cache?.validators[endpoint] : undefined;
+    const headers: Record<string, string> = {};
+    if (endpoint && config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
+    if (endpoint === "contents") headers.Accept = "application/vnd.github.raw+json";
+    if (validator?.etag) headers["If-None-Match"] = validator.etag;
+    else if (validator?.lastModified) headers["If-Modified-Since"] = validator.lastModified;
+    const response = await fetch(candidate.url, { headers, signal });
+    if (signal.aborted) await response.body?.cancel().catch(() => {});
+    signal.throwIfAborted();
+    if (response.status === 304 || !response.ok) {
+      await response.body?.cancel().catch(() => {});
+      if (response.status !== 304) throw new Error(`HTTP ${response.status}`);
+      if (!endpoint || !cache || !validator) throw new Error("Unexpected 304 without a matching endpoint and cached body");
+      return { text: cache.text, entries: cache.entries, source: endpoint, notModified: true,
+        validators: { ...cache.validators, [endpoint]: { ...validator,
+          etag: response.headers.get("etag") ?? validator.etag,
+          lastModified: response.headers.get("last-modified") ?? validator.lastModified,
+        } } };
+    }
+    const text = await responseText(response, signal);
+    const entries = parseText(text);
+    const sha256 = digest(text);
+    const validators: ManifestValidators = cache?.sha256 === sha256 ? { ...cache.validators } : {};
+    if (endpoint) {
+      // A full response replaces this endpoint's validators, including removing
+      // obsolete ones when the server no longer sends either header.
+      delete validators[endpoint];
+      const etag = response.headers.get("etag") ?? undefined;
+      const lastModified = response.headers.get("last-modified") ?? undefined;
+      if (etag || lastModified) validators[endpoint] = { url: candidate.url, bodySha256: sha256, etag, lastModified };
+    }
+    return { text, entries, source: endpoint ?? "mirror", notModified: false, validators };
+  }, config.downloadConcurrency);
 }
 
 /** First valid complete body wins; every failure advances all remaining nodes. */

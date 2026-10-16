@@ -32,6 +32,8 @@
 - 清单使用 GitHub raw 与 Contents API 两条权威通道；已有合法同源缓存时，权威刷新失败保留缓存，避免被旧镜像覆盖。
 - 文件镜像短期复用通过完整性校验的获胜节点，同时保持原节点的启动时间；故障立即切换，`--no-hedge` 保留全量竞速。
 - 可复现热读和公网 A/B 基准见 [beta.6 审查记录](docs/BETA-6-REVIEW.md)。
+- `read_skill` 保留完整根说明，目录/子技能使用 12 KiB 有界导航；`list_skill_files` 支持全量检索、分页和签名 cursor。Journal 真实 stdio 结果约 2.07 MB → 20 KB，热读 273 → 209 ms。
+- 文件、元数据和 manifest 共享默认 88 路进程级 HTTP admission（数据上限 80、manifest 保留 4），跨技能公平排队且完整覆盖 body 读取与校验。
 
 ## beta.5 改进（2026-10-16）
 
@@ -255,11 +257,11 @@ output: 14 个分类 + 各自的技能数量
 
 ### 📖 read_skill
 
-物化技能（协议 STEP 3，执行前必调）：完整下载技能目录到本地缓存（已缓存则秒回），返回 SKILL.md 指令 + 文件结构 + 依赖 + **Cache & Execution 段（local_path / 完整性 / setup 命令）** + 子技能。
+物化技能（协议 STEP 3，执行前必调）：完整下载技能目录到本地缓存（已缓存则秒回），原样返回根 `SKILL.md` 指令 + 依赖 + **Cache & Execution 段（local_path / 完整性 / setup 命令）**，目录和子技能给有界导航预览。
 
 ```
 input:  { name: "MediaCrawler" }
-output: { instructions, structure, dependencies, sub_skills }
+output: { instructions, dependencies, navigation: { files, sub_skills } }
 ```
 
 ### 📂 load_skill_file
@@ -275,11 +277,11 @@ output: { content, size_bytes }
 
 ### 🗂️ list_skill_files
 
-浏览技能的文件树（不读内容）。
+浏览技能的文件树或搜索全部嵌套子技能（不重复根说明）。
 
 ```
-input:  { skill_name: "remotion-skills", path?: "src", max_depth?: 2 }
-output: 目录树
+input:  { skill_name, view?: "files" | "sub_skills", path?, max_depth?, query?, limit?, cursor? }
+output: 有界页面 + matched/total/next_cursor 元数据
 ```
 
 ### 🔗 plan_workflow

@@ -46,6 +46,7 @@ test('built stdio server completes the entire local skill workflow', async t => 
   assert.match(text(await call('list_skill_files', { skill_name: 'sample' })), /SKILL.md/);
   assert.match(text(await call('skill_status', { names: 'sample' })), /1\/1 complete/);
   assert.match(text(await call('diagnostics', { include_log: false })), /local/);
+  assert.match(text(await call('diagnostics', { include_log: false })), /HTTP admission/);
   assert.equal((await call('read_skill', { name: 'missing' })).isError, true);
   assert.equal((await call('load_skill_file', { skill_name: 'sample', file_path: '../escape' })).isError, true);
   assert.equal((await call('list_skill_files', { skill_name: 'sample', max_depth: 999 })).isError, true);

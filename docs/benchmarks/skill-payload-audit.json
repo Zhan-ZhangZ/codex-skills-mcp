@@ -1,0 +1,2512 @@
+{
+  "started_at": "2026-10-16T17:28:26.355Z",
+  "source_root": "/Users/zz/codexproject/codex-skills",
+  "dist": "/Users/zz/codex-skills-mcp/dist",
+  "manifest_sha256": "5b17d8ac3c80e73f0d00d9b85ace992089518a6275eef58e7801cba1d13ac56d",
+  "runtime": {
+    "node": "v26.4.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "build_sha256": {
+    "loader/index.js": "a444cdc711e6537fdd6398437fb7c86896e20db9c1a41b6124df63d6c6d025ae",
+    "tools/read-skill.js": "f86200559ca01955ff806f3dd9f854fa8943ccb3a050fd16ff952b093bb4d1ca",
+    "openai/mentions.js": "418bdd13849c452b4edbc63f08827aebc4268a1b9cd25e54151a1e555ddcde69"
+  },
+  "notes": [
+    "All source access is read-only. Catalog digests and root SKILL.md Git blob SHA/size are checked; other supporting file bodies are not all reread.",
+    "Payloads use the actual built tool formatter with catalog-driven structures. Synthetic complete cache metadata uses the source path; overhead differs slightly from real cache paths/timestamps.",
+    "The root router uses its actual resource handler and is excluded from ordinary skill-tool aggregates.",
+    "Byte shares are UTF-8 text bytes; chars are JavaScript UTF-16 code units, matching existing UI truncation. No tokenizer estimates are asserted.",
+    "Frontmatter extraction handles top-level scalar strings/block scalars for comparison, not arbitrary YAML. Mismatches are review candidates.",
+    "Size thresholds and marketing-language matches identify review candidates, not automatic quality failures."
+  ],
+  "entries": [
+    {
+      "name": "huashu-design",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/huashu-design",
+      "description_chars": 147,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 63979,
+        "chars": 33623
+      },
+      "catalog": {
+        "files": 188,
+        "bytes": 33193525,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 66835,
+        "json_bytes": 68072,
+        "instructions_bytes": 63979,
+        "tree_bytes": 1595,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1261
+      }
+    },
+    {
+      "name": "nuwa-skill",
+      "category": "07_智能体框架与协同",
+      "relative_path": "./00_全局大管家/07_智能体框架与协同/nuwa-skill",
+      "description_chars": 99,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 37858,
+        "chars": 18110
+      },
+      "catalog": {
+        "files": 144,
+        "bytes": 7156683,
+        "nested_skills": 15,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 15,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 51303,
+        "json_bytes": 52572,
+        "instructions_bytes": 37858,
+        "tree_bytes": 2074,
+        "subskill_summary_bytes": 10055,
+        "overhead_bytes": 1316
+      }
+    },
+    {
+      "name": "cc2image",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/cc2image",
+      "description_chars": 127,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 42012,
+        "chars": 20020
+      },
+      "catalog": {
+        "files": 161,
+        "bytes": 80552651,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 45830,
+        "json_bytes": 46905,
+        "instructions_bytes": 42012,
+        "tree_bytes": 2671,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1147
+      }
+    },
+    {
+      "name": "guizang-ppt-skill",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/guizang-ppt-skill",
+      "description_chars": 174,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 42965,
+        "chars": 25078
+      },
+      "catalog": {
+        "files": 33,
+        "bytes": 6083909,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 44490,
+        "json_bytes": 45564,
+        "instructions_bytes": 42965,
+        "tree_bytes": 836,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 689
+      }
+    },
+    {
+      "name": "officecli",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/officecli",
+      "description_chars": 358,
+      "aliases": 8,
+      "tags": 0,
+      "root": {
+        "bytes": 26533,
+        "chars": 26063
+      },
+      "catalog": {
+        "files": 1205,
+        "bytes": 95023177,
+        "nested_skills": 11,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 11,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 35794,
+        "json_bytes": 36935,
+        "instructions_bytes": 26533,
+        "tree_bytes": 1821,
+        "subskill_summary_bytes": 6139,
+        "overhead_bytes": 1301
+      }
+    },
+    {
+      "name": "vibe",
+      "category": "07_智能体框架与协同",
+      "relative_path": "./00_全局大管家/07_智能体框架与协同/vibe-skills",
+      "description_chars": 196,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 18702,
+        "chars": 18502
+      },
+      "catalog": {
+        "files": 2542,
+        "bytes": 26943466,
+        "nested_skills": 257,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 257,
+        "empty_descriptions": 1,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 34575,
+        "json_bytes": 35840,
+        "instructions_bytes": 18702,
+        "tree_bytes": 1960,
+        "subskill_summary_bytes": 12533,
+        "overhead_bytes": 1380
+      }
+    },
+    {
+      "name": "skill-creator",
+      "category": "10_Skill开发脚手架与安装器",
+      "relative_path": "./00_全局大管家/10_Skill开发脚手架与安装器/skill-creator",
+      "description_chars": 135,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 33212,
+        "chars": 32859
+      },
+      "catalog": {
+        "files": 18,
+        "bytes": 225036,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 34479,
+        "json_bytes": 35485,
+        "instructions_bytes": 33212,
+        "tree_bytes": 570,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 697
+      }
+    },
+    {
+      "name": "loki-mode",
+      "category": "01_代码工程与架构",
+      "relative_path": "./00_全局大管家/01_代码工程与架构/loki-mode",
+      "description_chars": 100,
+      "aliases": 2,
+      "tags": 0,
+      "root": {
+        "bytes": 30205,
+        "chars": 30051
+      },
+      "catalog": {
+        "files": 2137,
+        "bytes": 32872525,
+        "nested_skills": 4,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 4,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 33882,
+        "json_bytes": 35009,
+        "instructions_bytes": 30205,
+        "tree_bytes": 1461,
+        "subskill_summary_bytes": 810,
+        "overhead_bytes": 1406
+      }
+    },
+    {
+      "name": "humanizer",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/humanizer",
+      "description_chars": 138,
+      "aliases": 2,
+      "tags": 0,
+      "root": {
+        "bytes": 32315,
+        "chars": 32110
+      },
+      "catalog": {
+        "files": 9,
+        "bytes": 59241,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 33163,
+        "json_bytes": 33949,
+        "instructions_bytes": 32315,
+        "tree_bytes": 171,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 677
+      }
+    },
+    {
+      "name": "frontend-slides",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/frontend-slides",
+      "description_chars": 119,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 28163,
+        "chars": 27867
+      },
+      "catalog": {
+        "files": 162,
+        "bytes": 3532097,
+        "nested_skills": 1,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 1,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 31963,
+        "json_bytes": 32984,
+        "instructions_bytes": 28163,
+        "tree_bytes": 2066,
+        "subskill_summary_bytes": 383,
+        "overhead_bytes": 1351
+      }
+    },
+    {
+      "name": "OnlyShot",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/OnlyShot",
+      "description_chars": 140,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 25991,
+        "chars": 15804
+      },
+      "catalog": {
+        "files": 47,
+        "bytes": 338604,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 29066,
+        "json_bytes": 30411,
+        "instructions_bytes": 25991,
+        "tree_bytes": 1932,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1143
+      }
+    },
+    {
+      "name": "linkedin-skills",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/linkedin-skills",
+      "description_chars": 90,
+      "aliases": 2,
+      "tags": 0,
+      "root": {
+        "bytes": 12580,
+        "chars": 12408
+      },
+      "catalog": {
+        "files": 215,
+        "bytes": 2971012,
+        "nested_skills": 25,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 25,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 28104,
+        "json_bytes": 29163,
+        "instructions_bytes": 12580,
+        "tree_bytes": 1678,
+        "subskill_summary_bytes": 12382,
+        "overhead_bytes": 1464
+      }
+    },
+    {
+      "name": "auto-empirical-research-skills",
+      "category": "13_社科研究与实证工具",
+      "relative_path": "./00_全局大管家/13_社科研究与实证工具/Auto-Empirical-Research-Skills",
+      "description_chars": 158,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 11986,
+        "chars": 8130
+      },
+      "catalog": {
+        "files": 4599,
+        "bytes": 94540000,
+        "nested_skills": 1161,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 1161,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 27945,
+        "json_bytes": 28892,
+        "instructions_bytes": 11986,
+        "tree_bytes": 1647,
+        "subskill_summary_bytes": 12754,
+        "overhead_bytes": 1558
+      }
+    },
+    {
+      "name": "cloudbase",
+      "category": "11_API与第三方应用集成",
+      "relative_path": "./00_全局大管家/11_API与第三方应用集成/cloudbase",
+      "description_chars": 179,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 11894,
+        "chars": 11466
+      },
+      "catalog": {
+        "files": 134,
+        "bytes": 1153127,
+        "nested_skills": 28,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 28,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 27662,
+        "json_bytes": 28401,
+        "instructions_bytes": 11894,
+        "tree_bytes": 2560,
+        "subskill_summary_bytes": 11901,
+        "overhead_bytes": 1307
+      }
+    },
+    {
+      "name": "context-engineering-collection",
+      "category": "07_智能体框架与协同",
+      "relative_path": "./00_全局大管家/07_智能体框架与协同/context-engineering-skills",
+      "description_chars": 185,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 14019,
+        "chars": 7725
+      },
+      "catalog": {
+        "files": 489,
+        "bytes": 11519622,
+        "nested_skills": 22,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 22,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 25646,
+        "json_bytes": 26412,
+        "instructions_bytes": 14019,
+        "tree_bytes": 1928,
+        "subskill_summary_bytes": 8294,
+        "overhead_bytes": 1405
+      }
+    },
+    {
+      "name": "diasporic-intelligence",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/diasporic-intelligence",
+      "description_chars": 167,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 23579,
+        "chars": 23413
+      },
+      "catalog": {
+        "files": 23,
+        "bytes": 114406,
+        "nested_skills": 1,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 1,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 25568,
+        "json_bytes": 26352,
+        "instructions_bytes": 23579,
+        "tree_bytes": 719,
+        "subskill_summary_bytes": 396,
+        "overhead_bytes": 874
+      }
+    },
+    {
+      "name": "video-use",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/video-use",
+      "description_chars": 153,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 23006,
+        "chars": 22503
+      },
+      "catalog": {
+        "files": 32,
+        "bytes": 756802,
+        "nested_skills": 1,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 1,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 24945,
+        "json_bytes": 25728,
+        "instructions_bytes": 23006,
+        "tree_bytes": 546,
+        "subskill_summary_bytes": 492,
+        "overhead_bytes": 901
+      }
+    },
+    {
+      "name": "guizang-social-card-skill",
+      "category": "05_多媒体与设计资产",
+      "relative_path": "./00_全局大管家/05_多媒体与设计资产/guizang-social-card-skill",
+      "description_chars": 148,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 23118,
+        "chars": 21987
+      },
+      "catalog": {
+        "files": 37,
+        "bytes": 2194609,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 24872,
+        "json_bytes": 25570,
+        "instructions_bytes": 23118,
+        "tree_bytes": 955,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 799
+      }
+    },
+    {
+      "name": "creator-buddy",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/creator-buddy",
+      "description_chars": 241,
+      "aliases": 6,
+      "tags": 8,
+      "root": {
+        "bytes": 7582,
+        "chars": 4444
+      },
+      "catalog": {
+        "files": 137,
+        "bytes": 907145,
+        "nested_skills": 32,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 32,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 23725,
+        "json_bytes": 24942,
+        "instructions_bytes": 7582,
+        "tree_bytes": 2232,
+        "subskill_summary_bytes": 12573,
+        "overhead_bytes": 1338
+      }
+    },
+    {
+      "name": "qiaomu-anything-to-notebooklm",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/qiaomu-anything-to-notebooklm",
+      "description_chars": 140,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 22053,
+        "chars": 14317
+      },
+      "catalog": {
+        "files": 19,
+        "bytes": 145463,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 23420,
+        "json_bytes": 24700,
+        "instructions_bytes": 22053,
+        "tree_bytes": 529,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 838
+      }
+    },
+    {
+      "name": "source-check",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/source-check-skill",
+      "description_chars": 152,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 20605,
+        "chars": 20131
+      },
+      "catalog": {
+        "files": 16,
+        "bytes": 148590,
+        "nested_skills": 5,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 5,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 23376,
+        "json_bytes": 24319,
+        "instructions_bytes": 20605,
+        "tree_bytes": 413,
+        "subskill_summary_bytes": 1526,
+        "overhead_bytes": 832
+      }
+    },
+    {
+      "name": "sloptrim",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/sloptrim",
+      "description_chars": 278,
+      "aliases": 4,
+      "tags": 5,
+      "root": {
+        "bytes": 21140,
+        "chars": 20835
+      },
+      "catalog": {
+        "files": 35,
+        "bytes": 702187,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 22882,
+        "json_bytes": 23512,
+        "instructions_bytes": 21140,
+        "tree_bytes": 1065,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 677
+      }
+    },
+    {
+      "name": "openmaic",
+      "category": "07_智能体框架与协同",
+      "relative_path": "./00_全局大管家/07_智能体框架与协同/openmaic",
+      "description_chars": 297,
+      "aliases": 13,
+      "tags": 12,
+      "root": {
+        "bytes": 7155,
+        "chars": 4181
+      },
+      "catalog": {
+        "files": 2818,
+        "bytes": 115450477,
+        "nested_skills": 25,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 25,
+        "empty_descriptions": 1,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 22473,
+        "json_bytes": 23392,
+        "instructions_bytes": 7155,
+        "tree_bytes": 1240,
+        "subskill_summary_bytes": 12680,
+        "overhead_bytes": 1398
+      }
+    },
+    {
+      "name": "speak-human-tw",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/speak-human-tw",
+      "description_chars": 287,
+      "aliases": 0,
+      "tags": 0,
+      "root": {
+        "bytes": 19783,
+        "chars": 8329
+      },
+      "catalog": {
+        "files": 24,
+        "bytes": 1804751,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 21325,
+        "json_bytes": 21901,
+        "instructions_bytes": 19783,
+        "tree_bytes": 853,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 689
+      }
+    },
+    {
+      "name": "Humanizer-zh",
+      "category": "04_内容创作与文档处理",
+      "relative_path": "./00_全局大管家/04_内容创作与文档处理/Humanizer-zh",
+      "description_chars": 113,
+      "aliases": 2,
+      "tags": 0,
+      "root": {
+        "bytes": 20324,
+        "chars": 8037
+      },
+      "catalog": {
+        "files": 5,
+        "bytes": 29456,
+        "nested_skills": 0,
+        "omitted_nested": 0
+      },
+      "subskills": {
+        "count": 0,
+        "empty_descriptions": 0,
+        "yaml_block_marker_descriptions": 0,
+        "quoted_descriptions": 0
+      },
+      "payload": {
+        "text_bytes": 21091,
+        "json_bytes": 21814,
+        "instructions_bytes": 20324,
+        "tree_bytes": 84,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 683
+      }
+    }
+  ],
+  "issues": [
+    {
+      "name": "khazix-skills",
+      "code": "missing_frontmatter",
+      "detail": "Root SKILL.md has no leading frontmatter"
+    }
+  ],
+  "summary": {
+    "manifest_entries": 291,
+    "catalog_entries": 290,
+    "catalog_files": 102737,
+    "catalog_bytes": 2891756911,
+    "categories": {
+      "00_全局大管家": 1,
+      "01_代码工程与架构": 20,
+      "02_DevOps与自动化": 12,
+      "03_效率工具与协同管理": 33,
+      "04_内容创作与文档处理": 36,
+      "05_多媒体与设计资产": 48,
+      "06_商业与专业领域": 49,
+      "07_智能体框架与协同": 28,
+      "08_MCP服务开发与评估": 7,
+      "09_Composio集成服务": 2,
+      "10_Skill开发脚手架与安装器": 11,
+      "11_API与第三方应用集成": 18,
+      "12_学术论文与科研图表": 15,
+      "13_社科研究与实证工具": 6,
+      "14_财务发票提取与归档": 4,
+      "15_优质GitHub项目清单": 1
+    },
+    "alias_coverage": 114,
+    "tag_coverage": 29,
+    "descriptions": {
+      "min": 54,
+      "p50": 154,
+      "p90": 212,
+      "p95": 237,
+      "max": 358,
+      "sum": 44499
+    },
+    "description_over_160_chars": 122,
+    "leading_words_entries": 272,
+    "leading_words_chars": 16299,
+    "descriptions_without_leading_words_over_160_chars": 18,
+    "marketing_terms_entries": 37,
+    "exact_duplicate_names": [],
+    "normalized_duplicate_names": [],
+    "duplicate_paths": [],
+    "duplicate_descriptions": [],
+    "duplicate_root_instructions": [],
+    "root_bytes": {
+      "min": 358,
+      "p50": 2161,
+      "p90": 12751,
+      "p95": 21140,
+      "max": 63979,
+      "sum": 1461533
+    },
+    "root_chars": {
+      "min": 220,
+      "p50": 1377,
+      "p90": 10669,
+      "p95": 18110,
+      "max": 33623,
+      "sum": 1101120
+    },
+    "root_over_12000_chars": [
+      {
+        "name": "anysearch",
+        "chars": 13372,
+        "bytes": 13564
+      },
+      {
+        "name": "diasporic-intelligence",
+        "chars": 23413,
+        "bytes": 23579
+      },
+      {
+        "name": "qiaomu-anything-to-notebooklm",
+        "chars": 14317,
+        "bytes": 22053
+      },
+      {
+        "name": "tailored-resume-generator",
+        "chars": 12406,
+        "bytes": 12588
+      },
+      {
+        "name": "frontend-slides",
+        "chars": 27867,
+        "bytes": 28163
+      },
+      {
+        "name": "guizang-ppt-skill",
+        "chars": 25078,
+        "bytes": 42965
+      },
+      {
+        "name": "guizang-social-card-skill",
+        "chars": 21987,
+        "bytes": 23118
+      },
+      {
+        "name": "html-ppt",
+        "chars": 12889,
+        "bytes": 13857
+      },
+      {
+        "name": "huashu-design",
+        "chars": 33623,
+        "bytes": 63979
+      },
+      {
+        "name": "video-use",
+        "chars": 22503,
+        "bytes": 23006
+      },
+      {
+        "name": "serenity-skill",
+        "chars": 13191,
+        "bytes": 14001
+      },
+      {
+        "name": "developer-growth-analysis",
+        "chars": 15661,
+        "bytes": 15843
+      },
+      {
+        "name": "vibe",
+        "chars": 18502,
+        "bytes": 18702
+      },
+      {
+        "name": "skill-creator",
+        "chars": 32859,
+        "bytes": 33212
+      },
+      {
+        "name": "scientific-schematics",
+        "chars": 16172,
+        "bytes": 16458
+      },
+      {
+        "name": "scientific-visualization",
+        "chars": 12549,
+        "bytes": 12751
+      },
+      {
+        "name": "cc2image",
+        "chars": 20020,
+        "bytes": 42012
+      },
+      {
+        "name": "OnlyShot",
+        "chars": 15804,
+        "bytes": 25991
+      },
+      {
+        "name": "nuwa-skill",
+        "chars": 18110,
+        "bytes": 37858
+      },
+      {
+        "name": "source-check",
+        "chars": 20131,
+        "bytes": 20605
+      },
+      {
+        "name": "sloptrim",
+        "chars": 20835,
+        "bytes": 21140
+      },
+      {
+        "name": "humanizer",
+        "chars": 32110,
+        "bytes": 32315
+      },
+      {
+        "name": "linkedin-skills",
+        "chars": 12408,
+        "bytes": 12580
+      },
+      {
+        "name": "loki-mode",
+        "chars": 30051,
+        "bytes": 30205
+      },
+      {
+        "name": "officecli",
+        "chars": 26063,
+        "bytes": 26533
+      }
+    ],
+    "root_over_16000_chars": [
+      {
+        "name": "diasporic-intelligence",
+        "chars": 23413,
+        "bytes": 23579,
+        "lines": 371
+      },
+      {
+        "name": "frontend-slides",
+        "chars": 27867,
+        "bytes": 28163,
+        "lines": 381
+      },
+      {
+        "name": "guizang-ppt-skill",
+        "chars": 25078,
+        "bytes": 42965,
+        "lines": 633
+      },
+      {
+        "name": "guizang-social-card-skill",
+        "chars": 21987,
+        "bytes": 23118,
+        "lines": 301
+      },
+      {
+        "name": "huashu-design",
+        "chars": 33623,
+        "bytes": 63979,
+        "lines": 580
+      },
+      {
+        "name": "video-use",
+        "chars": 22503,
+        "bytes": 23006,
+        "lines": 323
+      },
+      {
+        "name": "vibe",
+        "chars": 18502,
+        "bytes": 18702,
+        "lines": 288
+      },
+      {
+        "name": "skill-creator",
+        "chars": 32859,
+        "bytes": 33212,
+        "lines": 488
+      },
+      {
+        "name": "scientific-schematics",
+        "chars": 16172,
+        "bytes": 16458,
+        "lines": 371
+      },
+      {
+        "name": "cc2image",
+        "chars": 20020,
+        "bytes": 42012,
+        "lines": 421
+      },
+      {
+        "name": "nuwa-skill",
+        "chars": 18110,
+        "bytes": 37858,
+        "lines": 678
+      },
+      {
+        "name": "source-check",
+        "chars": 20131,
+        "bytes": 20605,
+        "lines": 375
+      },
+      {
+        "name": "sloptrim",
+        "chars": 20835,
+        "bytes": 21140,
+        "lines": 231
+      },
+      {
+        "name": "humanizer",
+        "chars": 32110,
+        "bytes": 32315,
+        "lines": 393
+      },
+      {
+        "name": "loki-mode",
+        "chars": 30051,
+        "bytes": 30205,
+        "lines": 489
+      },
+      {
+        "name": "officecli",
+        "chars": 26063,
+        "bytes": 26533,
+        "lines": 420
+      }
+    ],
+    "root_over_32000_chars": [
+      {
+        "name": "huashu-design",
+        "chars": 33623,
+        "bytes": 63979
+      },
+      {
+        "name": "skill-creator",
+        "chars": 32859,
+        "bytes": 33212
+      },
+      {
+        "name": "humanizer",
+        "chars": 32110,
+        "bytes": 32315
+      }
+    ],
+    "payload_bytes": {
+      "min": 1409,
+      "p50": 5506,
+      "p90": 17698,
+      "p95": 25646,
+      "max": 66835,
+      "sum": 2589375
+    },
+    "payload_parts_total": {
+      "instructions_bytes": 1456720,
+      "tree_bytes": 317100,
+      "subskill_summary_bytes": 520448,
+      "overhead_bytes": 295107
+    },
+    "payload_parts_share_percent": {
+      "instructions_bytes": 56.26,
+      "tree_bytes": 12.25,
+      "subskill_summary_bytes": 20.1,
+      "overhead_bytes": 11.4
+    },
+    "payload_without_largest": {
+      "excluded": "huashu-design",
+      "total_bytes": 2522540,
+      "parts": {
+        "instructions_bytes": 1392741,
+        "tree_bytes": 315505,
+        "subskill_summary_bytes": 520448,
+        "overhead_bytes": 293846
+      },
+      "shares_percent": {
+        "instructions_bytes": 55.21,
+        "tree_bytes": 12.51,
+        "subskill_summary_bytes": 20.63,
+        "overhead_bytes": 11.65
+      }
+    },
+    "payload_thresholds": {
+      "16000": 45,
+      "32000": 9,
+      "64000": 1,
+      "128000": 0,
+      "512000": 0,
+      "1000000": 0
+    },
+    "largest_payloads": [
+      {
+        "name": "huashu-design",
+        "text_bytes": 66835,
+        "chars": 36327,
+        "json_bytes": 68072,
+        "instructions_bytes": 63979,
+        "tree_bytes": 1595,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1261,
+        "shares_percent": {
+          "instructions": 95.73,
+          "tree": 2.39,
+          "subskill_summary": 0,
+          "overhead": 1.89
+        },
+        "tree_lines": 50,
+        "subskills_returned": 0
+      },
+      {
+        "name": "nuwa-skill",
+        "text_bytes": 51303,
+        "chars": 26123,
+        "json_bytes": 52572,
+        "instructions_bytes": 37858,
+        "tree_bytes": 2074,
+        "subskill_summary_bytes": 10055,
+        "overhead_bytes": 1316,
+        "shares_percent": {
+          "instructions": 73.79,
+          "tree": 4.04,
+          "subskill_summary": 19.6,
+          "overhead": 2.57
+        },
+        "tree_lines": 50,
+        "subskills_returned": 15
+      },
+      {
+        "name": "cc2image",
+        "text_bytes": 45830,
+        "chars": 23686,
+        "json_bytes": 46905,
+        "instructions_bytes": 42012,
+        "tree_bytes": 2671,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1147,
+        "shares_percent": {
+          "instructions": 91.67,
+          "tree": 5.83,
+          "subskill_summary": 0,
+          "overhead": 2.5
+        },
+        "tree_lines": 50,
+        "subskills_returned": 0
+      },
+      {
+        "name": "guizang-ppt-skill",
+        "text_bytes": 44490,
+        "chars": 26493,
+        "json_bytes": 45564,
+        "instructions_bytes": 42965,
+        "tree_bytes": 836,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 689,
+        "shares_percent": {
+          "instructions": 96.57,
+          "tree": 1.88,
+          "subskill_summary": 0,
+          "overhead": 1.55
+        },
+        "tree_lines": 30,
+        "subskills_returned": 0
+      },
+      {
+        "name": "officecli",
+        "text_bytes": 35794,
+        "chars": 35134,
+        "json_bytes": 36935,
+        "instructions_bytes": 26533,
+        "tree_bytes": 1821,
+        "subskill_summary_bytes": 6139,
+        "overhead_bytes": 1301,
+        "shares_percent": {
+          "instructions": 74.13,
+          "tree": 5.09,
+          "subskill_summary": 17.15,
+          "overhead": 3.63
+        },
+        "tree_lines": 50,
+        "subskills_returned": 11
+      },
+      {
+        "name": "vibe",
+        "text_bytes": 34575,
+        "chars": 34051,
+        "json_bytes": 35840,
+        "instructions_bytes": 18702,
+        "tree_bytes": 1960,
+        "subskill_summary_bytes": 12533,
+        "overhead_bytes": 1380,
+        "shares_percent": {
+          "instructions": 54.09,
+          "tree": 5.67,
+          "subskill_summary": 36.25,
+          "overhead": 3.99
+        },
+        "tree_lines": 50,
+        "subskills_returned": 257
+      },
+      {
+        "name": "skill-creator",
+        "text_bytes": 34479,
+        "chars": 34026,
+        "json_bytes": 35485,
+        "instructions_bytes": 33212,
+        "tree_bytes": 570,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 697,
+        "shares_percent": {
+          "instructions": 96.33,
+          "tree": 1.65,
+          "subskill_summary": 0,
+          "overhead": 2.02
+        },
+        "tree_lines": 23,
+        "subskills_returned": 0
+      },
+      {
+        "name": "loki-mode",
+        "text_bytes": 33882,
+        "chars": 33580,
+        "json_bytes": 35009,
+        "instructions_bytes": 30205,
+        "tree_bytes": 1461,
+        "subskill_summary_bytes": 810,
+        "overhead_bytes": 1406,
+        "shares_percent": {
+          "instructions": 89.15,
+          "tree": 4.31,
+          "subskill_summary": 2.39,
+          "overhead": 4.15
+        },
+        "tree_lines": 50,
+        "subskills_returned": 4
+      },
+      {
+        "name": "humanizer",
+        "text_bytes": 33163,
+        "chars": 32888,
+        "json_bytes": 33949,
+        "instructions_bytes": 32315,
+        "tree_bytes": 171,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 677,
+        "shares_percent": {
+          "instructions": 97.44,
+          "tree": 0.52,
+          "subskill_summary": 0,
+          "overhead": 2.04
+        },
+        "tree_lines": 8,
+        "subskills_returned": 0
+      },
+      {
+        "name": "frontend-slides",
+        "text_bytes": 31963,
+        "chars": 31515,
+        "json_bytes": 32984,
+        "instructions_bytes": 28163,
+        "tree_bytes": 2066,
+        "subskill_summary_bytes": 383,
+        "overhead_bytes": 1351,
+        "shares_percent": {
+          "instructions": 88.11,
+          "tree": 6.46,
+          "subskill_summary": 1.2,
+          "overhead": 4.23
+        },
+        "tree_lines": 50,
+        "subskills_returned": 1
+      },
+      {
+        "name": "OnlyShot",
+        "text_bytes": 29066,
+        "chars": 18587,
+        "json_bytes": 30411,
+        "instructions_bytes": 25991,
+        "tree_bytes": 1932,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 1143,
+        "shares_percent": {
+          "instructions": 89.42,
+          "tree": 6.65,
+          "subskill_summary": 0,
+          "overhead": 3.93
+        },
+        "tree_lines": 50,
+        "subskills_returned": 0
+      },
+      {
+        "name": "linkedin-skills",
+        "text_bytes": 28104,
+        "chars": 27774,
+        "json_bytes": 29163,
+        "instructions_bytes": 12580,
+        "tree_bytes": 1678,
+        "subskill_summary_bytes": 12382,
+        "overhead_bytes": 1464,
+        "shares_percent": {
+          "instructions": 44.76,
+          "tree": 5.97,
+          "subskill_summary": 44.06,
+          "overhead": 5.21
+        },
+        "tree_lines": 50,
+        "subskills_returned": 25
+      },
+      {
+        "name": "auto-empirical-research-skills",
+        "text_bytes": 27945,
+        "chars": 23849,
+        "json_bytes": 28892,
+        "instructions_bytes": 11986,
+        "tree_bytes": 1647,
+        "subskill_summary_bytes": 12754,
+        "overhead_bytes": 1558,
+        "shares_percent": {
+          "instructions": 42.89,
+          "tree": 5.89,
+          "subskill_summary": 45.64,
+          "overhead": 5.58
+        },
+        "tree_lines": 50,
+        "subskills_returned": 1161
+      },
+      {
+        "name": "cloudbase",
+        "text_bytes": 27662,
+        "chars": 26888,
+        "json_bytes": 28401,
+        "instructions_bytes": 11894,
+        "tree_bytes": 2560,
+        "subskill_summary_bytes": 11901,
+        "overhead_bytes": 1307,
+        "shares_percent": {
+          "instructions": 43,
+          "tree": 9.25,
+          "subskill_summary": 43.02,
+          "overhead": 4.72
+        },
+        "tree_lines": 50,
+        "subskills_returned": 28
+      },
+      {
+        "name": "context-engineering-collection",
+        "text_bytes": 25646,
+        "chars": 19192,
+        "json_bytes": 26412,
+        "instructions_bytes": 14019,
+        "tree_bytes": 1928,
+        "subskill_summary_bytes": 8294,
+        "overhead_bytes": 1405,
+        "shares_percent": {
+          "instructions": 54.66,
+          "tree": 7.52,
+          "subskill_summary": 32.34,
+          "overhead": 5.48
+        },
+        "tree_lines": 50,
+        "subskills_returned": 22
+      },
+      {
+        "name": "diasporic-intelligence",
+        "text_bytes": 25568,
+        "chars": 25290,
+        "json_bytes": 26352,
+        "instructions_bytes": 23579,
+        "tree_bytes": 719,
+        "subskill_summary_bytes": 396,
+        "overhead_bytes": 874,
+        "shares_percent": {
+          "instructions": 92.22,
+          "tree": 2.81,
+          "subskill_summary": 1.55,
+          "overhead": 3.42
+        },
+        "tree_lines": 29,
+        "subskills_returned": 1
+      },
+      {
+        "name": "video-use",
+        "text_bytes": 24945,
+        "chars": 24346,
+        "json_bytes": 25728,
+        "instructions_bytes": 23006,
+        "tree_bytes": 546,
+        "subskill_summary_bytes": 492,
+        "overhead_bytes": 901,
+        "shares_percent": {
+          "instructions": 92.23,
+          "tree": 2.19,
+          "subskill_summary": 1.97,
+          "overhead": 3.61
+        },
+        "tree_lines": 23,
+        "subskills_returned": 1
+      },
+      {
+        "name": "guizang-social-card-skill",
+        "text_bytes": 24872,
+        "chars": 23623,
+        "json_bytes": 25570,
+        "instructions_bytes": 23118,
+        "tree_bytes": 955,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 799,
+        "shares_percent": {
+          "instructions": 92.95,
+          "tree": 3.84,
+          "subskill_summary": 0,
+          "overhead": 3.21
+        },
+        "tree_lines": 34,
+        "subskills_returned": 0
+      },
+      {
+        "name": "creator-buddy",
+        "text_bytes": 23725,
+        "chars": 14315,
+        "json_bytes": 24942,
+        "instructions_bytes": 7582,
+        "tree_bytes": 2232,
+        "subskill_summary_bytes": 12573,
+        "overhead_bytes": 1338,
+        "shares_percent": {
+          "instructions": 31.96,
+          "tree": 9.41,
+          "subskill_summary": 52.99,
+          "overhead": 5.64
+        },
+        "tree_lines": 50,
+        "subskills_returned": 32
+      },
+      {
+        "name": "qiaomu-anything-to-notebooklm",
+        "text_bytes": 23420,
+        "chars": 15586,
+        "json_bytes": 24700,
+        "instructions_bytes": 22053,
+        "tree_bytes": 529,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 838,
+        "shares_percent": {
+          "instructions": 94.16,
+          "tree": 2.26,
+          "subskill_summary": 0,
+          "overhead": 3.58
+        },
+        "tree_lines": 22,
+        "subskills_returned": 0
+      },
+      {
+        "name": "source-check",
+        "text_bytes": 23376,
+        "chars": 22806,
+        "json_bytes": 24319,
+        "instructions_bytes": 20605,
+        "tree_bytes": 413,
+        "subskill_summary_bytes": 1526,
+        "overhead_bytes": 832,
+        "shares_percent": {
+          "instructions": 88.15,
+          "tree": 1.77,
+          "subskill_summary": 6.53,
+          "overhead": 3.56
+        },
+        "tree_lines": 20,
+        "subskills_returned": 5
+      },
+      {
+        "name": "sloptrim",
+        "text_bytes": 22882,
+        "chars": 22441,
+        "json_bytes": 23512,
+        "instructions_bytes": 21140,
+        "tree_bytes": 1065,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 677,
+        "shares_percent": {
+          "instructions": 92.39,
+          "tree": 4.65,
+          "subskill_summary": 0,
+          "overhead": 2.96
+        },
+        "tree_lines": 41,
+        "subskills_returned": 0
+      },
+      {
+        "name": "openmaic",
+        "text_bytes": 22473,
+        "chars": 18773,
+        "json_bytes": 23392,
+        "instructions_bytes": 7155,
+        "tree_bytes": 1240,
+        "subskill_summary_bytes": 12680,
+        "overhead_bytes": 1398,
+        "shares_percent": {
+          "instructions": 31.84,
+          "tree": 5.52,
+          "subskill_summary": 56.42,
+          "overhead": 6.22
+        },
+        "tree_lines": 50,
+        "subskills_returned": 25
+      },
+      {
+        "name": "speak-human-tw",
+        "text_bytes": 21325,
+        "chars": 9759,
+        "json_bytes": 21901,
+        "instructions_bytes": 19783,
+        "tree_bytes": 853,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 689,
+        "shares_percent": {
+          "instructions": 92.77,
+          "tree": 4,
+          "subskill_summary": 0,
+          "overhead": 3.23
+        },
+        "tree_lines": 29,
+        "subskills_returned": 0
+      },
+      {
+        "name": "Humanizer-zh",
+        "text_bytes": 21091,
+        "chars": 8742,
+        "json_bytes": 21814,
+        "instructions_bytes": 20324,
+        "tree_bytes": 84,
+        "subskill_summary_bytes": 0,
+        "overhead_bytes": 683,
+        "shares_percent": {
+          "instructions": 96.36,
+          "tree": 0.4,
+          "subskill_summary": 0,
+          "overhead": 3.24
+        },
+        "tree_lines": 4,
+        "subskills_returned": 0
+      }
+    ],
+    "largest_roots": [
+      {
+        "name": "huashu-design",
+        "bytes": 63979,
+        "chars": 33623,
+        "lines": 580,
+        "code_fence_bytes": 0
+      },
+      {
+        "name": "guizang-ppt-skill",
+        "bytes": 42965,
+        "chars": 25078,
+        "lines": 633,
+        "code_fence_bytes": 3130
+      },
+      {
+        "name": "cc2image",
+        "bytes": 42012,
+        "chars": 20020,
+        "lines": 421,
+        "code_fence_bytes": 2015
+      },
+      {
+        "name": "nuwa-skill",
+        "bytes": 37858,
+        "chars": 18110,
+        "lines": 678,
+        "code_fence_bytes": 5205
+      },
+      {
+        "name": "skill-creator",
+        "bytes": 33212,
+        "chars": 32859,
+        "lines": 488,
+        "code_fence_bytes": 2688
+      },
+      {
+        "name": "humanizer",
+        "bytes": 32315,
+        "chars": 32110,
+        "lines": 393,
+        "code_fence_bytes": 0
+      },
+      {
+        "name": "loki-mode",
+        "bytes": 30205,
+        "chars": 30051,
+        "lines": 489,
+        "code_fence_bytes": 5806
+      },
+      {
+        "name": "frontend-slides",
+        "bytes": 28163,
+        "chars": 27867,
+        "lines": 381,
+        "code_fence_bytes": 226
+      },
+      {
+        "name": "officecli",
+        "bytes": 26533,
+        "chars": 26063,
+        "lines": 420,
+        "code_fence_bytes": 6322
+      },
+      {
+        "name": "OnlyShot",
+        "bytes": 25991,
+        "chars": 15804,
+        "lines": 671,
+        "code_fence_bytes": 7930
+      },
+      {
+        "name": "diasporic-intelligence",
+        "bytes": 23579,
+        "chars": 23413,
+        "lines": 371,
+        "code_fence_bytes": 0
+      },
+      {
+        "name": "guizang-social-card-skill",
+        "bytes": 23118,
+        "chars": 21987,
+        "lines": 301,
+        "code_fence_bytes": 664
+      },
+      {
+        "name": "video-use",
+        "bytes": 23006,
+        "chars": 22503,
+        "lines": 323,
+        "code_fence_bytes": 3735
+      },
+      {
+        "name": "qiaomu-anything-to-notebooklm",
+        "bytes": 22053,
+        "chars": 14317,
+        "lines": 743,
+        "code_fence_bytes": 5440
+      },
+      {
+        "name": "sloptrim",
+        "bytes": 21140,
+        "chars": 20835,
+        "lines": 231,
+        "code_fence_bytes": 154
+      },
+      {
+        "name": "source-check",
+        "bytes": 20605,
+        "chars": 20131,
+        "lines": 375,
+        "code_fence_bytes": 10961
+      },
+      {
+        "name": "Humanizer-zh",
+        "bytes": 20324,
+        "chars": 8037,
+        "lines": 402,
+        "code_fence_bytes": 0
+      },
+      {
+        "name": "speak-human-tw",
+        "bytes": 19783,
+        "chars": 8329,
+        "lines": 221,
+        "code_fence_bytes": 0
+      },
+      {
+        "name": "vibe",
+        "bytes": 18702,
+        "chars": 18502,
+        "lines": 288,
+        "code_fence_bytes": 2160
+      },
+      {
+        "name": "canghe-tianyancha",
+        "bytes": 16584,
+        "chars": 9634,
+        "lines": 401,
+        "code_fence_bytes": 1679
+      },
+      {
+        "name": "scientific-schematics",
+        "bytes": 16458,
+        "chars": 16172,
+        "lines": 371,
+        "code_fence_bytes": 1486
+      },
+      {
+        "name": "huashu-art-motion",
+        "bytes": 16198,
+        "chars": 7911,
+        "lines": 107,
+        "code_fence_bytes": 806
+      },
+      {
+        "name": "developer-growth-analysis",
+        "bytes": 15843,
+        "chars": 15661,
+        "lines": 323,
+        "code_fence_bytes": 7951
+      },
+      {
+        "name": "moore-wechat-article-downloader",
+        "bytes": 15259,
+        "chars": 9213,
+        "lines": 335,
+        "code_fence_bytes": 3501
+      },
+      {
+        "name": "human-writing",
+        "bytes": 15199,
+        "chars": 5703,
+        "lines": 172,
+        "code_fence_bytes": 0
+      }
+    ],
+    "largest_trees": [
+      {
+        "name": "awesome-claude-code-subagents",
+        "bytes": 2941,
+        "lines": 50,
+        "catalog_files": 194
+      },
+      {
+        "name": "MARS",
+        "bytes": 2780,
+        "lines": 50,
+        "catalog_files": 1608
+      },
+      {
+        "name": "agent-rules-books",
+        "bytes": 2757,
+        "lines": 50,
+        "catalog_files": 215
+      },
+      {
+        "name": "emdash-skills",
+        "bytes": 2709,
+        "lines": 50,
+        "catalog_files": 914
+      },
+      {
+        "name": "cc2image",
+        "bytes": 2671,
+        "lines": 50,
+        "catalog_files": 161
+      },
+      {
+        "name": "ecom-details-image",
+        "bytes": 2670,
+        "lines": 50,
+        "catalog_files": 118
+      },
+      {
+        "name": "cloudbase",
+        "bytes": 2560,
+        "lines": 50,
+        "catalog_files": 134
+      },
+      {
+        "name": "pcbparts-mcp",
+        "bytes": 2329,
+        "lines": 50,
+        "catalog_files": 909
+      },
+      {
+        "name": "academic-research-skills-codex",
+        "bytes": 2309,
+        "lines": 50,
+        "catalog_files": 2281
+      },
+      {
+        "name": "superpowers",
+        "bytes": 2298,
+        "lines": 50,
+        "catalog_files": 56
+      },
+      {
+        "name": "asm",
+        "bytes": 2241,
+        "lines": 50,
+        "catalog_files": 602
+      },
+      {
+        "name": "creator-buddy",
+        "bytes": 2232,
+        "lines": 50,
+        "catalog_files": 137
+      },
+      {
+        "name": "wechat-article-skills",
+        "bytes": 2223,
+        "lines": 50,
+        "catalog_files": 215
+      },
+      {
+        "name": "paper-search-mcp",
+        "bytes": 2216,
+        "lines": 50,
+        "catalog_files": 71
+      },
+      {
+        "name": "Auto-Research-Skills",
+        "bytes": 2186,
+        "lines": 50,
+        "catalog_files": 100
+      }
+    ],
+    "largest_subskill_lists": [
+      {
+        "name": "Amazon-Skills",
+        "bytes": 12784,
+        "count": 52
+      },
+      {
+        "name": "eCommerce-Skills",
+        "bytes": 12769,
+        "count": 162
+      },
+      {
+        "name": "auto-empirical-research-skills",
+        "bytes": 12754,
+        "count": 1161
+      },
+      {
+        "name": "awesome-gamedev-agent-skills",
+        "bytes": 12752,
+        "count": 75
+      },
+      {
+        "name": "china-law",
+        "bytes": 12748,
+        "count": 45
+      },
+      {
+        "name": "google-skills",
+        "bytes": 12748,
+        "count": 133
+      },
+      {
+        "name": "Awesome-Journal-Skills",
+        "bytes": 12681,
+        "count": 4166
+      },
+      {
+        "name": "openmaic",
+        "bytes": 12680,
+        "count": 25
+      },
+      {
+        "name": "Scientific Agent Skills",
+        "bytes": 12659,
+        "count": 163
+      },
+      {
+        "name": "creator-buddy",
+        "bytes": 12573,
+        "count": 32
+      },
+      {
+        "name": "pm-skills",
+        "bytes": 12538,
+        "count": 69
+      },
+      {
+        "name": "vibe",
+        "bytes": 12533,
+        "count": 257
+      },
+      {
+        "name": "marketingskills",
+        "bytes": 12459,
+        "count": 50
+      },
+      {
+        "name": "OpenSpace",
+        "bytes": 12405,
+        "count": 62
+      },
+      {
+        "name": "linkedin-skills",
+        "bytes": 12382,
+        "count": 25
+      }
+    ],
+    "subskill_metadata": {
+      "returned": 8346,
+      "omitted_by_existing_depth_or_skip_rules": 0,
+      "empty_descriptions": 206,
+      "yaml_block_marker_descriptions": 0,
+      "quoted_descriptions": 0
+    },
+    "text_documents_over_500k": {
+      "count": 101,
+      "skills": 36,
+      "extension_counts": {
+        ".json": 51,
+        ".md": 11,
+        ".jsonl": 2,
+        ".html": 3,
+        ".csv": 6,
+        ".ipynb": 3,
+        ".tsv": 4,
+        ".yaml": 18,
+        ".txt": 3
+      },
+      "files": [
+        {
+          "skill": "ai-news-radar",
+          "path": "data/archive.json",
+          "bytes": 56882791
+        },
+        {
+          "skill": "china-law",
+          "path": "laws/provision-index.json",
+          "bytes": 41060097
+        },
+        {
+          "skill": "ai-news-radar",
+          "path": "data/latest-24h-all.json",
+          "bytes": 13418174
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/sickn33_antigravity-awesome-skills.json",
+          "bytes": 12586002
+        },
+        {
+          "skill": "Awesome-Journal-Skills",
+          "path": "shared-resources/journal-selection/scope-postings.tsv",
+          "bytes": 7805539
+        },
+        {
+          "skill": "Awesome-Journal-Skills",
+          "path": "shared-resources/journal-selection/topic-postings.tsv",
+          "bytes": 7155872
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/prompt_injection_attacks/prompt_injection_attacks_harvest_2026.yaml",
+          "bytes": 6046933
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/jailbreaking/jailbreaking_harvest_2026.yaml",
+          "bytes": 4918681
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/ComposioHQ_awesome-claude-skills.json",
+          "bytes": 4231385
+        },
+        {
+          "skill": "ai-news-radar",
+          "path": "data/title-zh-cache.json",
+          "bytes": 3988974
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/mcp_security/mcp_security_harvest_2026.yaml",
+          "bytes": 3674145
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/inference_infrastructure/inference_infrastructure_harvest_2026.yaml",
+          "bytes": 3575239
+        },
+        {
+          "skill": "ppt-master",
+          "path": "skills/dashi-ppt/project/layout-manifest.json",
+          "bytes": 3574466
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/GPTomics_bioSkills.json",
+          "bytes": 3493308
+        },
+        {
+          "skill": "minimax-skills",
+          "path": "skills/minimax-music-playlist/data/artist_genre_map.json",
+          "bytes": 3187972
+        },
+        {
+          "skill": "china-law",
+          "path": "laws/currency-manifest.json",
+          "bytes": 2945188
+        },
+        {
+          "skill": "Auto-Research-Skills",
+          "path": "catalog/skills.json",
+          "bytes": 2779124
+        },
+        {
+          "skill": "dbskill",
+          "path": "知识库/原子库/atoms.jsonl",
+          "bytes": 2693492
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/alirezarezvani_claude-skills.json",
+          "bytes": 2682843
+        },
+        {
+          "skill": "Aletheore",
+          "path": "src/aletheore/data/jina_v2_base_code_tokenizer.json",
+          "bytes": 2561316
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/github_awesome-copilot.json",
+          "bytes": 2505202
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/model_poisoning/model_poisoning_harvest_2026.yaml",
+          "bytes": 2438185
+        },
+        {
+          "skill": "ai-news-radar",
+          "path": "data/latest-24h.json",
+          "bytes": 2271076
+        },
+        {
+          "skill": "elevenlabs-cli",
+          "path": "cli/elevenlabs/openapi0.json",
+          "bytes": 2230479
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/agent_security/agent_security_harvest_2026.yaml",
+          "bytes": 2208242
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/dp_attacks/dp_attacks_harvest_2026.yaml",
+          "bytes": 2150069
+        },
+        {
+          "skill": "aiogram",
+          "path": ".butcher/schema/schema.json",
+          "bytes": 2010914
+        },
+        {
+          "skill": "loki-mode",
+          "path": "CHANGELOG.md",
+          "bytes": 1929061
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/rag_vulnerabilities/rag_vulnerabilities_harvest_2026.yaml",
+          "bytes": 1848383
+        },
+        {
+          "skill": "crawl4ai",
+          "path": "docs/apps/linkdin/Crawl4ai_Linkedin_Data_Discovery_Part_1.ipynb",
+          "bytes": 1842277
+        },
+        {
+          "skill": "Scientific Agent Skills",
+          "path": "docs/security-report.json",
+          "bytes": 1814101
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "skills/67-econfin-workflow-toolkit/China-CF-study/asset/ppmandata_trade_list.csv",
+          "bytes": 1811329
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "skills/67-econfin-workflow-toolkit/Foreign-CF-study/asset/ppmandata_trade_list.csv",
+          "bytes": 1811329
+        },
+        {
+          "skill": "StatsPAI",
+          "path": "schemas/functions.json",
+          "bytes": 1786592
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/affaan-m_everything-claude-code.json",
+          "bytes": 1777202
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/model_extraction/model_extraction_harvest_2026.yaml",
+          "bytes": 1768042
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/affaan-m_ECC.json",
+          "bytes": 1759382
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/privacy_attacks/privacy_attacks_harvest_2026.yaml",
+          "bytes": 1646064
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/genai_security/genai_security_harvest_2026.yaml",
+          "bytes": 1636913
+        },
+        {
+          "skill": "StatsPAI",
+          "path": "schemas/agent_cards.json",
+          "bytes": 1619315
+        },
+        {
+          "skill": "Auto-Research-Skills",
+          "path": "catalog/skills.csv",
+          "bytes": 1618972
+        },
+        {
+          "skill": "headroom",
+          "path": "crates/headroom-proxy/data/model_prices_and_context_window.json",
+          "bytes": 1584773
+        },
+        {
+          "skill": "Auto-Research-Skills",
+          "path": "catalog/search-index.json",
+          "bytes": 1567430
+        },
+        {
+          "skill": "china-law",
+          "path": "laws/dependency-graph.json",
+          "bytes": 1535299
+        },
+        {
+          "skill": "ai-news-radar",
+          "path": "data/stories-merged.json",
+          "bytes": 1533925
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "skills/67-econfin-workflow-toolkit/China-CF-study/asset/macrodatas_list.csv",
+          "bytes": 1392715
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "skills/67-econfin-workflow-toolkit/Foreign-CF-study/asset/macrodatas_list.csv",
+          "bytes": 1392715
+        },
+        {
+          "skill": "dbskill",
+          "path": "books/dontbesilent-开源推文集.md",
+          "bytes": 1276801
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/K-Dense-AI_claude-scientific-skills.json",
+          "bytes": 1226215
+        },
+        {
+          "skill": "ebay-mcp",
+          "path": "docs/sell-apps/marketing-and-promotions/sell_marketing_v1_oas3.json",
+          "bytes": 1172709
+        },
+        {
+          "skill": "ebay-mcp",
+          "path": "docs/sell-apps/other-apis/sell_marketing_v1_oas3.json",
+          "bytes": 1172709
+        },
+        {
+          "skill": "Awesome-Journal-Skills",
+          "path": "catalog.json",
+          "bytes": 1169306
+        },
+        {
+          "skill": "elevenlabs-cli",
+          "path": "wiremock/wire-test-cases.json",
+          "bytes": 1088445
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/google_skills.json",
+          "bytes": 1062232
+        },
+        {
+          "skill": "china-law",
+          "path": "laws/law-index.json",
+          "bytes": 1054274
+        },
+        {
+          "skill": "crawl4ai",
+          "path": "sbom/sbom.cdx.json",
+          "bytes": 1051671
+        },
+        {
+          "skill": "openmaic",
+          "path": "pnpm-lock.yaml",
+          "bytes": 1044521
+        },
+        {
+          "skill": "Scientific Agent Skills",
+          "path": "skills/onekgpd/assets/kgpe.json",
+          "bytes": 1037258
+        },
+        {
+          "skill": "StatsPAI",
+          "path": "schemas/tools.json",
+          "bytes": 1034072
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/federated_learning_attacks/federated_learning_attacks_harvest_2026.yaml",
+          "bytes": 982832
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "catalog/skills-enriched.json",
+          "bytes": 971375
+        },
+        {
+          "skill": "agents-kit",
+          "path": "llms-full.txt",
+          "bytes": 944906
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/agentic_attacks/agentic_attacks_harvest_2026.yaml",
+          "bytes": 939802
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "demo-notebooks/R_skill_lalonde_full_pipeline.ipynb",
+          "bytes": 911770
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "catalog/skills.json",
+          "bytes": 889273
+        },
+        {
+          "skill": "home-assistant-mcp",
+          "path": "resources/hass/json-schemas/configuration.json",
+          "bytes": 887352
+        },
+        {
+          "skill": "home-assistant-mcp",
+          "path": "resources/hass/json-schemas/integration-homeassistant-packages.json",
+          "bytes": 887352
+        },
+        {
+          "skill": "StatsPAI",
+          "path": "docs/changelog.md",
+          "bytes": 865479
+        },
+        {
+          "skill": "StatsPAI",
+          "path": "CHANGELOG.md",
+          "bytes": 863119
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/vector_db_attacks/vector_db_attacks_harvest_2026.yaml",
+          "bytes": 849730
+        },
+        {
+          "skill": "ui-ux-pro-max-skill",
+          "path": "src/ui-ux-pro-max/data/phosphor-icons-upstream.json",
+          "bytes": 823933
+        },
+        {
+          "skill": "Scientific Agent Skills",
+          "path": "skills/bids/references/bids_schema.json",
+          "bytes": 813726
+        },
+        {
+          "skill": "vibe",
+          "path": "bundled/skills/unsloth/references/llms-txt.md",
+          "bytes": 813092
+        },
+        {
+          "skill": "ebay-mcp",
+          "path": "docs/sell-apps/listing-management/sell_inventory_v1_oas3.json",
+          "bytes": 793331
+        },
+        {
+          "skill": "open-design",
+          "path": "docs/design/chat-mirror/mirror-exec.html",
+          "bytes": 776980
+        },
+        {
+          "skill": "ui-ux-pro-max-skill",
+          "path": "src/ui-ux-pro-max/data/google-fonts.csv",
+          "bytes": 747241
+        },
+        {
+          "skill": "claude-code-best-practice",
+          "path": "changelog/best-practice/concepts/changelog.md",
+          "bytes": 747121
+        },
+        {
+          "skill": "medusa",
+          "path": "medusa/rules/watermarking_bypass/watermarking_bypass_harvest_2026.yaml",
+          "bytes": 732081
+        },
+        {
+          "skill": "bernstein",
+          "path": "references/docs/reference/openapi.json",
+          "bytes": 729806
+        },
+        {
+          "skill": "cortex",
+          "path": "package-lock.json",
+          "bytes": 674419
+        },
+        {
+          "skill": "auto-empirical-research-skills",
+          "path": "demo-notebooks/Python_skill_lalonde_full_pipeline.ipynb",
+          "bytes": 643324
+        },
+        {
+          "skill": "claude-code-best-practice",
+          "path": "changelog/development-workflows/changelog.md",
+          "bytes": 642103
+        },
+        {
+          "skill": "generative-media-skills",
+          "path": "schema_data.json",
+          "bytes": 637891
+        },
+        {
+          "skill": "academic-research-skills-codex",
+          "path": "CHANGELOG.md",
+          "bytes": 636513
+        },
+        {
+          "skill": "captain-claw",
+          "path": "examples/code/.code/sessions/31253d44/trace.jsonl",
+          "bytes": 629250
+        },
+        {
+          "skill": "mediacrawler",
+          "path": "media_platform/tieba/test_data/note_comments.html",
+          "bytes": 621419
+        },
+        {
+          "skill": "stagehand",
+          "path": "pnpm-lock.yaml",
+          "bytes": 617854
+        },
+        {
+          "skill": "rigol-dho824-mcp",
+          "path": "captured_waveforms/ch1234/raw.json",
+          "bytes": 601539
+        },
+        {
+          "skill": "captain-claw",
+          "path": "docs/code-desc/v0.3.5/log.txt",
+          "bytes": 592507
+        },
+        {
+          "skill": "moli",
+          "path": "moli-benchmark/wpt-cross-current/passed-cases.txt",
+          "bytes": 590715
+        },
+        {
+          "skill": "ppt-master",
+          "path": "skills/dashi-ppt/project/i18n/zh-en.json",
+          "bytes": 588374
+        },
+        {
+          "skill": "mediacrawler",
+          "path": "media_platform/tieba/test_data/note_detail.html",
+          "bytes": 577541
+        },
+        {
+          "skill": "Awesome-Journal-Skills",
+          "path": "shared-resources/journal-selection/venue-index.tsv",
+          "bytes": 576268
+        },
+        {
+          "skill": "headroom",
+          "path": "CHANGELOG.md",
+          "bytes": 574491
+        },
+        {
+          "skill": "telegram-search",
+          "path": "pnpm-lock.yaml",
+          "bytes": 573202
+        },
+        {
+          "skill": "loki-mode",
+          "path": "docs/v10/BOARD.md",
+          "bytes": 564473
+        },
+        {
+          "skill": "captain-claw",
+          "path": "examples/deep-dive.md",
+          "bytes": 557016
+        },
+        {
+          "skill": "Awesome-Journal-Skills",
+          "path": "shared-resources/journal-selection/eval/abstract-terms.tsv",
+          "bytes": 548445
+        },
+        {
+          "skill": "agents-kit",
+          "path": "package-lock.json",
+          "bytes": 540720
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/coreyhaines31_marketingskills.json",
+          "bytes": 535812
+        },
+        {
+          "skill": "asm",
+          "path": "data/skill-index/anthropics_financial-services.json",
+          "bytes": 513996
+        }
+      ]
+    },
+    "issue_counts": {
+      "missing_frontmatter": 1
+    }
+  },
+  "network_requests": 0,
+  "completed_at": "2026-10-16T17:28:27.387Z",
+  "detail_level": "summary"
+}

@@ -5,6 +5,7 @@ import type { SkillLoader } from "../loader/index.js";
 import { FOOTER_READ } from "../lib/protocol.js";
 import { withToolLogging, logEvent } from "../lib/logger.js";
 import { raceDownloadDeadline, DownloadDeadlineExceeded } from "../lib/deadline.js";
+import { fileNavigationRows, subSkillNavigationRows, navigationPage, navigationFooter, navigationMetadata } from "../lib/navigation.js";
 
 export function registerReadSkill(
   server: McpServer,
@@ -13,7 +14,7 @@ export function registerReadSkill(
 ): void {
   server.tool(
     "read_skill",
-    "STEP 3 MATERIALIZE — MANDATORY before executing any skill, once for EVERY skill you plan to use. Downloads the COMPLETE skill directory (SKILL.md + scripts + configs + references) into the local cache (instant when already cached) and returns the instructions, file structure, dependencies, and local_path — the on-disk path to execute the skill from. After this call you MUST execute the task strictly per the returned instructions; do NOT do the task from general knowledge after reading.",
+    "STEP 3 MATERIALIZE — MANDATORY before executing any skill, once for EVERY skill you plan to use. Downloads the COMPLETE skill directory (SKILL.md + scripts + configs + references) into the local cache and returns the FULL root instructions, dependencies, local_path, and a bounded directory/sub-skill preview. Large navigation lists include list_skill_files pagination and search calls; only navigation labels may be excerpts. After this call you MUST execute the task strictly per the returned instructions; do NOT do the task from general knowledge after reading.",
     {
       name: z.string().describe("Exact skill name from search/plan results, e.g. 'MediaCrawler'"),
     },
@@ -86,19 +87,26 @@ export function registerReadSkill(
           // loaders can still supply only the original instructions result.
           const cache = result.cache ?? loader.cacheState(entry);
 
-          // Format structure as a compact tree
-          const structureStr = formatTree(result.structure.files, "");
+          const identity = result.navigationIdentity ?? JSON.stringify([entry.name, entry.relative_path, entry.file_index?.sha256]);
+          const filesContext = { identity, skillName: entry.name, view: "files" as const, maxDepth: 2 };
+          const subSkillsContext = { identity, skillName: entry.name, view: "sub_skills" as const };
+          const filesPage = navigationPage(fileNavigationRows(result.structure.files), filesContext);
+          const subSkillsPage = navigationPage(subSkillNavigationRows(result.structure.sub_skills), subSkillsContext);
+          const structureStr = filesPage.nextCursor
+            ? filesPage.rows.map(item => item.text).join("\n")
+            : formatTree(result.structure.files, "");
+          const structureNavigation = filesPage.nextCursor ? navigationFooter(filesContext, filesPage) : "";
 
           // Format sub-skills if any
           let subSkillsStr = "";
           if (result.structure.sub_skills.length > 0) {
             subSkillsStr =
               "\n## Sub-Skills\n" +
-              result.structure.sub_skills
-                .map((s) => `- **${s.name}** (${s.path}): ${s.description}`)
-                .join("\n");
-            subSkillsStr +=
-              "\n\nUse read_skill or load_skill_file to access sub-skill instructions.";
+              subSkillsPage.rows.map(item => item.text).join("\n");
+            if (subSkillsPage.nextCursor || subSkillsPage.excerpted) subSkillsStr += "\n\n" + navigationFooter(subSkillsContext, subSkillsPage);
+            const first = subSkillsPage.rows[0]?.row.path;
+            subSkillsStr += "\n\nRead complete sub-skill instructions with load_skill_file(" +
+              JSON.stringify({ skill_name: entry.name, file_path: `${first ?? "SUB_SKILL_PATH"}/SKILL.md` }) + ").";
           }
 
           // Format dependencies
@@ -143,6 +151,7 @@ export function registerReadSkill(
             .join("");
 
           return {
+            structuredContent: { navigation: { files: navigationMetadata(filesPage), sub_skills: navigationMetadata(subSkillsPage) } },
             content: [
               {
                 type: "text" as const,
@@ -159,6 +168,7 @@ export function registerReadSkill(
                   "```",
                   structureStr,
                   "```",
+                  structureNavigation,
                   cacheSection,
                   subSkillsStr,
                   "",

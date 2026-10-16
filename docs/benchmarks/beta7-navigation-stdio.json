@@ -1,0 +1,133 @@
+{
+  "started_at": "2026-10-16T17:28:47.328Z",
+  "dist": "/Users/zz/codex-skills-mcp/dist/index.js",
+  "source_root": "/Users/zz/codexproject/codex-skills",
+  "skill": "Awesome-Journal-Skills",
+  "tool_count": 16,
+  "calls": {
+    "read_first": {
+      "elapsed_ms": 436,
+      "wire_json_bytes": 20146,
+      "text_bytes": 19314,
+      "isError": false
+    },
+    "read_warm_median": {
+      "elapsed_ms": 209,
+      "wire_json_bytes": 20146,
+      "text_bytes": 19314,
+      "isError": false,
+      "attempts": [
+        {
+          "elapsed_ms": 217,
+          "wire_json_bytes": 20146
+        },
+        {
+          "elapsed_ms": 222,
+          "wire_json_bytes": 20146
+        },
+        {
+          "elapsed_ms": 209,
+          "wire_json_bytes": 20146
+        },
+        {
+          "elapsed_ms": 207,
+          "wire_json_bytes": 20146
+        },
+        {
+          "elapsed_ms": 206,
+          "wire_json_bytes": 20146
+        }
+      ]
+    },
+    "list_files_median": {
+      "elapsed_ms": 40,
+      "wire_json_bytes": 3217,
+      "text_bytes": 2720,
+      "isError": false,
+      "attempts": [
+        {
+          "elapsed_ms": 41,
+          "wire_json_bytes": 3217
+        },
+        {
+          "elapsed_ms": 40,
+          "wire_json_bytes": 3217
+        },
+        {
+          "elapsed_ms": 39,
+          "wire_json_bytes": 3217
+        }
+      ]
+    },
+    "list_subskills_filtered_median": {
+      "elapsed_ms": 200,
+      "wire_json_bytes": 13105,
+      "text_bytes": 12612,
+      "isError": false,
+      "attempts": [
+        {
+          "elapsed_ms": 207,
+          "wire_json_bytes": 13105
+        },
+        {
+          "elapsed_ms": 199,
+          "wire_json_bytes": 13105
+        },
+        {
+          "elapsed_ms": 200,
+          "wire_json_bytes": 13105
+        }
+      ]
+    }
+  },
+  "stderr_tail": [
+    "[codex-skills-mcp] info tool_result tool=read_skill",
+    "[codex-skills-mcp] info tool_call tool=read_skill",
+    "[codex-skills-mcp] info tool_result tool=read_skill",
+    "[codex-skills-mcp] info tool_call tool=read_skill",
+    "[codex-skills-mcp] info tool_result tool=read_skill",
+    "[codex-skills-mcp] info tool_call tool=read_skill",
+    "[codex-skills-mcp] info tool_result tool=read_skill",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    "[codex-skills-mcp] info tool_call tool=list_skill_files",
+    "[codex-skills-mcp] info tool_result tool=list_skill_files",
+    ""
+  ],
+  "comparison_baseline": {
+    "dist": "/var/folders/_l/64fzznvj755c2l5mr4c61p6h0000gn/T/codex-beta6-nav-baseline-lQmfLS/dist/index.js",
+    "runtime": "2026-10-16T17:28:44.857Z",
+    "tool_count": 16,
+    "calls": {
+      "read_first": {
+        "elapsed_ms": 543,
+        "wire_json_bytes": 2067825,
+        "text_bytes": 2053520
+      },
+      "read_warm_median": {
+        "elapsed_ms": 273,
+        "wire_json_bytes": 2067825,
+        "text_bytes": 2053520
+      },
+      "list_files_median": {
+        "elapsed_ms": 38,
+        "wire_json_bytes": 293311,
+        "text_bytes": 283663
+      },
+      "list_subskills_filtered_median": {
+        "elapsed_ms": 38,
+        "wire_json_bytes": 293311,
+        "text_bytes": 283663
+      }
+    },
+    "note": "Same source, skill, Node process/client, and real stdio transport; baseline list calls did not support sub-skill search, so filtered sub-skills are not a like-for-like timing comparison."
+  }
+}

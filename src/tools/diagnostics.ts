@@ -8,6 +8,7 @@ import type { Config } from "../config.js";
 import { FOOTER_DIAGNOSTICS } from "../lib/protocol.js";
 import { withToolLogging, readRecentEvents, loggerActive, logDirPath } from "../lib/logger.js";
 import { readManifestMeta } from "../remote/github.js";
+import { readHttpBudgetState } from "../remote/http-budget.js";
 
 const TREE_MARKER = ".codex-skills.tree.json";
 const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", "logs"]);
@@ -94,6 +95,16 @@ export function registerDiagnostics(
             `- Mode: ${config.isRemote ? "remote (on-demand download)" : "local (skills-dir)"}`,
             `- Remote: ${config.githubRepo ?? "-"}@${config.githubBranch ?? "-"}`,
             `- Cache dir: \`${config.skillsDir}\``,
+          ].join("\n")
+        );
+
+        const budget = readHttpBudgetState();
+        sections.push(
+          "## HTTP admission",
+          [
+            `- Capacity: ${budget.limits.capacity} active operations (data ceiling ${budget.limits.capacity - budget.limits.metadataReserve}; manifest reserve ${budget.limits.manifestReserve})`,
+            `- Current: ${budget.active} active, ${budget.queued} queued across ${budget.queuedGroups} group(s)`,
+            `- By class: data ${budget.activeByKind.data}, metadata ${budget.activeByKind.metadata}, manifest ${budget.activeByKind.manifest}`,
           ].join("\n")
         );
 

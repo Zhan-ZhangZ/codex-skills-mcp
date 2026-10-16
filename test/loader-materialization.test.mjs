@@ -59,7 +59,7 @@ async function countFs(operation) {
   }
 }
 
-test("catalog structure matches the existing depth, hidden-name, skip and subskill rules", async (t) => {
+test("catalog tree keeps its depth and visibility rules while subskills extend beyond depth five", async (t) => {
   const contents = {
     "SKILL.md": "# root instructions", "requirements.txt": "example", "README.md": "guide",
     "alpha/SKILL.md": child("alpha"), "alpha/sub/SKILL.md": child("sub"),
@@ -72,6 +72,8 @@ test("catalog structure matches the existing depth, hidden-name, skip and subski
   };
   const { loader, directory } = fixture(t, contents);
   const expected = loader.scanStructure(directory, entry);
+  expected.sub_skills.splice(expected.sub_skills.findIndex(item => item.name === "five") + 1, 0,
+    { name: "six", path: "alpha/sub/deeper/four/five/six", description: "child instructions" });
   const { result, calls } = await countFs(() => loader.readSkill(entry));
   assert.deepEqual(result.structure, expected);
   assert.equal(result.instructions, contents["SKILL.md"]);
