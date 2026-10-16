@@ -182,3 +182,73 @@ test("unsupported handshake blocks tools and offers a connection retry", async (
   assert.equal(app.sent.filter((item) => item.method === "ui/initialize").length, 2);
   await app.dispose();
 });
+
+for (const failed of [false, true]) {
+  test("attachment " + (failed ? "failure" : "success") + " remains visible after a slower preview", async () => {
+    const app = harness(); await app.ready();
+    app.node("cards").children[0].onclick(); await app.flush();
+    const preview = app.latest("resources/read");
+    const attaching = app.node("d-attach").onclick();
+    assert.match(app.node("d-attach-status").textContent, /正在将/);
+    await app.reply(app.latest("ui/update-model-context"), failed ? { isError: true } : {});
+    await attaching;
+    const message = app.node("d-attach-status").textContent;
+    assert.match(message, failed ? /加入失败/ : /已将「alpha」加入对话上下文/);
+    await app.reply(preview, { contents: [{ text: "# Alpha" }] });
+    assert.equal(app.node("d-attach-status").textContent, message);
+    assert.equal(app.node("d-attach-status").hidden, false);
+    assert.equal(app.node("d-md").textContent, "# Alpha");
+    assert.equal(app.node("content").attributes["aria-busy"], "false");
+    await app.dispose();
+  });
+}
+
+for (const attachmentFirst of [false, true]) {
+  test("preview failure keeps retry available when attachment finishes " + (attachmentFirst ? "first" : "last"), async () => {
+    const app = harness(); await app.ready();
+    app.node("cards").children[0].onclick(); await app.flush();
+    const preview = app.latest("resources/read");
+    const attaching = app.node("d-attach").onclick();
+    const attachment = app.latest("ui/update-model-context");
+    if (attachmentFirst) { await app.reply(attachment, {}); await attaching; }
+    await app.reply(preview, undefined, { code: -32603, message: "download pending" });
+    if (!attachmentFirst) { await app.reply(attachment, {}); await attaching; }
+    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
+    assert.match(app.node("status").textContent, /download pending/);
+    assert.equal(app.node("retry").hidden, false);
+    app.node("retry").onclick(); await app.flush();
+    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
+    await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+    assert.equal(app.node("retry").hidden, true);
+    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
+    await app.dispose();
+  });
+}
+
+test("an attachment completing during preview retry stays associated with that detail", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const attaching = app.node("d-attach").onclick();
+  const attachment = app.latest("ui/update-model-context");
+  await app.reply(app.latest("resources/read"), undefined, { code: -32603, message: "download pending" });
+  app.node("retry").onclick(); await app.flush();
+  await app.reply(attachment, {}); await attaching;
+  assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
+  await app.dispose();
+});
+
+test("a late attachment result never appears on another skill detail", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const attaching = app.node("d-attach").onclick();
+  const attachment = app.latest("ui/update-model-context");
+  app.node("back").onclick(); await app.flush();
+  app.node("cards").children[1].onclick(); await app.flush();
+  assert.equal(app.node("d-attach-status").hidden, true);
+  await app.reply(attachment, {}); await attaching;
+  assert.equal(app.node("heading").textContent, "beta");
+  assert.equal(app.node("d-attach-status").hidden, true);
+  assert.equal(app.node("d-attach-status").textContent, "");
+  assert.equal(app.node("d-attach").disabled, false);
+  await app.dispose();
+});

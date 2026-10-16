@@ -60,9 +60,11 @@ export function registerSkillStatus(
 
           const status = cache.complete
             ? `✅ complete — ${cache.filesTotal} files (${formatBytes(cache.sizeBytes)})`
-            : cache.cached
-              ? `⚠️ INCOMPLETE — missing ${cache.filesMissing.length}/${cache.filesTotal} files: ${cache.filesMissing.slice(0, 5).join(", ")}${cache.filesMissing.length > 5 ? ", …" : ""}`
-              : "⬜ not downloaded yet — call read_skill to materialize it";
+            : cache.cached && cache.catalogCurrent === false
+              ? `⚠️ cached revision — current manifest catalog not validated. Retry read_skill("${entry.name}") when the source is available.`
+              : cache.cached
+                ? `⚠️ INCOMPLETE — missing ${cache.filesMissing.length}/${cache.filesTotal} files: ${cache.filesMissing.slice(0, 5).join(", ")}${cache.filesMissing.length > 5 ? ", …" : ""}`
+                : "⬜ not downloaded yet — call read_skill to materialize it";
 
           lines.push(
             [

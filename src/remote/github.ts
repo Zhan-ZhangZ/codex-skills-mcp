@@ -1,4 +1,4 @@
-import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, renameSync, lstatSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, renameSync, lstatSync, chmodSync, createReadStream } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve, dirname, join, basename, isAbsolute } from "node:path";
 import type { Config, ManifestEntry } from "../config.js";
@@ -37,6 +37,8 @@ interface SkillTreeCache {
   singleFileRemotePath?: string;
   /** Remote source (repo/branch/path) this cache entry was fetched from */
   source?: CacheSource;
+  /** Set only after this tree was loaded from the verified manifest catalog. */
+  fileIndexSha256?: string;
 }
 
 /** Metadata marker written inside each cached skill directory */
@@ -148,7 +150,7 @@ function validFiles(files: unknown): files is TreeFileEntry[] {
   return files.every((file) => {
     if (!file || typeof file.path !== "string" || !Number.isSafeInteger(file.size) || file.size < 0) return false;
     try { if (relativePath(file.path) !== file.path) return false; } catch { return false; }
-    if (file.path === TREE_CACHE_FILE || seen.has(file.path)) return false;
+    if (file.path.split("/")[0] === TREE_CACHE_FILE || seen.has(file.path)) return false;
     seen.add(file.path);
     if (file.mode !== undefined && !["100644", "100755", "120000"].includes(file.mode)) return false;
     return file.sha === undefined || (typeof file.sha === "string" && /^[a-f0-9]{40}$/i.test(file.sha));
@@ -178,7 +180,12 @@ function rawUrl(config: Config, path: string): string {
 }
 
 /** The timeout and optional integrity checks cover the complete response body. */
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000, expected?: TreeFileEntry): Promise<Response> {
+interface ResponseIntegrity {
+  sha256: string;
+  maxBytes: number;
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 15000, expected?: TreeFileEntry, integrity?: ResponseIntegrity): Promise<Response> {
   const controller = new AbortController();
   const onAbort = () => controller.abort(options.signal?.reason);
   if (options.signal?.aborted) onAbort();
@@ -188,6 +195,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
     const res = await fetch(url, { ...options, signal: controller.signal });
     if (!res.ok || !res.body) {
       await res.body?.cancel();
+      if (res.ok && integrity) throw new Error(`Empty response for ${url}`);
       if (res.ok && expected && expected.size !== 0) throw new Error(`Empty response for ${expected.path}`);
       return new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
     }
@@ -199,7 +207,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > (expected?.size ?? 64 * 1024 * 1024)) throw new Error(`Unexpected response size for ${url}: ${size} bytes`);
+        if (size > (expected?.size ?? integrity?.maxBytes ?? 64 * 1024 * 1024)) throw new Error(`Unexpected response size for ${url}: ${size} bytes`);
         chunks.push(value);
       }
     } catch (error) {
@@ -207,6 +215,9 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
       throw error;
     } finally { reader.releaseLock(); }
     const body = Buffer.concat(chunks, size);
+    if (integrity && createHash("sha256").update(body).digest("hex") !== integrity.sha256) {
+      throw new Error(`SHA-256 mismatch for ${url}`);
+    }
     if (expected) {
       if (size !== expected.size) throw new Error(`Size mismatch for ${expected.path}: expected ${expected.size}, received ${size}`);
       if (expected.sha) {
@@ -263,7 +274,7 @@ interface DownloadNode {
  *    free of guaranteed-loser race traffic while keeping instant fallback.
  *  - Otherwise all nodes race in parallel and the first success wins.
  */
-async function fetchRawWithFallback(config: Config, path: string, expected?: TreeFileEntry): Promise<Response> {
+async function fetchRawWithFallback(config: Config, path: string, expected?: TreeFileEntry, integrity?: ResponseIntegrity): Promise<Response> {
   const expectedSize = expected?.size;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
   const encodedBranch = encodeURIComponent(config.githubBranch ?? "main");
@@ -358,7 +369,7 @@ async function fetchRawWithFallback(config: Config, path: string, expected?: Tre
     if (node.useAuth && config.githubToken) {
       headers["Authorization"] = `Bearer ${config.githubToken}`;
     }
-    fetchWithTimeout(node.url, { headers, signal: controller.signal }, node.timeout, expected).then(
+    fetchWithTimeout(node.url, { headers, signal: controller.signal }, node.timeout, expected, integrity).then(
       (res) => {
         if (!res.ok) {
           fail(node.name, `HTTP ${res.status}`);
@@ -429,6 +440,30 @@ async function fetchRawDirectFirst(config: Config, path: string, expected?: Tree
   }
 }
 
+/** Recover catalog-pinned bytes after a mutable branch advances. */
+async function fetchCatalogFile(config: Config, path: string, file: TreeFileEntry): Promise<Response> {
+  try {
+    // The catalog pins the exact blob: a validated mirror is authoritative
+    // for these bytes, including updates. Avoid a serial direct-only timeout.
+    return await fetchRawWithFallback(config, path, file);
+  } catch (rawError) {
+    if (!file.sha) throw rawError;
+    const headers: Record<string, string> = { Accept: "application/vnd.github.raw+json" };
+    if (config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
+    try {
+      const response = await fetchWithTimeout(
+        `https://api.github.com/repos/${config.githubRepo}/git/blobs/${file.sha}`,
+        { headers }, config.downloadTimeout || 30000, file,
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      logEvent("info", "file_blob_fallback", { detail: path });
+      return response;
+    } catch (blobError) {
+      throw new Error(`File download failed: ${String(rawError)}; immutable blob fallback: ${String(blobError)}`);
+    }
+  }
+}
+
 /**
  * Build the remote repo path of a skill directory, e.g.
  * "codex-skills/00_全局大管家/12_学术论文与科研图表/nature-skills"
@@ -448,7 +483,8 @@ function parseSkillFileCatalog(data: Buffer, entry: ManifestEntry): SkillTreeCac
     throw new Error(`File catalog for ${entry.name} is not valid JSON`);
   }
   const catalog = value as { version?: unknown; skill_path?: unknown; files?: unknown };
-  if (catalog.version !== 1 || catalog.skill_path !== entry.relative_path || !validFiles(catalog.files)) {
+  if (!catalog || catalog.version !== 1 || catalog.skill_path !== entry.relative_path || !validFiles(catalog.files) ||
+      catalog.files.some((file) => !file.sha || !file.mode)) {
     throw new Error(`File catalog for ${entry.name} failed structural validation`);
   }
   const files = catalog.files;
@@ -460,7 +496,7 @@ function parseSkillFileCatalog(data: Buffer, entry: ManifestEntry): SkillTreeCac
       files.reduce((sum, item) => sum + item.size, 0) !== index.total_bytes) {
     throw new Error(`File catalog for ${entry.name} does not match manifest metadata`);
   }
-  return { version: 1, files };
+  return { version: 1, files, fileIndexSha256: index.sha256 };
 }
 
 function readCachedSkillFileCatalog(config: Config, entry: ManifestEntry): SkillTreeCache | null {
@@ -468,6 +504,7 @@ function readCachedSkillFileCatalog(config: Config, entry: ManifestEntry): Skill
   if (!index) return null;
   try {
     const file = localFilePath(config.skillsDir, index.path);
+    if (statSync(file).size > MAX_CATALOG_BYTES) return null;
     const data = readFileSync(file);
     if (data.byteLength > MAX_CATALOG_BYTES) return null;
     if (createHash("sha256").update(data).digest("hex") !== index.sha256) return null;
@@ -492,7 +529,9 @@ async function fetchSkillTreeFromFileIndex(
   if (cached) return cached;
   try {
     const remotePath = buildSkillRemotePath(config, index.path);
-    const response = await fetchRawWithFallback(config, remotePath);
+    const response = await fetchRawWithFallback(config, remotePath, undefined, {
+      sha256: index.sha256, maxBytes: MAX_CATALOG_BYTES,
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = Buffer.from(await response.arrayBuffer());
     if (data.byteLength === 0 || data.byteLength > MAX_CATALOG_BYTES) {
@@ -792,10 +831,11 @@ async function runPool<T>(
 }
 
 /** True when the local file already exists with the expected size (resume support) */
-function isFileUpToDate(localPath: string, expectedSize: number): boolean {
+function isFileUpToDate(localPath: string, expectedSize: number, mode?: string): boolean {
   try {
     const stat = statSync(localPath);
-    return stat.isFile() && stat.size === expectedSize;
+    return stat.isFile() && stat.size === expectedSize &&
+      (process.platform === "win32" || !mode || (stat.mode & 0o111) === (mode === "100755" ? 0o111 : 0));
   } catch {
     return false;
   }
@@ -804,8 +844,23 @@ function isFileUpToDate(localPath: string, expectedSize: number): boolean {
 /** Verify every recorded file exists with the expected size */
 function areFilesUpToDate(tree: SkillTreeCache, skillLocalPath: string): boolean {
   return tree.files.every((file) =>
-    isFileUpToDate(localFilePath(skillLocalPath, file.path), file.size)
+    isFileUpToDate(localFilePath(skillLocalPath, file.path), file.size, file.mode)
   );
+}
+
+/** Incomplete markers do not attest existing bytes, even when sizes match. */
+async function matchesBlob(localPath: string, file: TreeFileEntry): Promise<boolean> {
+  if (!file.sha) return false;
+  try {
+    const hash = createHash("sha1").update(`blob ${file.size}\0`);
+    let size = 0;
+    for await (const chunk of createReadStream(localPath)) {
+      size += chunk.length;
+      if (size > file.size) return false;
+      hash.update(chunk);
+    }
+    return size === file.size && hash.digest("hex") === file.sha.toLowerCase();
+  } catch { return false; }
 }
 
 /**
@@ -818,16 +873,34 @@ async function downloadMissing(
   tree: SkillTreeCache,
   skillLocalPath: string,
   onProgress?: ProgressCallback,
-  options: { force?: ReadonlySet<string>; transactional?: boolean } = {}
+  options: { force?: ReadonlySet<string>; transactional?: boolean; verifyExisting?: boolean } = {}
 ): Promise<void> {
   if (!validFiles(tree.files)) throw new Error("Invalid remote file tree");
   if (tree.singleFileRemotePath) relativePath(tree.singleFileRemotePath);
 
   const skillRemotePath = buildSkillRemotePath(config, relPath);
-  const missing = tree.files.filter(
+  const needed = new Set(tree.files.filter(
     (file) => options.force?.has(file.path) || !isFileUpToDate(localFilePath(skillLocalPath, file.path), file.size)
-  );
-  if (missing.length === 0) return;
+  ).map((file) => file.path));
+  if (options.verifyExisting) {
+    await runPool(tree.files, config.downloadConcurrency, async (file) => {
+      if (!needed.has(file.path) && !await matchesBlob(localFilePath(skillLocalPath, file.path), file)) {
+        needed.add(file.path);
+      }
+    });
+  }
+  const missing = tree.files.filter((file) => needed.has(file.path));
+  const applyModes = () => {
+    if (process.platform === "win32") return;
+    for (const file of tree.files) {
+      if (!file.mode) continue;
+      const local = localFilePath(skillLocalPath, file.path);
+      if (!isFileUpToDate(local, file.size, file.mode)) {
+        chmodSync(local, file.mode === "100755" ? 0o755 : 0o644);
+      }
+    }
+  };
+  if (missing.length === 0) { applyModes(); return; }
 
   const skillName = basename(skillLocalPath);
   console.error(
@@ -851,7 +924,9 @@ async function downloadMissing(
       // otherwise a lagging mirror keeps rewriting stale bytes and the refresh
       // never converges (see docs/CHANGELOG.md v1.4.2). Brand-new files keep
       // the fast mirror race.
-      const res = existsSync(localFile)
+      const res = tree.fileIndexSha256 && file.sha
+        ? await fetchCatalogFile(config, remotePath, file)
+        : existsSync(localFile)
         ? await fetchRawDirectFirst(config, remotePath, file)
         : await fetchRawWithFallback(config, remotePath, file);
       const buffer = Buffer.from(await res.arrayBuffer());
@@ -860,6 +935,7 @@ async function downloadMissing(
         const temporary = join(dirname(localFile), `.${basename(localFile)}.${randomUUID()}.tmp`);
         staged.push({ temporary, target: localFile });
         writeFileSync(temporary, buffer, { flag: "wx" });
+        if (file.mode && process.platform !== "win32") chmodSync(temporary, file.mode === "100755" ? 0o755 : 0o644);
       } else {
         atomicWrite(localFile, buffer);
       }
@@ -867,6 +943,7 @@ async function downloadMissing(
       try { onProgress?.(done, missing.length, `Fetching ${done}/${missing.length} files for ${skillName}`); } catch { /* notification failure must not invalidate a download */ }
     });
     for (const file of staged) renameSync(file.temporary, file.target);
+    applyModes();
   } finally {
     for (const file of staged) { try { unlinkSync(file.temporary); } catch { /* committed */ } }
   }
@@ -1144,9 +1221,25 @@ function inRevalidateBackoff(relPath: string): boolean {
  * never-revalidate behavior, zero overhead). Legacy entries without
  * `validatedAt` use `completedAt` as a one-time anchor.
  */
-function isTreeValidationFresh(cached: SkillTreeCache, config: Config, relPath: string): boolean {
+function matchesFileIndex(cached: SkillTreeCache, entry: ManifestEntry): boolean {
+  return cached.fileIndexSha256 === entry.file_index?.sha256;
+}
+
+function revalidationKey(config: Config, entry: ManifestEntry): string {
+  return operationKey(config, `${relativePath(entry.relative_path)}:${entry.file_index?.sha256 ?? "legacy"}`);
+}
+
+function recordCatalogValidation(config: Config, entry: ManifestEntry, tree: SkillTreeCache): void {
+  if (matchesFileIndex(tree, entry)) revalidateBackoff.delete(revalidationKey(config, entry));
+  else revalidateBackoff.set(revalidationKey(config, entry), Date.now() + REVALIDATE_BACKOFF_MS);
+}
+
+function isTreeValidationFresh(cached: SkillTreeCache, config: Config, entry: ManifestEntry): boolean {
+  // A new manifest is an explicit content revision, even when time-based
+  // polling is disabled. Legacy markers migrate on their next read.
+  if (!matchesFileIndex(cached, entry)) return false;
   if (config.manifestTTL === 0) return true;
-  if (inRevalidateBackoff(operationKey(config, relPath))) return true;
+  if (inRevalidateBackoff(revalidationKey(config, entry))) return true;
   const anchor = cached.validatedAt ?? cached.completedAt ?? null;
   if (!anchor) return false;
   const age = Date.now() - Date.parse(anchor);
@@ -1207,7 +1300,7 @@ async function revalidateSkillTree(
 
     const now = new Date().toISOString();
     atomicWrite(cacheFile, JSON.stringify({ ...remoteTree, completedAt: now, validatedAt: now }, null, 2));
-    revalidateBackoff.delete(operationKey(config, relPath));
+    recordCatalogValidation(config, entry, remoteTree);
 
     if (changed > 0 || removed > 0) {
       logEvent("info", "skill_revalidated", {
@@ -1219,7 +1312,7 @@ async function revalidateSkillTree(
       );
     }
   } catch (error: any) {
-    revalidateBackoff.set(operationKey(config, relPath), Date.now() + REVALIDATE_BACKOFF_MS);
+    revalidateBackoff.set(revalidationKey(config, entry), Date.now() + REVALIDATE_BACKOFF_MS);
     console.error(
       `[codex-skills-mcp] Tree revalidation failed for "${skillName}" (${error?.message ?? error}); serving cached version`
     );
@@ -1232,7 +1325,8 @@ async function runExclusively(relPath: string, fn: () => Promise<void>): Promise
   const existing = inflightFetches.get(relPath);
   if (existing) {
     await existing;
-    return;
+    // Recheck under the lock: a waiting caller may hold a newer manifest.
+    return runExclusively(relPath, fn);
   }
   const promise = (async () => {
     try {
@@ -1248,8 +1342,8 @@ async function runExclusively(relPath: string, fn: () => Promise<void>): Promise
 /**
  * Ensure a skill's directory is downloaded and cached.
  *
- * - Listing prefers the category-wide tree cache (2 API calls per category,
- *   refreshed on a TTL); falls back to the per-skill subtree API if needed.
+ * - Listing prefers a verified immutable catalog, then the category-wide
+ *   tree cache and per-skill subtree API for legacy sources or failures.
  * - Downloads run concurrently and skip files already cached with the right size.
  * - A `.codex-skills.tree.json` marker records the file list + completion state,
  *   so an interrupted download resumes on the next call instead of being
@@ -1257,7 +1351,7 @@ async function runExclusively(relPath: string, fn: () => Promise<void>): Promise
  * - Completed caches are REVALIDATED against the remote tree once
  *   `manifestTTL` expires: content-level (sha) changes, added files and
  *   upstream deletions are all picked up; `manifestTTL === 0` keeps the
- *   legacy never-revalidate behavior.
+ *   legacy never-revalidate behavior unless the manifest catalog changes.
  * - Concurrent calls for the same skill are deduplicated via a promise lock.
  */
 export async function ensureSkillFetched(
@@ -1272,14 +1366,14 @@ export async function ensureSkillFetched(
 
   const cached = readTree(cacheFile);
   if (cached && sameSource(cached.source, config) && cached.completedAt &&
-      isTreeValidationFresh(cached, config, relPath) && areFilesUpToDate(cached, skillLocalPath)) return;
+      isTreeValidationFresh(cached, config, entry) && areFilesUpToDate(cached, skillLocalPath)) return;
 
   await runExclusively(key, async () => {
     const current = readTree(cacheFile);
     if (current && sameSource(current.source, config) && current.completedAt) {
-      if (isTreeValidationFresh(current, config, relPath)) {
+      if (isTreeValidationFresh(current, config, entry)) {
         await downloadMissing(config, relPath, current, skillLocalPath, onProgress);
-      } else {
+      } else if (!inRevalidateBackoff(revalidationKey(config, entry))) {
         await revalidateSkillTree(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
       }
       return;
@@ -1298,8 +1392,8 @@ async function doFetchSkill(
   onProgress?: ProgressCallback
 ): Promise<void> {
   const cached = readTree(cacheFile);
-  if (cached && sameSource(cached.source, config)) {
-    await downloadMissing(config, relPath, cached, skillLocalPath, onProgress);
+  if (cached && sameSource(cached.source, config) && matchesFileIndex(cached, entry)) {
+    await downloadMissing(config, relPath, cached, skillLocalPath, onProgress, { verifyExisting: true });
     atomicWrite(cacheFile, JSON.stringify({ ...cached, completedAt: new Date().toISOString() }, null, 2));
     return;
   }
@@ -1312,7 +1406,7 @@ async function doFetchSkill(
   if (!validFiles(tree.files)) throw new Error("Invalid remote file tree");
   const treeWithSource = { ...tree, source: cacheSource(config) };
   // A different source can have same-size files. Never treat them as a resume.
-  const sourceChanged = !!cached && !sameSource(cached.source, config);
+  const sourceChanged = !!cached && (!sameSource(cached.source, config) || !matchesFileIndex(cached, entry));
   const currentPaths = new Set(tree.files.map((file) => file.path));
   const obsoletePaths = sourceChanged ? cached.files.filter((file) => !currentPaths.has(file.path))
     .map((file) => localFilePath(skillLocalPath, file.path)) : [];
@@ -1323,6 +1417,7 @@ async function doFetchSkill(
   });
   for (const obsolete of obsoletePaths) if (existsSync(obsolete)) unlinkSync(obsolete);
   atomicWrite(cacheFile, JSON.stringify({ ...treeWithSource, completedAt: new Date().toISOString() }, null, 2));
+  recordCatalogValidation(config, entry, treeWithSource);
 }
 
 /** Deep cache-state report for one skill (see docs/IMPROVEMENT-PLAN.md §5). */
@@ -1337,6 +1432,8 @@ export interface SkillCacheState {
   /** Expected total size in bytes (sum of the recorded tree) */
   sizeBytes: number;
   completedAt?: string;
+  /** Whether cached content is tied to the manifest catalog, when present. */
+  catalogCurrent?: boolean;
 }
 
 /**
@@ -1354,6 +1451,7 @@ export function readSkillCacheState(config: Config, entry: ManifestEntry): Skill
     filesTotal: 0,
     filesMissing: [],
     sizeBytes: 0,
+    catalogCurrent: entry.file_index ? false : undefined,
   };
   const cacheFile = join(localPath, TREE_CACHE_FILE);
   if (!existsSync(cacheFile)) return base;
@@ -1361,19 +1459,21 @@ export function readSkillCacheState(config: Config, entry: ManifestEntry): Skill
     const cached = readTree(cacheFile);
     if (!cached) return base;
     const filesMissing = cached.files
-      .filter((f) => !isFileUpToDate(localFilePath(localPath, f.path), f.size))
+      .filter((f) => !isFileUpToDate(localFilePath(localPath, f.path), f.size, f.mode))
       .map((f) => f.path);
     return {
       cached: true,
       complete:
         !!cached.completedAt &&
         sameSource(cached.source, config) &&
+        matchesFileIndex(cached, entry) &&
         filesMissing.length === 0,
       localPath,
       filesTotal: cached.files.length,
       filesMissing,
       sizeBytes: cached.files.reduce((s, f) => s + (f.size || 0), 0),
       completedAt: cached.completedAt,
+      catalogCurrent: entry.file_index ? matchesFileIndex(cached, entry) : undefined,
     };
   } catch {
     return base;
@@ -1394,7 +1494,8 @@ export function isSkillCachedLight(config: Config, entry: ManifestEntry): boolea
       !!cached.completedAt &&
       Array.isArray(cached.files) &&
       cached.files.length > 0 &&
-      sameSource(cached.source, config)
+      sameSource(cached.source, config) &&
+      matchesFileIndex(cached, entry)
     );
   } catch {
     return false;

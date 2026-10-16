@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync, symlinkSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync, symlinkSync, utimesSync, statSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { ensureSkillFetched, ensureCategoryTree, fetchManifest, refreshManifestIfStale, readSkillCacheState } from "../dist/remote/github.js";
+import { ensureSkillFetched, ensureCategoryTree, fetchManifest, refreshManifestIfStale, readSkillCacheState, isSkillCachedLight } from "../dist/remote/github.js";
 import { raceDownloadDeadline, DownloadDeadlineExceeded } from "../dist/lib/deadline.js";
 
 const entry = { name: "demo", description: "fixture", category: "test", folder: "demo", relative_path: "demo" };
@@ -270,8 +270,10 @@ test("a single-file skill is resolved from its parent contents listing", async (
 
 test("reserved marker aliases in remote trees cannot overwrite metadata", async (t) => {
   const config = setup(t);
-  mockRemote([file("./.codex-skills.tree.json", "bad")], () => new Response("bad"));
-  await assert.rejects(ensureSkillFetched(config, entry), /Invalid remote file tree/);
+  for (const path of ["./.codex-skills.tree.json", ".codex-skills.tree.json", ".codex-skills.tree.json/payload"]) {
+    mockRemote([file(path, "bad")], () => new Response("bad"));
+    await assert.rejects(ensureSkillFetched(config, entry), /Invalid remote file tree/);
+  }
 });
 
 test("offline startup serves a validated expired same-source manifest, forced refresh fails", async (t) => {
@@ -383,5 +385,288 @@ test("a corrupt immutable catalog falls back to the GitHub tree API", async (t) 
 
   await ensureSkillFetched(config, indexed);
   assert.equal(readFileSync(join(config.skillsDir, "demo", "SKILL.md"), "utf8"), content);
-  assert.ok(readSkillCacheState(config, indexed).complete);
+  assert.ok(readSkillCacheState(config, indexed).cached);
+  assert.equal(readSkillCacheState(config, indexed).catalogCurrent, false);
+  assert.equal(readSkillCacheState(config, indexed).complete, false, "API fallback cannot attest a corrupt catalog");
+});
+
+function indexedSkill(contents, transform = (files) => files, skillPath = "./demo") {
+  const files = transform(Object.entries(contents).map(([path, content]) => ({ ...file(path, content), mode: "100644" })));
+  const data = Buffer.from(JSON.stringify({ version: 1, skill_path: skillPath, files }) + "\n");
+  const hash = createHash("sha256").update(data).digest("hex");
+  return { data, entry: { ...entry, relative_path: skillPath, file_index: {
+    path: `.catalog/${hash}.json`, sha256: hash, file_count: files.length,
+    total_bytes: files.reduce((total, item) => total + item.size, 0),
+  } } };
+}
+
+test("catalog digest changes refresh a complete cache before TTL expiry", async (t) => {
+  const config = setup(t, { manifestTTL: 60_000 });
+  const initial = indexedSkill({ "SKILL.md": "old" });
+  const updated = indexedSkill({ "SKILL.md": "new" });
+  let current = initial;
+  let content = "old";
+  let catalogCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("api.github.com")) throw new Error("Catalog path must not need GitHub API");
+    if (String(url).includes("/.catalog/")) { catalogCalls++; return new Response(current.data); }
+    return new Response(content);
+  };
+  await ensureSkillFetched(config, initial.entry);
+  current = updated;
+  content = "new";
+  await ensureSkillFetched(config, updated.entry);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "new");
+  assert.equal(catalogCalls, 2);
+});
+
+test("a changed catalog supersedes an interrupted old download marker", async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  const initial = indexedSkill({ "SKILL.md": "old", "old-only.md": "old reference" });
+  const updated = indexedSkill({ "SKILL.md": "new", "new-only.md": "new reference" });
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/.catalog/")) return new Response(initial.data);
+    if (String(url).endsWith("/SKILL.md")) return new Response("old");
+    return new Response(null, { status: 503 });
+  };
+  await assert.rejects(ensureSkillFetched(config, initial.entry), /downloads failed/);
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/.catalog/")) return new Response(updated.data);
+    if (String(url).endsWith("/SKILL.md")) return new Response("new");
+    if (String(url).endsWith("/new-only.md")) return new Response("new reference");
+    throw new Error(`Unexpected obsolete download: ${url}`);
+  };
+  await ensureSkillFetched(config, updated.entry);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "new");
+  assert.equal(readFileSync(join(config.skillsDir, "demo/new-only.md"), "utf8"), "new reference");
+  assert.equal(existsSync(join(config.skillsDir, "demo/old-only.md")), false);
+  assert.ok(readSkillCacheState(config, updated.entry).complete);
+});
+
+test("a corrupt fastest catalog mirror cannot suppress healthy raw nodes", async (t) => {
+  const config = setup(t);
+  const indexed = indexedSkill({ "SKILL.md": "good" });
+  let apiCalls = 0;
+  let healthyCatalogCalls = 0;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.hostname === "api.github.com") { apiCalls++; return new Response(null, { status: 403 }); }
+    if (parsed.pathname.includes("/.catalog/")) {
+      if (parsed.hostname === "gh.251716.xyz") return new Response("corrupt catalog");
+      healthyCatalogCalls++;
+      return new Response(indexed.data);
+    }
+    return new Response("good");
+  };
+  await ensureSkillFetched(config, indexed.entry);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "good");
+  assert.ok(healthyCatalogCalls > 0);
+  assert.equal(apiCalls, 0);
+});
+
+test("catalog records missing Git blob SHA are rejected before materialization", async (t) => {
+  const config = setup(t);
+  const indexed = indexedSkill({ "SKILL.md": "good" }, (files) => files.map(({ sha: _sha, ...item }) => item));
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("api.github.com")) return new Response(null, { status: 403 });
+    return new Response(String(url).includes("/.catalog/") ? indexed.data : "evil");
+  };
+  await assert.rejects(ensureSkillFetched(config, indexed.entry));
+  assert.equal(existsSync(join(config.skillsDir, "demo/SKILL.md")), false);
+});
+
+test("catalog records missing Git file mode are rejected before materialization", async (t) => {
+  const config = setup(t);
+  const indexed = indexedSkill({ "SKILL.md": "good" }, (files) => files.map(({ mode: _mode, ...item }) => item));
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("api.github.com")) return new Response(null, { status: 403 });
+    return new Response(String(url).includes("/.catalog/") ? indexed.data : "good");
+  };
+  await assert.rejects(ensureSkillFetched(config, indexed.entry));
+  assert.equal(existsSync(join(config.skillsDir, "demo/SKILL.md")), false);
+});
+
+test("a catalog-pinned blob remains downloadable after the branch advances", async (t) => {
+  const config = setup(t, { githubToken: "TEST_TOKEN" });
+  const indexed = indexedSkill({ "SKILL.md": "old" });
+  let blobCalls = 0;
+  globalThis.fetch = async (url, { headers } = {}) => {
+    const value = String(url);
+    if (value.includes("/.catalog/")) return new Response(indexed.data);
+    if (value.endsWith(`/git/blobs/${sha("old")}`)) {
+      blobCalls++;
+      assert.equal(headers.Accept, "application/vnd.github.raw+json");
+      assert.equal(headers.Authorization, "Bearer TEST_TOKEN");
+      return new Response("old");
+    }
+    return new Response("new");
+  };
+  await ensureSkillFetched(config, indexed.entry);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "old");
+  assert.equal(blobCalls, 1);
+});
+
+test("immutable blob fallback rejects bytes with the wrong Git SHA", async (t) => {
+  const config = setup(t);
+  const indexed = indexedSkill({ "SKILL.md": "old" });
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/") ? indexed.data : "bad");
+  await assert.rejects(ensureSkillFetched(config, indexed.entry), /SHA mismatch/);
+  assert.equal(existsSync(join(config.skillsDir, "demo/SKILL.md")), false);
+  assert.equal(readSkillCacheState(config, indexed.entry).complete, false);
+});
+
+test("catalog executable modes persist and permission-only repair needs no network", { skip: process.platform === "win32" }, async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  const script = "#!/bin/sh\necho ready\n";
+  const indexed = indexedSkill({ "SKILL.md": "ready", "run.sh": script }, (files) =>
+    files.map((item) => ({ ...item, mode: item.path === "run.sh" ? "100755" : "100644" })));
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/")
+    ? indexed.data : String(url).endsWith("/run.sh") ? script : "ready");
+  await ensureSkillFetched(config, indexed.entry);
+  const path = join(config.skillsDir, "demo/run.sh");
+  assert.equal(statSync(path).mode & 0o777, 0o755);
+  chmodSync(path, 0o644);
+  globalThis.fetch = async () => { throw new Error("Permission repair should stay offline"); };
+  await ensureSkillFetched(config, indexed.entry);
+  assert.equal(statSync(path).mode & 0o777, 0o755);
+  assert.ok(readSkillCacheState(config, indexed.entry).complete);
+});
+
+test("cache badges reject a superseded catalog identity", async (t) => {
+  const config = setup(t);
+  const old = indexedSkill({ "SKILL.md": "old" });
+  const next = indexedSkill({ "SKILL.md": "new" });
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/") ? old.data : "old");
+  await ensureSkillFetched(config, old.entry);
+  assert.equal(readSkillCacheState(config, old.entry).complete, true);
+  assert.equal(isSkillCachedLight(config, old.entry), true);
+  assert.equal(readSkillCacheState(config, next.entry).complete, false);
+  assert.equal(isSkillCachedLight(config, next.entry), false);
+});
+
+test("legacy completed markers adopt a catalog identity even with TTL disabled", async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  seed(config, { "SKILL.md": "old" });
+  const indexed = indexedSkill({ "SKILL.md": "new" });
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/") ? indexed.data : "new");
+  await ensureSkillFetched(config, indexed.entry);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "new");
+  assert.ok(isSkillCachedLight(config, indexed.entry));
+});
+
+test("concurrent callers with different catalog digests recheck after the inflight download", async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  const old = indexedSkill({ "SKILL.md": "old" });
+  const next = indexedSkill({ "SKILL.md": "new" });
+  let releaseOld;
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  const blocked = new Promise((resolve) => { releaseOld = resolve; });
+  let fileCalls = 0;
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value.includes(old.entry.file_index.path)) return new Response(old.data);
+    if (value.includes(next.entry.file_index.path)) return new Response(next.data);
+    fileCalls++;
+    if (fileCalls === 1) { markStarted(); await blocked; return new Response("old"); }
+    return new Response("new");
+  };
+  const first = ensureSkillFetched(config, old.entry);
+  await started;
+  const second = ensureSkillFetched(config, next.entry);
+  releaseOld();
+  await Promise.all([first, second]);
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "new");
+  assert.equal(isSkillCachedLight(config, next.entry), true);
+  assert.equal(fileCalls, 2);
+});
+
+test("retry after a failed forced fetch cannot promote unverified same-size local bytes", async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  const indexed = indexedSkill({ "SKILL.md": "new" });
+  const local = join(config.skillsDir, "demo/SKILL.md");
+  mkdirSync(dirname(local), { recursive: true });
+  writeFileSync(local, "old");
+  globalThis.fetch = async (url) => String(url).includes("/.catalog/")
+    ? new Response(indexed.data) : new Response(null, { status: 503 });
+  await assert.rejects(ensureSkillFetched(config, indexed.entry), /downloads failed/);
+  assert.equal(readFileSync(local, "utf8"), "old");
+  assert.equal(readSkillCacheState(config, indexed.entry).complete, false);
+  let fileCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/.catalog/")) return new Response(indexed.data);
+    fileCalls++;
+    return new Response("new");
+  };
+  await ensureSkillFetched(config, indexed.entry);
+  assert.equal(readFileSync(local, "utf8"), "new");
+  assert.ok(fileCalls > 0, "same-size preexisting bytes have not passed the catalog SHA check");
+  assert.equal(readSkillCacheState(config, indexed.entry).complete, true);
+});
+
+test("stale category fallback must not permanently attest a new catalog digest", async (t) => {
+  const config = setup(t, { manifestTTL: 0 });
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  t.after(() => { Date.now = originalNow; });
+  const skillPath = "./root/category/demo";
+  const old = indexedSkill({ "SKILL.md": "old" }, undefined, skillPath);
+  const next = indexedSkill({ "SKILL.md": "new" }, undefined, skillPath);
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/") ? old.data : "old");
+  await ensureSkillFetched(config, old.entry);
+  writeFileSync(join(config.skillsDir, ".category-trees.json"), JSON.stringify({
+    "root/category": { fetchedAt: Date.now(), truncated: false,
+      source: { repo: config.githubRepo, branch: config.githubBranch, path: config.githubPath },
+      entries: [file("demo/SKILL.md", "old")],
+    },
+  }));
+  let failedCalls = 0;
+  globalThis.fetch = async () => { failedCalls++; return new Response(null, { status: 503 }); };
+  await ensureSkillFetched(config, next.entry);
+  assert.equal(readFileSync(join(config.skillsDir, skillPath, "SKILL.md"), "utf8"), "old");
+  assert.equal(isSkillCachedLight(config, next.entry), false, "fallback tree has not been verified against the new catalog");
+  assert.equal(readSkillCacheState(config, next.entry).catalogCurrent, false);
+  const firstAttemptCalls = failedCalls;
+  await ensureSkillFetched(config, next.entry);
+  assert.equal(failedCalls, firstAttemptCalls, "failed catalog refresh is backed off");
+  now += 10 * 60 * 1000 + 1;
+  let recoveredCalls = 0;
+  globalThis.fetch = async (url) => {
+    recoveredCalls++;
+    return new Response(String(url).includes("/.catalog/") ? next.data : "new");
+  };
+  await ensureSkillFetched(config, next.entry);
+  assert.ok(recoveredCalls > 0, "catalog is retried after backoff even with TTL disabled");
+  assert.equal(readFileSync(join(config.skillsDir, skillPath, "SKILL.md"), "utf8"), "new");
+  assert.equal(readSkillCacheState(config, next.entry).catalogCurrent, true);
+  assert.equal(readSkillCacheState(config, next.entry).complete, true);
+  assert.equal(isSkillCachedLight(config, next.entry), true);
+});
+
+test("catalog refresh races verified mirrors without waiting for a hanging direct node", async (t) => {
+  const config = setup(t, { manifestTTL: 0, downloadTimeout: 2000 });
+  const old = indexedSkill({ "SKILL.md": "old" });
+  const next = indexedSkill({ "SKILL.md": "new" });
+  globalThis.fetch = async (url) => new Response(String(url).includes("/.catalog/") ? old.data : "old");
+  await ensureSkillFetched(config, old.entry);
+  let directCalls = 0;
+  globalThis.fetch = async (url, { signal } = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.includes("/.catalog/")) return new Response(next.data);
+    if (parsed.hostname === "raw.githubusercontent.com") {
+      directCalls++;
+      return new Promise((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    }
+    if (parsed.hostname === "gh.251716.xyz") return new Response("new");
+    throw new Error(`Unexpected fallback node: ${url}`);
+  };
+  const start = performance.now();
+  await ensureSkillFetched(config, next.entry);
+  assert.ok(performance.now() - start < 500, "verified mirror update should finish before the hedge window");
+  assert.equal(directCalls, 0, "fast verified mirror leaves the direct connection unused");
+  assert.equal(readFileSync(join(config.skillsDir, "demo/SKILL.md"), "utf8"), "new");
 });

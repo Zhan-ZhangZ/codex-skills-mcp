@@ -114,11 +114,14 @@ export function registerReadSkill(
             .join(" | ");
 
           // Cache & Execution section: makes "it is on disk, execute from here" visible
+          const cachedRevision = cache.cached && cache.catalogCurrent === false;
           const statusLine = cache.complete
             ? `✅ complete — ${cache.filesTotal} files (${formatBytes(cache.sizeBytes)})${cache.completedAt ? `, downloaded ${cache.completedAt}` : ""}`
-            : cache.cached
-              ? `⚠️ INCOMPLETE — ${cache.filesMissing.length} of ${cache.filesTotal} files missing. Re-call read_skill("${entry.name}") to resume the download.`
-              : `⚠️ not cached — re-call read_skill("${entry.name}") to download.`;
+            : cachedRevision
+              ? `⚠️ cached revision — current manifest catalog not validated. Retry read_skill("${entry.name}") when the source is available.`
+              : cache.cached
+                ? `⚠️ INCOMPLETE — ${cache.filesMissing.length} of ${cache.filesTotal} files missing. Re-call read_skill("${entry.name}") to resume the download.`
+                : `⚠️ not cached — re-call read_skill("${entry.name}") to download.`;
 
           const cacheSection = [
             "## Cache & Execution",
@@ -129,7 +132,11 @@ export function registerReadSkill(
             result.dependencies.setup_command
               ? `\n- Setup before first run: \`${result.dependencies.setup_command}\``
               : "",
-            "\n- The complete skill now lives on local disk. Run its scripts from local_path and follow the Instructions above exactly.",
+            cachedRevision
+              ? "\n- local_path contains a cached revision. The instructions above describe that cached revision; completeness against the current manifest has not been verified."
+              : cache.complete
+                ? "\n- The complete skill now lives on local disk. Run its scripts from local_path and follow the Instructions above exactly."
+                : "\n- Materialization is not complete. Re-call read_skill to finish downloading, then use skill_status to verify completeness before execution.",
           ]
             .filter(Boolean)
             .join("");
@@ -155,7 +162,11 @@ export function registerReadSkill(
                   subSkillsStr,
                   "",
                   "---",
-                  FOOTER_READ,
+                  cachedRevision
+                    ? `▶ Retry read_skill("${entry.name}") when the source is available, then use skill_status to verify the current manifest revision before execution.`
+                    : cache.complete
+                      ? FOOTER_READ
+                      : `▶ Re-call read_skill("${entry.name}") to complete materialization, then use skill_status to verify completeness before execution.`,
                 ].join("\n"),
               },
             ],

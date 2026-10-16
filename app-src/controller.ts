@@ -52,6 +52,12 @@ function status(message: string, action?: () => void) {
   retry = action;
   $("retry").hidden = !action;
 }
+// Attachment feedback is independent of navigation/preview loading. Either
+// request may finish first, and neither should erase the other's result.
+function attachmentStatus(message: string) {
+  $("d-attach-status").textContent = message;
+  $("d-attach-status").hidden = !message;
+}
 function busy(value: boolean) {
   $("content").setAttribute("aria-busy", String(value));
 }
@@ -115,6 +121,7 @@ function cachedBadge(cached: boolean) {
   $("d-cached").className = "badge" + (cached ? " on" : "");
 }
 function showView(next: View) {
+  const previous = view;
   view = next;
   $("home").hidden = next.view !== "home";
   $("list").hidden = next.view !== "category" && next.view !== "search";
@@ -127,6 +134,7 @@ function showView(next: View) {
   $("empty").hidden = true;
   if (next.view !== "detail") search.value = next.view === "search" ? next.query : "";
   if (next.view === "detail") {
+    if (previous !== next) attachmentStatus("");
     cachedBadge(next.skill.cached);
     $("d-md").textContent = "正在读取 SKILL.md…";
     attach.disabled = attaching;
@@ -187,18 +195,19 @@ async function navigate(next: View) {
 
 attach.onclick = async () => {
   if (view.view !== "detail" || attaching || !connected) return;
-  const skill = view.skill;
-  const token = revision;
+  const selected = view;
+  const skill = selected.skill;
   attaching = true; attach.disabled = true;
+  attachmentStatus(`正在将「${skill.name}」加入对话…`);
   try {
     const result = await transport.request<{ isError?: boolean }>("ui/update-model-context", {
       content: [{ type: "text", text: `已选择技能：${skill.name}。通过 resources/read 读取 skill://${encodeURIComponent(skill.name)} 获取完整使用说明。` }],
       structuredContent: { skill: { name: skill.name, uri: `skill://${encodeURIComponent(skill.name)}` } },
     }, 15_000);
     if (result?.isError) throw new Error("宿主未接受技能上下文");
-    if (revision === token && !disposed) status(`已将「${skill.name}」加入对话上下文`);
+    if (view === selected && !disposed) attachmentStatus(`已将「${skill.name}」加入对话上下文`);
   } catch (error) {
-    if (revision === token && !disposed) status(`加入失败：${errorMessage(error)}`);
+    if (view === selected && !disposed) attachmentStatus(`加入失败：${errorMessage(error)}`);
   } finally {
     attaching = false; attach.disabled = !connected;
   }

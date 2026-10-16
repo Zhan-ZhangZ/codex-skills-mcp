@@ -46,9 +46,9 @@
 
 ## 预期影响
 
-冷下载从“2 次 GitHub API 获取文件树 + N 个文件请求”变成“最多 1 个 catalog 请求 + N 个文件请求”。对匿名 GitHub API 的依赖从每次技能物化降低到仅旧清单或 catalog 故障兜底。文件内容仍按 blob SHA 校验，镜像可以加速传输但不能污染内容。
+冷下载从“GitHub API 获取文件树 + N 个文件获取”变成“一次 catalog 获取 + N 个文件获取”。这里是逻辑获取次数；每次获取的镜像竞速可能发出多个 HTTP 请求。正常 catalog 路径不依赖 GitHub API，旧清单、catalog 故障与历史 blob 恢复仍可能使用 API。文件内容按 blob SHA 校验。
 
-## 验证
+## 交接基线验证
 
 - `codexproject`: `python3 scripts/build_file_indexes.py --check` 通过；生成 290 catalogs / 102,737 files；全部 catalog SHA 与 manifest 元数据复核通过。
 - `codex-skills-mcp`: `npm test` 68/68 通过。
@@ -57,6 +57,57 @@
 ## 发布顺序
 
 1. 提交并推送 `codexproject`，确认 GitHub Actions catalog 门禁通过。
-2. 用 MCP beta.4 或本地构建指向远端新 manifest，确认日志出现 `File catalog loaded` 且无 API 兜底。
+2. 使用包含 catalog 消费代码的 beta.5 构建，执行 `node scripts/check-remote-catalog.mjs --skill human-writing --skill webapp-testing`，确认完整远端链路、零 API 兜底及热缓存零请求。beta.4 不支持本项验收。
 3. 发布 `codex-skills-mcp@1.5.0-beta.5 --tag beta`。
 4. 抽测一个多文件技能和大技能，确认冷下载、二次读取与 `skill_status` 完整性。
+
+## 接手复审与修正
+
+结论：保留源库生成不可变 catalog、MCP 按需消费的分工。原提交的基本路径正确，但仅原有 68 项回归不足以覆盖版本切换和故障恢复。此次独立复现并修正了以下问题。
+
+| 问题 | 修正后的行为 |
+| --- | --- |
+| 新清单已变，旧缓存仍受 TTL 保护；TTL=0 时可永不更新 | 已验证 marker 绑定 catalog SHA-256；摘要变化立即重新验证，旧 marker 自动迁移；等待中的请求重新检查自己的版本 |
+| 新清单遇到旧的未完成 marker，继续下载已经删除的旧文件 | 按新 catalog 重新列文件并暂存替换，不沿用旧文件列表 |
+| 第一次下载失败后，等长旧文件在重试时被标记为完整 | 未完成 marker 恢复时流式校验现有文件 Git blob SHA，复用通过校验的文件并重下错误内容 |
+| 最快镜像返回损坏 catalog，健康节点被提前取消 | 32 MiB 上限及 SHA-256 校验在每个节点胜出前完成；catalog 强制提供每文件 SHA 和 mode |
+| 旧分类树兜底被盖上新 catalog 摘要 | 只有通过 catalog 校验才记录摘要；兜底缓存显示未验证版本，按摘要退避并重试，不冒充当前完整版本 |
+| 旧 catalog 对应文件已被 main 改写或删除 | raw 节点失败后按 Git blob SHA 获取历史内容，再校验长度和 SHA；正常路径保持零 API |
+| catalog 记录了可执行权限，落盘却丢失 | POSIX 保留 100755 执行位；只丢权限时本地修复，无需重下；符号链接仍按目标文本落盘 |
+| 已知文件 SHA 的更新仍先串行等待直连 | catalog 文件更新直接参与经 SHA 校验的镜像竞速，避免额外直连等待窗口 |
+| App 预览迟到覆盖加入对话的成功/失败 | 附件状态使用独立可访问区域，详情重试保留状态，离开详情后忽略迟到结果 |
+| 工具在未完成物化时仍提示完整并立即执行 | `read_skill` / `skill_status` 区分缺文件和当前 catalog 尚未验证，仅完整缓存给出执行指引 |
+
+源库增加 `scripts/validate_manifest.py` 与离线测试，检查 metadata、路径唯一性、catalog 摘要/结构、计数、权限及符号链接边界。全库仍为 291 条目、290 catalogs、102,737 文件；内容与生成 catalog 未改写。现有两处悬空链接（phoenix、mcp-toolbox）保留为可见警告，上游内容保持原样。
+
+## 发布前联合实测
+
+可复现命令：
+
+```bash
+npm run build
+node scripts/check-remote-catalog.mjs --metadata-dir /Users/zz/codexproject/codex-skills --skill human-writing --skill webapp-testing
+```
+
+该模式仅从本地源库提供 manifest/catalog，技能文件来自真实远端；隔离临时缓存在结束时删除，不影响日常缓存。每个文件复核大小、Git blob SHA 和执行位。
+
+| 技能 | 文件/字节 | 可执行文件 | 冷下载 | 热读 | 冷下载实际 HTTP 尝试 |
+| --- | --- | --- | --- | --- | --- |
+| human-writing | 13 / 100,786 | 1 | 1,592.17 ms | 0.59 ms | 65 |
+| webapp-testing | 6 / 22,518 | 1 | 763.36 ms | 0.37 ms | 30 |
+
+两项正常下载均零 GitHub API、热读零请求。计时为同机单次样本，catalog 元数据本地读取；不代表完整公网链路延迟，也不直接与 beta.4 网络样本比较。镜像竞速最多五路，HTTP 尝试数包含被取消的请求。后续大技能主要优化空间仍是按技能归档下载与减少竞速放大。
+
+历史 blob 接口另经真实网络验证：匿名请求返回 403，使用现有 GitHub 凭据后返回 200，15,199 字节且 SHA 匹配。这说明历史回取仍受 API 可用性和限流约束；保留旧 catalog 本身不能保证所有旧版本永久可下载。
+
+复审时 npm registry 为 `latest=1.4.2`、`beta=1.5.0-beta.4`；源仓库远端 main 为 `2e5772a3c`，新 catalog 尚在本地。完整远端 catalog 冒烟、GitHub Actions 与真实 ChatGPT 宿主视觉验收仍待执行。beta.5 保持本地待发布。
+
+## 最终本地验收
+
+- MCP：`npm test` 90/90；`npm run build:plugin` 与 `npm run check:package` 通过；npm 包及插件入口各完成 2/2 stdio 验收。
+- 依赖：`npm audit --omit=dev` 返回 0 vulnerabilities。
+- 源库：Python 生成器/校验器回归 23/23；`validate_manifest.py` 全库通过（两项既有悬空链接警告）；builder `--check` 的 `catalogs_changed=0`、`manifest_changed=false`。
+- 两仓 `git diff --check` 通过。测试环境为 Node 26.4.0、macOS arm64；Node 22/24 的 GitHub Actions 结果仍须在推送后确认。
+- CI 改为浅克隆当前版本，校验只依赖索引和 blob，不再为此下载完整历史。源侧与 MCP 同时拒绝保留 marker `.codex-skills.tree.json` 及其子路径。
+
+下一阶段优先评估每技能归档分发，减少大技能 N 个文件请求及镜像竞速放大；在设计完成和实测前不承诺“所有技能 15 秒以内”。metadata 的 aliases/tags 补齐可作为单独的检索质量迭代。

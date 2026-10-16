@@ -3,7 +3,7 @@
 日期：2026-10-16（Asia/Shanghai）  
 范围：第一阶段为 `/Users/zz/codex-skills-mcp` 的服务端、缓存、搜索、OpenAI 扩展、App 与分发链。用户随后授权联动 `/Users/zz/codexproject` 技能源；源仓库联合审查正在进行，本记录待其结果及最终集成验证增补。
 
-当前为本地未发布的 beta.4 工作区，未推送、未发布 npm 或插件。下文的性能与包体数据是本次本地测量快照，不代表已经上线的版本。
+本文保留 beta.4 发布前的审计快照。beta.4 此后已由用户发布到 npm beta 通道，接手复审也已核对 registry；下文性能与包体数据仍只代表当时的本地测量。后续联合修正和最新验收状态见 [BETA-5-REVIEW.md](BETA-5-REVIEW.md)。
 
 ## 已落地的主要改进
 
@@ -32,7 +32,7 @@
 - OpenAI MCP Extensions 与官方 Bits & Bolts 示例：保留轻量 JSON-RPC transport，由控制器显式完成 UI 握手；同步宿主主题；在卸载时清理请求与监听器；样式和脚本内联到单文件 HTML。
 - 分发验收：从生成的 npm 包与插件入口实际完成 stdio 协议工作流，核对资源随包分发，避免仅检查源码编译。
 
-公开官方参考链接见本节后续增补；对应来源由并行参考审计核验。
+官方参考：[MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)、[MCP Apps 规范与 SDK](https://github.com/modelcontextprotocol/ext-apps)。beta.5 历史内容回取依据 [GitHub Git blobs API](https://docs.github.com/en/rest/git/blobs#get-a-blob)，并实测其 raw media type。
 
 ## 搜索性能基准
 

@@ -7,7 +7,10 @@
 
 - `codexproject` 新增 Git staging 驱动的 `scripts/build_file_indexes.py`，为 290 个非根技能生成内容寻址 catalog，并新增 CI `--check` 门禁。
 - MCP 严格校验 manifest `file_index`，冷物化优先读取本地/远端 immutable catalog，校验 SHA-256、结构与清单元数据；旧清单或 catalog 故障自动回退 GitHub Tree API。
-- 新增 catalog 正常链路、零 API 调用、热缓存零请求、损坏修复与 API 兜底回归；全量测试 68/68 通过。
+- 接手复审修复 catalog 版本切换、未完成缓存等长旧字节复用、兜底误认证新版、镜像校验时序、历史 blob 恢复与执行权限；已知 SHA 的更新无需先串行等待直连。
+- App 将附件结果与预览状态分开；工具明确区分未验证版本、缺文件与完整可执行缓存。
+- MCP 全量回归 90/90、源库 Python 回归 23/23，npm/插件两个产物的 stdio 验收通过，生产依赖审计 0 漏洞。
+- 新增 `scripts/check-remote-catalog.mjs`：发布前可用本地 manifest/catalog 配合真实远端文件联调；发布后验证全远端路径，自动使用并清理隔离缓存。
 - 详见 [BETA-5-REVIEW.md](BETA-5-REVIEW.md)。
 
 ## v1.5.0-beta.4 — 搜索、缓存、协议与 App 全链路优化（2026-10-16，已发布 beta 预发布）
