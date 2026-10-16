@@ -107,7 +107,7 @@ node scripts/check-remote-catalog.mjs --metadata-dir /Users/zz/codexproject/code
 - MCP：`npm test` 90/90；`npm run build:plugin` 与 `npm run check:package` 通过；npm 包及插件入口各完成 2/2 stdio 验收。
 - 依赖：`npm audit --omit=dev` 返回 0 vulnerabilities。
 - 源库：Python 生成器/校验器回归 23/23；`validate_manifest.py` 全库通过（两项既有悬空链接警告）；builder `--check` 的 `catalogs_changed=0`、`manifest_changed=false`。
-- 两仓 `git diff --check` 通过。测试环境为 Node 26.4.0、macOS arm64；Node 22/24 的 GitHub Actions 结果仍须在推送后确认。
+- 两仓 `git diff --check` 通过。本地测试环境为 Node 26.4.0、macOS arm64；Node 22/24 的 GitHub Actions 随后通过，见发布验收记录。
 - CI 改为浅克隆当前版本，校验只依赖索引和 blob，不再为此下载完整历史。源侧与 MCP 同时拒绝保留 marker `.codex-skills.tree.json` 及其子路径。
 
 下一阶段优先评估每技能归档分发，减少大技能 N 个文件请求及镜像竞速放大；在设计完成和实测前不承诺“所有技能 15 秒以内”。metadata 的 aliases/tags 补齐可作为单独的检索质量迭代。
@@ -124,3 +124,12 @@ node scripts/check-remote-catalog.mjs --metadata-dir /Users/zz/codexproject/code
 | webapp-testing | 6 / 22,518 | 1,395.79 ms | 0.55 ms | 35 |
 
 正常链路零 GitHub API、热读零请求；所有文件长度、Git blob SHA、catalog SHA-256、执行权限均通过校验。上述为单次网络样本；HTTP 计数包含镜像竞速及取消尝试。源仓库门禁：[Codex Skills catalog](https://github.com/Zhan-ZhangZ/codexprojec/actions/runs/38923297457)。
+
+## 发布验收（已完成）
+
+- 源仓库 `bd2ad1b91` 的 GitHub Actions 成功：23 项 Python 回归，291 条目/290 catalogs/102,737 文件的元数据与 Git staging 一致性校验通过。保留两个既有悬空链接警告。
+- MCP 发布提交 `bb2c96ed575621d9a981d26fb20794cee47d4c9a` 的 [Node 22/24 CI](https://github.com/Zhan-ZhangZ/codex-skills-mcp/actions/runs/38923661045) 两组均成功，覆盖 npm ci、90 项测试、插件构建、两个产物的 stdio 验收。
+- `npm publish --tag beta` 在用户完成 npm 二次验证后成功；registry 确认 `beta=1.5.0-beta.5`、`latest=1.4.2`，包 `gitHead` 与上述发布提交一致。Tarball SHA-1：`5f8754b9940bba514c38f8a00d9ccc05effc976e`，87 文件、压缩约 113.6 kB。
+- `node scripts/check-published-package.mjs 1.5.0-beta.5` 在独立临时目录及独立 npm cache 安装 registry 的精确版本；生产依赖独立解析，CLI/stdio 2/2 通过。随后把同一远端 smoke helper 指向安装包 dist，再次验证完整公网 catalog 链路。临时安装与技能缓存结束后均删除。
+- 安装包实测 human-writing：13 文件/100,786 字节，冷读 1,857.03ms、热读 0.75ms，零 GitHub API、热读零请求，全部哈希与执行位通过。仍为单次公网样本，不是 SLA。
+- 真实 ChatGPT 宿主视觉验收与预发布使用反馈继续跟进；后续性能工作的测量依据见 [NEXT-PERFORMANCE-REVIEW.md](NEXT-PERFORMANCE-REVIEW.md)。

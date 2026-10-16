@@ -3,7 +3,7 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
-## 1.5.0-beta.5 — 源仓库 immutable file catalog 联动（2026-10-16）
+## 1.5.0-beta.5 — 源仓库 immutable file catalog 联动（2026-10-16，已发布 beta）
 
 - `codexproject` 新增 Git staging 驱动的 `scripts/build_file_indexes.py`，为 290 个非根技能生成内容寻址 catalog，并新增 CI `--check` 门禁。
 - MCP 严格校验 manifest `file_index`，冷物化优先读取本地/远端 immutable catalog，校验 SHA-256、结构与清单元数据；旧清单或 catalog 故障自动回退 GitHub Tree API。
@@ -11,6 +11,7 @@
 - App 将附件结果与预览状态分开；工具明确区分未验证版本、缺文件与完整可执行缓存。
 - MCP 全量回归 90/90、源库 Python 回归 23/23，npm/插件两个产物的 stdio 验收通过，生产依赖审计 0 漏洞。
 - 新增 `scripts/check-remote-catalog.mjs`：发布前可用本地 manifest/catalog 配合真实远端文件联调；发布后验证全远端路径，自动使用并清理隔离缓存。
+- 源库 CI、MCP Node 22/24 CI 和完整公网 catalog 冒烟通过后发布至 npm beta；隔离安装 registry 包后再次通过 CLI、stdio、远端下载与热缓存校验。发布版本对应 `bb2c96e`，`latest` 保持 1.4.2。
 - 详见 [BETA-5-REVIEW.md](BETA-5-REVIEW.md)。
 
 ## v1.5.0-beta.4 — 搜索、缓存、协议与 App 全链路优化（2026-10-16，已发布 beta 预发布）
