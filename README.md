@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-一个独立的 MCP Server，为 [codex-skills](https://github.com/Zhan-ZhangZ/codex-skills) 技能库提供标准化的 AI 工具接入协议。
+一个独立的 MCP Server，为 [codexproject 技能源](https://github.com/Zhan-ZhangZ/codexprojec/tree/main/codex-skills)提供标准化的 AI 工具接入协议。
 
 - **无需先下载全部技能文件**：启动只拉取轻量清单，技能全文按需加载（beta.5 源清单约 245 KiB）；
 - **技能与分类持续更新**：目录数量以实时清单为准，内容按需获取；
@@ -23,9 +23,17 @@
 | **自动网络加速** | 官方加速端点优先，延迟加入 GitHub / CDN / 公共镜像竞速；完整正文通过校验后才接受 |
 | **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
 
+## beta.6 开发迭代（尚未发布）
+
+当前源码版本为 **1.5.0-beta.6**，插件版本为 **0.3.6**；npm 的 `beta` 仍为下方已发布的 beta.5。
+
+- 资源预览保持完整技能物化，读取说明时跳过未使用的目录和依赖扫描。
+- 文件镜像短期复用通过完整性校验的获胜节点，同时保持原节点的启动时间；故障立即切换，`--no-hedge` 保留全量竞速。
+- 可复现热读和公网 A/B 基准见 [beta.6 审查记录](docs/BETA-6-REVIEW.md)。
+
 ## beta.5 改进（2026-10-16）
 
-本轮版本为 **1.5.0-beta.5**，需要 **Node.js 22+**，通过 npm 的 `beta` 预发布通道分发。本版新增源仓库 immutable file catalog 联动。审计依据见 [BETA-5 审查记录](docs/BETA-5-REVIEW.md)，beta.4 服务端优化见 [BETA-4 审查记录](docs/BETA-4-REVIEW.md)。
+已发布版本为 **1.5.0-beta.5**，需要 **Node.js 22+**，通过 npm 的 `beta` 预发布通道分发。本版新增源仓库 immutable file catalog 联动。审计依据见 [BETA-5 审查记录](docs/BETA-5-REVIEW.md)，beta.4 服务端优化见 [BETA-4 审查记录](docs/BETA-4-REVIEW.md)。
 
 体验预发布版本：`npx -y codex-skills-mcp@beta`；正式通道仍使用 `@latest`。
 
@@ -81,8 +89,8 @@ node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
 
 ```bash
 curl http://localhost:3456/health
-# 预期输出
-{"status":"ok","name":"codex-skills-mcp","version":"1.2.1","skills":181}
+# 示例输出；版本和技能数量由实际服务决定
+{"status":"ok","name":"codex-skills-mcp","version":"1.5.0-beta.6","skills":291}
 ```
 
 ## 客户端配置
@@ -178,7 +186,7 @@ flowchart LR
 
 ### 网络加速（并发竞速）
 
-技能文件默认先尝试官方加速端点，延迟后将公共节点加入竞速。完整响应体通过大小和 Git blob SHA 校验后才可胜出；清单与内容更新优先读取 GitHub 权威源。可用 `--no-hedge` 立即并发所有节点：
+技能文件默认立即尝试官方加速端点，400ms 后启动其余节点；最近五分钟内经完整性校验的获胜节点也可立即启动，减少它在后续文件上的等待。实际故障立即触发后备节点。已知文件的完整响应体通过大小和 Git blob SHA 校验后才可胜出；清单更新优先读取 GitHub 权威源。关闭官方端点或使用 `--no-hedge` 时，所有启用节点立即竞速：
 
 1. **官方加速端点** `gh.251716.xyz`（自建于香港的 raw.githubusercontent.com 只读反向代理，大陆方向 RTT 最低，小文件场景最快）；
 2. **GitHub 官方直连**；
@@ -186,7 +194,7 @@ flowchart LR
 4. **gh-proxy.com**；
 5. **ghfast.top**。
 
-单个节点失败或变慢不影响整体——竞速天然容错。
+单个节点失败后会切换到其他节点；延迟取决于网络和后备节点状态。获胜节点复用有助于减少重复尝试，慢响应时仍可能启动全部节点。
 
 #### 官方加速端点披露
 
@@ -343,7 +351,7 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | `--port` | `3456` | HTTP 端口，0–65535；0 自动选择空闲端口 |
 | `--cache-dir` | `~/.codex-skills-cache` | 缓存目录，也可用 `CODEX_SKILLS_CACHE_DIR` |
 | `--download-concurrency` | `16` | 技能文件并发下载数，1–64 |
-| `--download-timeout` | `30` | 单请求超时秒数，1–300，覆盖完整正文 |
+| `--download-timeout` | `30` | 请求/单轮镜像竞速超时秒数，1–300，覆盖完整正文；大文件自动延长，blob 回退单独计时 |
 | `--soft-deadline-seconds` | `55` | 无 progress token 请求的响应期限；0 禁用 |
 | `--hard-deadline-seconds` | `285` | 所有下载调用的响应期限；0 禁用 |
 | `--no-official-mirror` | 关闭 | 禁用官方加速端点 |

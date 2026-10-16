@@ -1,0 +1,272 @@
+{
+  "measuredAt": "2026-10-16T15:50:31.192Z",
+  "node": "v26.4.0",
+  "platform": "darwin-arm64",
+  "runtimes": {
+    "baseline": "/var/folders/_l/64fzznvj755c2l5mr4c61p6h0000gn/T/codex-beta5-baseline-a9iBBB/dist",
+    "candidate": "/Users/zz/codex-skills-mcp/dist"
+  },
+  "method": "Alternating separate processes, isolated disk caches, fully remote manifest/catalog/files; requests include cancelled losers; small sample, no production SLA.",
+  "summary": [
+    {
+      "name": "human-writing",
+      "variant": "baseline",
+      "samples": 3,
+      "coldP50Ms": 1758.28,
+      "coldMaxMs": 2033.6,
+      "requestsP50": 70,
+      "warmP50Ms": 0.29
+    },
+    {
+      "name": "human-writing",
+      "variant": "candidate",
+      "samples": 3,
+      "coldP50Ms": 1184.23,
+      "coldMaxMs": 2744.74,
+      "requestsP50": 15,
+      "warmP50Ms": 0.27
+    },
+    {
+      "name": "superpowers",
+      "variant": "baseline",
+      "samples": 3,
+      "coldP50Ms": 4206.94,
+      "coldMaxMs": 6267.62,
+      "requestsP50": 285,
+      "warmP50Ms": 1.08
+    },
+    {
+      "name": "superpowers",
+      "variant": "candidate",
+      "samples": 3,
+      "coldP50Ms": 5077.65,
+      "coldMaxMs": 5110.18,
+      "requestsP50": 121,
+      "warmP50Ms": 0.91
+    }
+  ],
+  "samples": [
+    {
+      "round": 1,
+      "variant": "baseline",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 1758.28,
+      "warmMs": 0.29,
+      "networkRequests": 70,
+      "requestsByHost": {
+        "gh.251716.xyz": 14,
+        "raw.githubusercontent.com": 14,
+        "cdn.jsdelivr.net": 14,
+        "gh-proxy.com": 14,
+        "ghfast.top": 14
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 689.47,
+      "warmMs": 0.27,
+      "networkRequests": 15,
+      "requestsByHost": {
+        "gh.251716.xyz": 1,
+        "raw.githubusercontent.com": 14
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 1,
+      "variant": "baseline",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 3917.91,
+      "warmMs": 1.37,
+      "networkRequests": 285,
+      "requestsByHost": {
+        "gh.251716.xyz": 57,
+        "raw.githubusercontent.com": 57,
+        "cdn.jsdelivr.net": 57,
+        "gh-proxy.com": 57,
+        "ghfast.top": 57
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 5110.18,
+      "warmMs": 0.91,
+      "networkRequests": 121,
+      "requestsByHost": {
+        "gh.251716.xyz": 25,
+        "raw.githubusercontent.com": 57,
+        "cdn.jsdelivr.net": 13,
+        "gh-proxy.com": 13,
+        "ghfast.top": 13
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 2744.74,
+      "warmMs": 0.37,
+      "networkRequests": 35,
+      "requestsByHost": {
+        "gh.251716.xyz": 12,
+        "raw.githubusercontent.com": 14,
+        "cdn.jsdelivr.net": 3,
+        "gh-proxy.com": 3,
+        "ghfast.top": 3
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 1651.17,
+      "warmMs": 0.28,
+      "networkRequests": 70,
+      "requestsByHost": {
+        "gh.251716.xyz": 14,
+        "raw.githubusercontent.com": 14,
+        "cdn.jsdelivr.net": 14,
+        "gh-proxy.com": 14,
+        "ghfast.top": 14
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 5077.65,
+      "warmMs": 0.98,
+      "networkRequests": 120,
+      "requestsByHost": {
+        "gh.251716.xyz": 27,
+        "raw.githubusercontent.com": 49,
+        "cdn.jsdelivr.net": 13,
+        "gh-proxy.com": 19,
+        "ghfast.top": 12
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 4206.94,
+      "warmMs": 0.98,
+      "networkRequests": 285,
+      "requestsByHost": {
+        "gh.251716.xyz": 57,
+        "raw.githubusercontent.com": 57,
+        "cdn.jsdelivr.net": 57,
+        "gh-proxy.com": 57,
+        "ghfast.top": 57
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 2033.6,
+      "warmMs": 0.32,
+      "networkRequests": 70,
+      "requestsByHost": {
+        "gh.251716.xyz": 14,
+        "raw.githubusercontent.com": 14,
+        "cdn.jsdelivr.net": 14,
+        "gh-proxy.com": 14,
+        "ghfast.top": 14
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 1184.23,
+      "warmMs": 0.26,
+      "networkRequests": 15,
+      "requestsByHost": {
+        "gh.251716.xyz": 1,
+        "raw.githubusercontent.com": 14
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 6267.62,
+      "warmMs": 1.08,
+      "networkRequests": 285,
+      "requestsByHost": {
+        "gh.251716.xyz": 57,
+        "raw.githubusercontent.com": 57,
+        "cdn.jsdelivr.net": 57,
+        "gh-proxy.com": 57,
+        "ghfast.top": 57
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 2794.89,
+      "warmMs": 0.84,
+      "networkRequests": 123,
+      "requestsByHost": {
+        "gh.251716.xyz": 18,
+        "raw.githubusercontent.com": 38,
+        "cdn.jsdelivr.net": 33,
+        "gh-proxy.com": 18,
+        "ghfast.top": 16
+      },
+      "localMetadataRequests": 0
+    }
+  ]
+}

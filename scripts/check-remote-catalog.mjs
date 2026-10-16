@@ -8,8 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { parseManifest } from '../dist/config.js';
-import { fetchManifest, ensureSkillFetched, readSkillCacheState } from '../dist/remote/github.js';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const { values } = parseArgs({ options: {
   'metadata-dir': { type: 'string' },
@@ -17,7 +16,11 @@ const { values } = parseArgs({ options: {
   repo: { type: 'string', default: 'Zhan-ZhangZ/codexprojec' },
   branch: { type: 'string', default: 'main' },
   path: { type: 'string', default: 'codex-skills' },
+  'runtime-dir': { type: 'string' },
 } });
+const runtime = values['runtime-dir'] ? resolve(values['runtime-dir']) : fileURLToPath(new URL('../dist/', import.meta.url));
+const { parseManifest } = await import(pathToFileURL(join(runtime, 'config.js')).href);
+const { fetchManifest, ensureSkillFetched, readSkillCacheState } = await import(pathToFileURL(join(runtime, 'remote/github.js')).href);
 const cache = mkdtempSync(join(tmpdir(), 'codex-catalog-smoke-'));
 const originalFetch = globalThis.fetch;
 const calls = [];
@@ -44,7 +47,9 @@ globalThis.fetch = async (url, options) => {
   return originalFetch(url, options);
 };
 try {
+  const manifestStart = performance.now();
   await fetchManifest(config, true);
+  const manifestMs = +(performance.now() - manifestStart).toFixed(2);
   const manifest = parseManifest(JSON.parse(readFileSync(config.manifestPath, 'utf8')));
   const indexed = manifest.filter(entry => entry.file_index);
   assert.ok(indexed.length > 0, 'Remote manifest has no file catalogs; publish the source catalogs first.');
@@ -82,10 +87,12 @@ try {
     results.push({ name, files: state.filesTotal, bytes: state.sizeBytes, executableFiles,
       coldMs: +coldMs.toFixed(2), warmMs: +warmMs.toFixed(2),
       networkRequests: coldCalls.filter(call => !call.local).length,
+      requestsByHost: Object.fromEntries([...new Set(coldCalls.filter(call => !call.local).map(call => call.host))]
+        .map(host => [host, coldCalls.filter(call => !call.local && call.host === host).length])),
       localMetadataRequests: coldCalls.filter(call => call.local).length });
   }
   console.log(JSON.stringify({ mode: metadataDir ? 'local-metadata-real-remote-files' : 'fully-remote',
-    manifestEntries: manifest.length, indexedSkills: indexed.length, results }, null, 2));
+    manifestEntries: manifest.length, indexedSkills: indexed.length, manifestMs, results }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(cache, { recursive: true, force: true });

@@ -4,6 +4,7 @@ import { resolve, dirname, join, basename, isAbsolute } from "node:path";
 import type { Config, ManifestEntry } from "../config.js";
 import { parseManifest } from "../config.js";
 import { logEvent } from "../lib/logger.js";
+import { DownloadHedger } from "./hedging.js";
 
 interface TreeFileEntry {
   /** Path relative to the skill directory, e.g. "README.md" or "skills/nature-reader/SKILL.md" */
@@ -197,6 +198,10 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
       await res.body?.cancel();
       if (res.ok && integrity) throw new Error(`Empty response for ${url}`);
       if (res.ok && expected && expected.size !== 0) throw new Error(`Empty response for ${expected.path}`);
+      if (res.ok && expected?.sha) {
+        const sha = createHash("sha1").update("blob 0").update(Buffer.from([0])).digest("hex");
+        if (sha !== expected.sha.toLowerCase()) throw new Error(`Git blob SHA mismatch for ${expected.path}`);
+      }
       return new Response(null, { status: res.status, statusText: res.statusText, headers: res.headers });
     }
     const chunks: Uint8Array[] = [];
@@ -250,30 +255,15 @@ async function fetchWithAuth(url: string, token?: string, timeout = 15000): Prom
   return res;
 }
 
-/**
- * How long the official endpoint gets as a head start before the public
- * nodes join the race (hedged request strategy). The official node's
- * mainland RTT P50 is ~330ms, so 400ms lets most of its fast responses
- * win outright while slow ones (bad Fastly IP hop, congestion) escalate
- * to the public race almost immediately.
- */
-const HEDGE_DELAY_MS = 400;
-
 interface DownloadNode {
   name: string;
   url: string;
   useAuth: boolean;
-  timeout: number;
 }
 
-/**
- * Advanced raw file downloader — hedged race:
- *  - With the official endpoint + hedge enabled (default), it fires FIRST
- *    and the public nodes only join after HEDGE_DELAY_MS (or immediately
- *    if it fails fast). This keeps the official node's narrow uplink pipe
- *    free of guaranteed-loser race traffic while keeping instant fallback.
- *  - Otherwise all nodes race in parallel and the first success wins.
- */
+const downloadHedger = new DownloadHedger();
+
+/** Race verified responses without delaying the original fallback schedule. */
 async function fetchRawWithFallback(config: Config, path: string, expected?: TreeFileEntry, integrity?: ResponseIntegrity): Promise<Response> {
   const expectedSize = expected?.size;
   const encodedPath = path.split("/").map(encodeURIComponent).join("/");
@@ -290,126 +280,54 @@ async function fetchRawWithFallback(config: Config, path: string, expected?: Tre
       ? [{
           name: "Official CN",
           url: `https://gh.251716.xyz/${config.githubRepo}/${encodedBranch}/${encodedPath}`,
-          useAuth: false,
-          timeout: dynamicTimeout
+          useAuth: false
         }]
       : []),
     // Official direct (fastest with a working route or VPN to GitHub)
     {
       name: "GitHub Official",
       url: rawUrl(config, path),
-      useAuth: true,
-      timeout: dynamicTimeout
+      useAuth: true
     },
     // jsDelivr CDN (fastest in CN without VPN)
     {
       name: "jsDelivr",
       url: `https://cdn.jsdelivr.net/gh/${config.githubRepo}@${encodedBranch}/${encodedPath}`,
-      useAuth: false,
-      timeout: dynamicTimeout
+      useAuth: false
     },
     // gh-proxy.com
     {
       name: "gh-proxy.com",
       url: `https://gh-proxy.com/${rawUrl(config, path)}`,
-      useAuth: false,
-      timeout: dynamicTimeout
+      useAuth: false
     },
     // ghfast.top
     {
       name: "ghfast.top",
       url: `https://ghfast.top/${rawUrl(config, path)}`,
-      useAuth: false,
-      timeout: dynamicTimeout
+      useAuth: false
     }
   ];
 
-  const official = config.useOfficialMirror ? nodes[0] : undefined;
-  const rest = official ? nodes.slice(1) : nodes;
-  const hedged = !!(official && config.hedgeEnabled);
-
-  const controllers: AbortController[] = [];
-  let settled = false;
-  let pending = 0;
-  let restLaunched = false;
-  const failures: string[] = [];
-  let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const launchRest = () => {
-    if (restLaunched || settled) return;
-    restLaunched = true;
-    for (const n of rest) launch(n);
-  };
-
-  const fail = (nodeName: string, message: string) => {
-    pending -= 1;
-    failures.push(`[${nodeName}] ${message}`);
-    if (settled || pending > 0) return;
-    if (hedged && !restLaunched) {
-      // The official node died before the hedge window elapsed — escalate
-      // to the public race immediately instead of rejecting early.
-      launchRest();
-      return;
-    }
-    rejectAll();
-  };
-
-  let rejectFn: ((reason: Error) => void) | undefined;
-  const rejectAll = () => {
-    settled = true;
-    clearTimeout(hedgeTimer);
-    rejectFn?.(new Error(`All download nodes failed to fetch ${path}. ${failures.join("; ")}`));
-  };
-
-  const launch = (node: DownloadNode) => {
-    pending += 1;
-    const controller = new AbortController();
-    controllers.push(controller);
+  const result = await downloadHedger.run({
+    nodes,
+    // Scope routing to this cache/source and transport settings, never a token.
+    key: JSON.stringify([operationKey(config), config.useOfficialMirror, !!config.githubToken]),
+    path,
+    enabled: config.hedgeEnabled && config.useOfficialMirror,
+    verified: !!(expected?.sha || integrity),
+    timeoutMs: dynamicTimeout,
+  }, async (node, signal, remainingMs) => {
     const headers: Record<string, string> = {};
-    if (node.useAuth && config.githubToken) {
-      headers["Authorization"] = `Bearer ${config.githubToken}`;
-    }
-    fetchWithTimeout(node.url, { headers, signal: controller.signal }, node.timeout, expected, integrity).then(
-      (res) => {
-        if (!res.ok) {
-          fail(node.name, `HTTP ${res.status}`);
-          return;
-        }
-        if (settled) {
-          controller.abort();
-          return;
-        }
-        settled = true;
-        clearTimeout(hedgeTimer);
-        for (const c of controllers) {
-          if (c !== controller) c.abort();
-        }
-        if (node.name === "Official CN") {
-          console.error(`[codex-skills-mcp] official endpoint won: ${path.split("/").pop()}`);
-        }
-        resolveFn?.(res);
-      },
-      (error: any) => {
-        fail(node.name, error?.message || String(error));
-      }
-    );
-  };
-
-  let resolveFn: ((res: Response) => void) | undefined;
-
-  return await new Promise<Response>((resolve, reject) => {
-    resolveFn = resolve;
-    rejectFn = reject;
-    if (hedged && official) {
-      launch(official);
-      hedgeTimer = setTimeout(() => {
-        if (!settled) launchRest();
-      }, HEDGE_DELAY_MS);
-    } else {
-      restLaunched = true;
-      for (const n of nodes) launch(n);
-    }
+    if (node.useAuth && config.githubToken) headers.Authorization = `Bearer ${config.githubToken}`;
+    const response = await fetchWithTimeout(node.url, { headers, signal }, remainingMs, expected, integrity);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response;
   });
+  if (result.node.name === "Official CN") {
+    console.error(`[codex-skills-mcp] official endpoint won: ${path.split("/").pop()}`);
+  }
+  return result.value;
 }
 
 /**

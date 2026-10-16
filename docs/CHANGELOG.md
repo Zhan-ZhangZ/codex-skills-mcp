@@ -3,6 +3,14 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
+## 1.5.0-beta.6 — 轻量预览与下载路由复用（开发版，尚未发布）
+
+- 资源预览保留完整物化，使用 `readInstructions` 跳过目录、子技能和依赖扫描；10,851 文件 fixture 预览 p50 从 810.446ms 降至 138.029ms。完整 `read_skill` 的结构输出保持。
+- 下载调度拆成可测试的 `DownloadHedger`，复用已验证 winner，同时保留原默认节点和 400ms 后备时间；增加路由 TTL/容量、共同 race deadline、取消清理与并发路由版本保护。
+- 保留 SHA/长度校验、token 域隔离、`--no-hedge` 全竞速；补齐零字节无正文响应的 Git blob SHA 检查。
+- 新增 10 项预览物化回归、23 项确定性调度与传输回归；全量 123/123 通过。
+- 增加可复现 loader 基准及真实远端交替 A/B，保留原始样本与模块摘要；细节和验收边界见 [BETA-6-REVIEW.md](BETA-6-REVIEW.md)。
+
 ## 1.5.0-beta.5 — 源仓库 immutable file catalog 联动（2026-10-16，已发布 beta）
 
 - `codexproject` 新增 Git staging 驱动的 `scripts/build_file_indexes.py`，为 290 个非根技能生成内容寻址 catalog，并新增 CI `--check` 门禁。

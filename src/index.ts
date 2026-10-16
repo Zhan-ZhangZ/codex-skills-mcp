@@ -163,7 +163,7 @@ Usage: codex-skills-mcp [options]
   --no-official-mirror           Disable the official acceleration endpoint
   --no-hedge                     Race all download nodes immediately
   --download-concurrency <1–64>  Parallel file downloads (default: 16)
-  --download-timeout <1–300>     Per-request seconds (default: 30)
+  --download-timeout <1–300>     Request/race seconds (default: 30)
   --manifest-ttl <seconds>       Cache TTL (0–604800; 0 disables expiry)
   --manifest-poll <seconds>      Background freshness check (0–3600)
   --soft-deadline-seconds <n>    No-progress call deadline (default: 55)

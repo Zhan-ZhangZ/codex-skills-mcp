@@ -123,7 +123,7 @@ test("invalid persisted fields and invalid updates leave effective settings inta
 
 test("mention links and resource catalog round-trip names with URI-reserved characters", async (t) => {
   const loaded = [];
-  const loader = { readSkill: async (entry) => { loaded.push(entry.name); return { instructions: `Instructions for ${entry.name}` }; } };
+  const loader = { readInstructions: async (entry) => { loaded.push(entry.name); return `Instructions for ${entry.name}`; } };
   const client = await session(t, (server, extensions) => registerOpenAIMentions(
     server, extensions, config(), new SkillSearchEngine(manifest), loader
   ));
@@ -159,7 +159,7 @@ test("supporting resource paths decode once and malformed encoding fails cleanly
 
 test("resource materialization has a bounded deadline and can be retried", async (t) => {
   let ready = false;
-  const loader = { readSkill: async () => ready ? { instructions: "ready" } : new Promise(() => {}) };
+  const loader = { readInstructions: async () => ready ? "ready" : new Promise(() => {}) };
   const client = await session(t, (server, extensions) => registerOpenAIMentions(
     server, extensions, config({ softDeadlineMs: 20, hardDeadlineMs: 80 }), new SkillSearchEngine(manifest), loader
   ));
@@ -185,7 +185,7 @@ test("supporting file reads honor the hard deadline when soft deadline is disabl
 test("cancelled resource reads settle promptly without keeping a deadline timer alive", async (t) => {
   let started;
   const downloadStarted = new Promise((resolve) => { started = resolve; });
-  const loader = { readSkill: async () => { started(); return new Promise(() => {}); } };
+  const loader = { readInstructions: async () => { started(); return new Promise(() => {}); } };
   const client = await session(t, (server, extensions) => registerOpenAIMentions(
     server, extensions, config({ softDeadlineMs: 55000, hardDeadlineMs: 285000 }), new SkillSearchEngine(manifest), loader
   ));

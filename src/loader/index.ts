@@ -91,23 +91,29 @@ export class SkillLoader {
   }
 
   /**
-   * Read a skill's SKILL.md + structure + dependencies.
+   * Read instructions after the same complete materialization used by
+   * readSkill. Resource previews do not need a directory or dependency scan.
    */
-  async readSkill(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<ReadSkillResult> {
+  async readInstructions(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<string> {
     if (this.config.isRemote) {
       await this.ensureRemoteFetched(entry, onProgress);
     }
 
     const skillPath = this.resolveSkillPath(entry);
 
-    // Read SKILL.md
-    let instructions = "";
     const skillMdPath = resolveWithin(skillPath, "SKILL.md");
-    if (existsSync(skillMdPath)) {
-      instructions = readFileSync(skillMdPath, "utf-8");
-    } else {
+    if (!existsSync(skillMdPath)) {
       throw new Error(`SKILL.md not found for ${entry.name}`);
     }
+    return readFileSync(skillMdPath, "utf-8");
+  }
+
+  /**
+   * Read a skill's SKILL.md + structure + dependencies.
+   */
+  async readSkill(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<ReadSkillResult> {
+    const instructions = await this.readInstructions(entry, onProgress);
+    const skillPath = this.resolveSkillPath(entry);
 
     // Scan structure
     const structure = this.scanStructure(skillPath, entry);

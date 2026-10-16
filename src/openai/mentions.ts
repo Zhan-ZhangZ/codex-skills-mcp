@@ -249,7 +249,7 @@ export function registerOpenAIMentions(
   );
 
   // Resolve skill:// URIs mentioned in the composer. Reading materializes the
-  // skill (same code path as read_skill) and serves its SKILL.md.
+  // complete skill, then serves SKILL.md without scanning unused metadata.
   server.registerResource(
     "skill",
     new ResourceTemplate("skill://{name}", {
@@ -338,7 +338,7 @@ export function registerOpenAIMentions(
         }
 
         const selectedEntry = entry;
-        const result = await readWithDeadline(() => loader.readSkill(selectedEntry), config, extra.signal);
+        const instructions = await readWithDeadline(() => loader.readInstructions(selectedEntry), config, extra.signal);
         if (typeof searchEngine.recordUsage === "function") {
           searchEngine.recordUsage(entry.name);
         }
@@ -355,7 +355,7 @@ export function registerOpenAIMentions(
             {
               uri: uri.href,
               mimeType: "text/markdown",
-              text: result.instructions + hint,
+              text: instructions + hint,
             },
           ],
         };

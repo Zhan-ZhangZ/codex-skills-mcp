@@ -19,11 +19,9 @@ export interface Config {
    */
   useOfficialMirror: boolean;
   /**
-   * Hedged download strategy: fire the official endpoint first, and only
-   * join the public nodes into the race if it has not succeeded within
-   * HEDGE_DELAY_MS (see remote/github.ts). Avoids wasting the official
-   * node's narrow uplink pipe on guaranteed-loser race traffic while
-   * keeping instant public fallback. Disable with --no-hedge.
+   * Keep the primary and 400ms fallback schedule, while also starting a
+   * short-lived integrity-verified winner immediately. Explicit failures
+   * start all fallbacks. Disable with --no-hedge to race all nodes at once.
    */
   hedgeEnabled: boolean;
   /**
