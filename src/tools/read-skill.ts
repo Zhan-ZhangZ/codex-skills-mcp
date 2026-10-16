@@ -82,8 +82,9 @@ export function registerReadSkill(
             searchEngine.recordUsage(entry.name);
           }
 
-          // Deep cache check right after materialization (read-only, fast)
-          const cache = loader.cacheState(entry);
+          // Reuse the request-bound state checked by the loader. Older custom
+          // loaders can still supply only the original instructions result.
+          const cache = result.cache ?? loader.cacheState(entry);
 
           // Format structure as a compact tree
           const structureStr = formatTree(result.structure.files, "");

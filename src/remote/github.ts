@@ -5,6 +5,7 @@ import type { Config, ManifestEntry } from "../config.js";
 import { parseManifest } from "../config.js";
 import { logEvent } from "../lib/logger.js";
 import { DownloadHedger } from "./hedging.js";
+import { fetchRemoteManifest, type ManifestCacheSnapshot, type ManifestValidators } from "./manifest-fetch.js";
 
 interface TreeFileEntry {
   /** Path relative to the skill directory, e.g. "README.md" or "skills/nature-reader/SKILL.md" */
@@ -759,13 +760,6 @@ function isFileUpToDate(localPath: string, expectedSize: number, mode?: string):
   }
 }
 
-/** Verify every recorded file exists with the expected size */
-function areFilesUpToDate(tree: SkillTreeCache, skillLocalPath: string): boolean {
-  return tree.files.every((file) =>
-    isFileUpToDate(localFilePath(skillLocalPath, file.path), file.size, file.mode)
-  );
-}
-
 /** Incomplete markers do not attest existing bytes, even when sizes match. */
 async function matchesBlob(localPath: string, file: TreeFileEntry): Promise<boolean> {
   if (!file.sha) return false;
@@ -900,10 +894,9 @@ export async function fetchRootSkillMd(config: Config): Promise<string> {
 
 /** Sidecar recording manifest validation state for conditional polling. */
 interface ManifestMeta {
-  /** ETag of the last authoritative (direct) manifest response, if known */
-  etag?: string;
-  /** Last-Modified header value of the last direct response, if known */
-  lastModified?: string;
+  /** Conditional validators bound to an exact endpoint URL and cached body. */
+  validators?: ManifestValidators;
+  source?: CacheSource;
   /** Epoch ms of the last freshness validation (poll, successful or not) */
   validatedAt?: number;
 }
@@ -918,9 +911,21 @@ export function readManifestMeta(config: Config): ManifestMeta {
   try {
     const value = JSON.parse(readFileSync(manifestMetaPath(config), "utf-8"));
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    if (value.source && !sameSource(value.source, config)) return {};
+    const validators: ManifestValidators = {};
+    for (const endpoint of ["raw", "contents"] as const) {
+      const candidate = value.validators?.[endpoint];
+      if (!candidate || typeof candidate.url !== "string" ||
+          typeof candidate.bodySha256 !== "string" || !/^[a-f0-9]{64}$/.test(candidate.bodySha256)) continue;
+      validators[endpoint] = {
+        url: candidate.url, bodySha256: candidate.bodySha256,
+        etag: typeof candidate.etag === "string" ? candidate.etag : undefined,
+        lastModified: typeof candidate.lastModified === "string" ? candidate.lastModified : undefined,
+      };
+    }
     return {
-      etag: typeof value.etag === "string" ? value.etag : undefined,
-      lastModified: typeof value.lastModified === "string" ? value.lastModified : undefined,
+      validators,
+      source: value.source,
       validatedAt: Number.isFinite(value.validatedAt) ? value.validatedAt : undefined,
     };
   } catch {
@@ -931,9 +936,23 @@ export function readManifestMeta(config: Config): ManifestMeta {
 function writeManifestMeta(config: Config, meta: ManifestMeta): void {
   try {
     mkdirSync(config.skillsDir, { recursive: true });
-    atomicWrite(manifestMetaPath(config), JSON.stringify(meta, null, 2));
+    atomicWrite(manifestMetaPath(config), JSON.stringify({ ...meta, source: cacheSource(config) }, null, 2));
   } catch {
     // best-effort
+  }
+}
+
+/** Only valid same-source bytes may participate in conditional validation. */
+function cachedManifest(config: Config): ManifestCacheSnapshot | undefined {
+  if (!sameSource(readSourceCache(config), config)) return undefined;
+  try {
+    const text = readFileSync(config.manifestPath, "utf-8");
+    parseManifest(JSON.parse(text));
+    // Legacy etag/lastModified fields had no body binding. Upgrade them by
+    // requesting one unconditional authoritative response, never by guessing.
+    return { text, validators: readManifestMeta(config).validators };
+  } catch {
+    return undefined;
   }
 }
 
@@ -943,14 +962,8 @@ function writeManifestMeta(config: Config, meta: ManifestMeta): void {
  * may serve a valid same-source cache offline; an explicit refresh reports errors.
  */
 export async function fetchManifest(config: Config, force = false): Promise<boolean> {
-  let usableCache = false;
-  if (sameSource(readSourceCache(config), config)) {
-    try {
-      parseManifest(JSON.parse(readFileSync(config.manifestPath, "utf-8")));
-      usableCache = true;
-    } catch { /* an invalid cache must be fetched even inside its TTL */ }
-  }
-  if (!force && usableCache) {
+  const cached = cachedManifest(config);
+  if (!force && cached) {
     // Same remote source: honor TTL (0 = never refresh by age).
     if (config.manifestTTL === 0) return false;
     try {
@@ -963,10 +976,10 @@ export async function fetchManifest(config: Config, force = false): Promise<bool
     }
   }
   try {
-    await downloadManifest(config);
+    await downloadManifest(config, cached);
     return true;
   } catch (error) {
-    if (!force && usableCache) {
+    if (!force && cached) {
       logEvent("warn", "manifest_refresh_failed", {
         error: error instanceof Error ? error.message : String(error),
         detail: "Serving validated same-source manifest cache",
@@ -977,61 +990,16 @@ export async function fetchManifest(config: Config, force = false): Promise<bool
   }
 }
 
-async function downloadManifest(config: Config): Promise<void> {
-  const manifestPath = buildSkillRemotePath(config, "skills_manifest.json");
-  console.error(`[codex-skills-mcp] Fetching manifest...`);
-
-  // The manifest is the source of truth for what skills exist, so it must NOT
-  // race through CDN mirrors: jsDelivr etc. can serve a stale copy for hours
-  // after a repo update, and the stale copy often wins the race. Fetch the
-  // authoritative GitHub raw URL first, and only fall back to mirrors when
-  // the direct connection is unavailable (accepting possible staleness there).
-  const directUrl = rawUrl(config, manifestPath);
-  let res: Response;
-  let viaDirect = true;
-  try {
-    res = await fetchWithAuth(directUrl, config.githubToken, 20000);
-  } catch (directErr) {
-    viaDirect = false;
-    console.error(
-      `[codex-skills-mcp] Direct manifest fetch failed (${(directErr as Error).message}); falling back to mirror chain...`
-    );
-    res = await fetchRawWithFallback(config, manifestPath);
-  }
-  const text = await res.text();
-
-  // Validate before replacing the cache — never let a corrupt/empty response
-  // clobber a previously working manifest.
-  let skillCount = 0;
-  try {
-    const parsed = parseManifest(JSON.parse(text));
-    skillCount = parsed.length;
-  } catch (parseErr) {
-    console.error(
-      `[codex-skills-mcp] Warning: fetched manifest failed validation (${(parseErr as Error).message}); keeping existing cache.`
-    );
-    throw new Error(`Fetched manifest failed validation: ${(parseErr as Error).message}`);
-  }
-
-  atomicWrite(config.manifestPath, text);
+async function downloadManifest(config: Config, cached?: ManifestCacheSnapshot): Promise<void> {
+  console.error("[codex-skills-mcp] Fetching manifest...");
+  const result = await fetchRemoteManifest(config, { cached, authoritativeTimeoutMs: 20_000 });
+  atomicWrite(config.manifestPath, result.text);
   writeSourceCache(config);
-  // Record validation meta. ETag/Last-Modified only from the authoritative
-  // direct source — mirror-sourced manifests carry no validators so the next
-  // conditional poll corrects them via a full 200 (fixes stale-mirror drift).
-  const meta = readManifestMeta(config);
-  if (viaDirect) {
-    meta.etag = res.headers.get("etag") ?? undefined;
-    meta.lastModified = res.headers.get("last-modified") ?? undefined;
-  } else {
-    delete meta.etag;
-    delete meta.lastModified;
-  }
-  meta.validatedAt = Date.now();
-  writeManifestMeta(config, meta);
+  writeManifestMeta(config, { validators: result.validators, validatedAt: Date.now() });
   logEvent("info", "manifest_refresh", {
-    detail: `startup/ttl refresh: ${skillCount} skills (${viaDirect ? "direct" : "mirror"})`,
+    detail: `startup/ttl refresh: ${result.entries.length} skills (${result.source}${result.notModified ? " 304" : ""})`,
   });
-  console.error(`[codex-skills-mcp] Manifest refreshed: ${skillCount} skills`);
+  console.error(`[codex-skills-mcp] Manifest refreshed: ${result.entries.length} skills`);
 }
 
 /** In-process throttle so concurrent tool calls share one poll window. */
@@ -1039,8 +1007,8 @@ const manifestPollInflight = new Map<string, Promise<boolean>>();
 const manifestPollLastAttempt = new Map<string, number>();
 
 /**
- * Throttled conditional freshness check against the authoritative GitHub raw
- * URL (docs/IMPROVEMENT-MANIFEST-FRESHNESS.md §3). Runs at most once per
+ * Throttled conditional freshness check against GitHub raw and Contents
+ * endpoints (docs/IMPROVEMENT-MANIFEST-FRESHNESS.md §3). Runs at most once per
  * config.manifestPollMs; 304 → no-op; 200 → replace manifest; failures are
  * silent (search proceeds with the local index). Returns true when the
  * manifest content changed and the search index should be rebuilt.
@@ -1060,50 +1028,25 @@ export async function refreshManifestIfStale(config: Config): Promise<boolean> {
       return false; // validated recently — stay silent
     }
     manifestPollLastAttempt.set(key, now);
-
-    const headers: Record<string, string> = {};
-    if (meta.etag) headers["If-None-Match"] = meta.etag;
-    else if (meta.lastModified) headers["If-Modified-Since"] = meta.lastModified;
-    if (config.githubToken) headers["Authorization"] = `Bearer ${config.githubToken}`;
-
-    const manifestPath = buildSkillRemotePath(config, "skills_manifest.json");
-    const url = rawUrl(config, manifestPath);
+    const cached = cachedManifest(config);
 
     try {
-      logEvent("info", "manifest_poll", { detail: meta.etag ? "conditional (etag)" : "full (no validator)" });
-      const res = await fetchWithTimeout(url, { headers }, 4000);
-
-      if (res.status === 304) {
-        writeManifestMeta(config, { ...meta, validatedAt: Date.now() });
-        return false;
-      }
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const text = await res.text();
-      let skillCount = 0;
-      try {
-        const parsed = parseManifest(JSON.parse(text));
-        skillCount = parsed.length;
-      } catch {
-        throw new Error("fetched manifest failed validation");
-      }
-
-      const changed = !sourceMatches || readFileSync(config.manifestPath, "utf-8") !== text;
-      if (changed) atomicWrite(config.manifestPath, text);
-      writeSourceCache(config);
-      writeManifestMeta(config, {
-        etag: res.headers.get("etag") ?? undefined,
-        lastModified: res.headers.get("last-modified") ?? undefined,
-        validatedAt: Date.now(),
+      logEvent("info", "manifest_poll", { detail: "authoritative conditional refresh" });
+      const result = await fetchRemoteManifest(config, {
+        cached, authoritativeTimeoutMs: 4_000, allowMirrors: false,
       });
-      logEvent("info", "manifest_refresh", { detail: `poll: ${skillCount} skills (direct 200)` });
-      console.error(`[codex-skills-mcp] Manifest refreshed via poll: ${skillCount} skills`);
+      const changed = cached?.text !== result.text;
+      if (changed) atomicWrite(config.manifestPath, result.text);
+      writeSourceCache(config);
+      writeManifestMeta(config, { validators: result.validators, validatedAt: Date.now() });
+      logEvent("info", "manifest_refresh", {
+        detail: `poll: ${result.entries.length} skills (${result.source} ${result.notModified ? "304" : "200"})`,
+      });
+      if (changed) console.error(`[codex-skills-mcp] Manifest refreshed via poll: ${result.entries.length} skills`);
       return changed;
     } catch (err) {
-      // Never break the search because of a poll failure; throttle anyway.
-      writeManifestMeta(config, { ...meta, validatedAt: Date.now() });
+      // Throttle failures without attaching a new source to an old cache.
+      if (cached) writeManifestMeta(config, { ...meta, validatedAt: Date.now() });
       logEvent("warn", "manifest_poll_failed", {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -1276,28 +1219,42 @@ export async function ensureSkillFetched(
   config: Config,
   entry: ManifestEntry,
   onProgress?: ProgressCallback
-): Promise<void> {
+): Promise<SkillMaterialization> {
   const relPath = relativePath(entry.relative_path);
   const skillLocalPath = localFilePath(config.skillsDir, relPath);
   const cacheFile = localFilePath(skillLocalPath, TREE_CACHE_FILE);
   const key = operationKey(config, relPath);
 
-  const cached = readTree(cacheFile);
+  const snapshot = readTreeSnapshot(cacheFile);
+  const cached = snapshot.tree;
   if (cached && sameSource(cached.source, config) && cached.completedAt &&
-      isTreeValidationFresh(cached, config, entry) && areFilesUpToDate(cached, skillLocalPath)) return;
+      isTreeValidationFresh(cached, config, entry)) {
+    const inspected = inspectSkillCache(config, entry, skillLocalPath, snapshot);
+    if (inspected.cache.complete && markerIdentity(cacheFile) === snapshot.identity) {
+      return materializationReceipt(config, entry, cacheFile, snapshot.identity, inspected);
+    }
+  }
 
   await runExclusively(key, async () => {
-    const current = readTree(cacheFile);
-    if (current && sameSource(current.source, config) && current.completedAt) {
-      if (isTreeValidationFresh(current, config, entry)) {
-        await downloadMissing(config, relPath, current, skillLocalPath, onProgress);
-      } else if (!inRevalidateBackoff(revalidationKey(config, entry))) {
-        await revalidateSkillTree(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
+    beginMaterialization(cacheFile);
+    try {
+      const current = readTree(cacheFile);
+      if (current && sameSource(current.source, config) && current.completedAt) {
+        if (isTreeValidationFresh(current, config, entry)) {
+          await downloadMissing(config, relPath, current, skillLocalPath, onProgress);
+        } else if (!inRevalidateBackoff(revalidationKey(config, entry))) {
+          await revalidateSkillTree(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
+        }
+        return;
       }
-      return;
+      await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
+    } finally {
+      finishMaterialization(cacheFile);
     }
-    await doFetchSkill(config, entry, relPath, skillLocalPath, cacheFile, onProgress);
   });
+  const completed = readTreeSnapshot(cacheFile);
+  const inspected = inspectSkillCache(config, entry, skillLocalPath, completed);
+  return materializationReceipt(config, entry, cacheFile, completed.identity, inspected);
 }
 
 /** Inner fetch logic, called under the source-scoped deduplication lock. */
@@ -1354,6 +1311,154 @@ export interface SkillCacheState {
   catalogCurrent?: boolean;
 }
 
+export interface SkillMaterializedFile {
+  path: string;
+  size: number;
+  sha?: string;
+  mode?: string;
+}
+
+/** A single-use receipt. Only this module can create an accepted instance. */
+export interface SkillMaterialization {
+  readonly kind: "skill-materialization";
+}
+
+/** Checked state and its matching marker file list for the current read. */
+export interface MaterializedSkillState {
+  cache: SkillCacheState;
+  files: readonly Readonly<SkillMaterializedFile>[];
+}
+
+interface TreeSnapshot {
+  tree: SkillTreeCache | null;
+  identity?: string;
+}
+
+interface MaterializationBinding {
+  key: string;
+  cacheFile: string;
+  marker?: string;
+  epoch: symbol;
+  inspected: MaterializedSkillState;
+}
+
+const materializationReceipts = new WeakMap<SkillMaterialization, MaterializationBinding>();
+// Epochs invalidate receipts during repairs even if the marker is unchanged.
+// They are not a cache of trusted file states, and evicting one invalidates its receipts.
+const materializationEpochs = new Map<string, symbol>();
+const activeMaterializations = new Map<string, number>();
+const MAX_MATERIALIZATION_EPOCHS = 128;
+
+function advanceMaterializationEpoch(cacheFile: string): symbol {
+  const epoch = Symbol();
+  materializationEpochs.delete(cacheFile);
+  materializationEpochs.set(cacheFile, epoch);
+  while (materializationEpochs.size > MAX_MATERIALIZATION_EPOCHS) {
+    materializationEpochs.delete(materializationEpochs.keys().next().value!);
+  }
+  return epoch;
+}
+
+function beginMaterialization(cacheFile: string): void {
+  advanceMaterializationEpoch(cacheFile);
+  activeMaterializations.set(cacheFile, (activeMaterializations.get(cacheFile) ?? 0) + 1);
+}
+
+function finishMaterialization(cacheFile: string): void {
+  advanceMaterializationEpoch(cacheFile);
+  const active = (activeMaterializations.get(cacheFile) ?? 1) - 1;
+  if (active) activeMaterializations.set(cacheFile, active);
+  else activeMaterializations.delete(cacheFile);
+}
+
+function markerIdentity(cacheFile: string): string | undefined {
+  try {
+    const stat = lstatSync(cacheFile, { bigint: true });
+    if (!stat.isFile() || stat.isSymbolicLink()) return undefined;
+    return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+  } catch { return undefined; }
+}
+
+function readTreeSnapshot(cacheFile: string): TreeSnapshot {
+  const before = markerIdentity(cacheFile);
+  if (!before) return { tree: null };
+  const tree = readTree(cacheFile);
+  const after = markerIdentity(cacheFile);
+  return before === after ? { tree, identity: after } : { tree: null };
+}
+
+function materializationReceipt(
+  config: Config, entry: ManifestEntry, cacheFile: string,
+  marker: string | undefined, inspected: MaterializedSkillState,
+): SkillMaterialization {
+  const receipt = Object.freeze({ kind: "skill-materialization" as const });
+  materializationReceipts.set(receipt, {
+    key: revalidationKey(config, entry), cacheFile, marker, inspected,
+    epoch: materializationEpochs.get(cacheFile) ?? advanceMaterializationEpoch(cacheFile),
+  });
+  return receipt;
+}
+
+/**
+ * Consume only within the same read that called ensureSkillFetched. Every new
+ * request still runs ensure/deep inspection; never store receipts on a loader.
+ * A mismatch or a second use returns undefined so callers can deep-check again.
+ */
+export function consumeSkillMaterialization(
+  config: Config, entry: ManifestEntry, receipt: SkillMaterialization | undefined,
+): MaterializedSkillState | undefined {
+  if (!receipt) return undefined;
+  const inspected = peekSkillMaterialization(config, entry, receipt);
+  materializationReceipts.delete(receipt);
+  return inspected;
+}
+
+/** Inspect before asynchronous reads; consume afterwards to detect invalidation. */
+export function peekSkillMaterialization(
+  config: Config, entry: ManifestEntry, receipt: SkillMaterialization | undefined,
+): MaterializedSkillState | undefined {
+  if (!receipt) return undefined;
+  const binding = materializationReceipts.get(receipt);
+  try {
+    if (!binding || binding.key !== revalidationKey(config, entry) ||
+        materializationEpochs.get(binding.cacheFile) !== binding.epoch ||
+        activeMaterializations.has(binding.cacheFile)) return undefined;
+    const localPath = localFilePath(config.skillsDir, relativePath(entry.relative_path));
+    const cacheFile = localFilePath(localPath, TREE_CACHE_FILE);
+    if (cacheFile !== binding.cacheFile || markerIdentity(cacheFile) !== binding.marker) return undefined;
+    return binding.inspected;
+  } catch { return undefined; }
+}
+
+function inspectSkillCache(
+  config: Config, entry: ManifestEntry, localPath: string, snapshot: TreeSnapshot,
+): MaterializedSkillState {
+  const base: SkillCacheState = {
+    cached: false, complete: false, localPath, filesTotal: 0, filesMissing: [], sizeBytes: 0,
+    catalogCurrent: entry.file_index ? false : undefined,
+  };
+  const cached = snapshot.tree;
+  if (!cached) return { cache: base, files: [] };
+  try {
+    const filesMissing = cached.files
+      .filter((f) => !isFileUpToDate(localFilePath(localPath, f.path), f.size, f.mode))
+      .map((f) => f.path);
+    if (markerIdentity(join(localPath, TREE_CACHE_FILE)) !== snapshot.identity) return { cache: base, files: [] };
+    return {
+      cache: {
+        cached: true,
+        complete: !!cached.completedAt && sameSource(cached.source, config) &&
+          matchesFileIndex(cached, entry) && filesMissing.length === 0,
+        localPath, filesTotal: cached.files.length, filesMissing,
+        sizeBytes: cached.files.reduce((sum, file) => sum + file.size, 0),
+        completedAt: cached.completedAt,
+        catalogCurrent: entry.file_index ? matchesFileIndex(cached, entry) : undefined,
+      },
+      files: cached.files.map((file) => Object.freeze({ ...file })),
+    };
+  } catch { return { cache: base, files: [] }; }
+}
+
 /**
  * Deep check: read the skill's .codex-skills.tree.json marker and verify every
  * recorded file exists locally with the expected size. Read-only — never
@@ -1362,40 +1467,8 @@ export interface SkillCacheState {
 export function readSkillCacheState(config: Config, entry: ManifestEntry): SkillCacheState {
   const relPath = relativePath(entry.relative_path);
   const localPath = localFilePath(config.skillsDir, relPath);
-  const base: SkillCacheState = {
-    cached: false,
-    complete: false,
-    localPath,
-    filesTotal: 0,
-    filesMissing: [],
-    sizeBytes: 0,
-    catalogCurrent: entry.file_index ? false : undefined,
-  };
   const cacheFile = join(localPath, TREE_CACHE_FILE);
-  if (!existsSync(cacheFile)) return base;
-  try {
-    const cached = readTree(cacheFile);
-    if (!cached) return base;
-    const filesMissing = cached.files
-      .filter((f) => !isFileUpToDate(localFilePath(localPath, f.path), f.size, f.mode))
-      .map((f) => f.path);
-    return {
-      cached: true,
-      complete:
-        !!cached.completedAt &&
-        sameSource(cached.source, config) &&
-        matchesFileIndex(cached, entry) &&
-        filesMissing.length === 0,
-      localPath,
-      filesTotal: cached.files.length,
-      filesMissing,
-      sizeBytes: cached.files.reduce((s, f) => s + (f.size || 0), 0),
-      completedAt: cached.completedAt,
-      catalogCurrent: entry.file_index ? matchesFileIndex(cached, entry) : undefined,
-    };
-  } catch {
-    return base;
-  }
+  return inspectSkillCache(config, entry, localPath, readTreeSnapshot(cacheFile)).cache;
 }
 
 /**

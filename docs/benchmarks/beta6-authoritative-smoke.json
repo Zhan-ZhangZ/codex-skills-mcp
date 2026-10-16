@@ -1,0 +1,66 @@
+{
+  "startedAt": "2026-10-16T16:45:38.395Z",
+  "completedAt": "2026-10-16T16:45:42.568Z",
+  "node": "v26.4.0",
+  "source": {
+    "repo": "Zhan-ZhangZ/codexprojec",
+    "branch": "main",
+    "expectedCommit": "bd2ad1b9128b2145499022af2a7b408cf889adcd"
+  },
+  "authenticated": true,
+  "moduleSha256": {
+    "remote/github.js": "e61780786be1be28534cfd5ee7846393b002b145901980f30f14c43cc0ddd5c9",
+    "remote/manifest-fetch.js": "abb53bc51d974c5a9a37d5b5023ff76a336c0b0e86830731423fd9c97171e6a2"
+  },
+  "mode": "fully-remote",
+  "manifestEntries": 291,
+  "indexedSkills": 290,
+  "manifestMs": 904.29,
+  "manifestSha256": "5b17d8ac3c80e73f0d00d9b85ace992089518a6275eef58e7801cba1d13ac56d",
+  "forcedManifestRawFailure": true,
+  "manifestRequests": [
+    {
+      "host": "raw.githubusercontent.com",
+      "local": false,
+      "blocked": true
+    },
+    {
+      "host": "api.github.com",
+      "local": false,
+      "blocked": false
+    }
+  ],
+  "results": [
+    {
+      "name": "human-writing",
+      "files": 13,
+      "bytes": 100786,
+      "executableFiles": 1,
+      "coldMs": 1089.07,
+      "warmMs": 0.64,
+      "networkRequests": 31,
+      "requestsByHost": {
+        "gh.251716.xyz": 14,
+        "raw.githubusercontent.com": 1,
+        "cdn.jsdelivr.net": 14,
+        "gh-proxy.com": 1,
+        "ghfast.top": 1
+      },
+      "localMetadataRequests": 0
+    },
+    {
+      "name": "superpowers",
+      "files": 56,
+      "bytes": 395805,
+      "executableFiles": 7,
+      "coldMs": 741.67,
+      "warmMs": 1.59,
+      "networkRequests": 114,
+      "requestsByHost": {
+        "gh.251716.xyz": 57,
+        "cdn.jsdelivr.net": 57
+      },
+      "localMetadataRequests": 0
+    }
+  ]
+}

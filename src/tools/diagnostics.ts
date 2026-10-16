@@ -98,6 +98,9 @@ export function registerDiagnostics(
         );
 
         const meta = readManifestMeta(config);
+        const validators = Object.entries(meta.validators ?? {})
+          .filter(([, value]) => value.etag || value.lastModified)
+          .map(([endpoint, value]) => `${endpoint}: ${value.etag ? value.etag.slice(0, 24) + "…" : "Last-Modified"}`);
         const validated = meta.validatedAt
           ? new Date(meta.validatedAt).toISOString()
           : "never";
@@ -107,7 +110,7 @@ export function registerDiagnostics(
             `- Skills indexed: ${totalSkills}`,
             `- Manifest age: ${manifestAge} (TTL ${Math.round(config.manifestTTL / 3600000)}h)`,
             `- Last freshness check: ${validated} (poll every ${Math.round(config.manifestPollMs / 1000)}s)`,
-            `- ETag: ${meta.etag ? meta.etag.slice(0, 24) + "…" : "(none — next poll fetches full)"}`,
+            `- Conditional validators: ${validators.join("; ") || "(none — next poll fetches full)"}`,
           ].join("\n")
         );
 

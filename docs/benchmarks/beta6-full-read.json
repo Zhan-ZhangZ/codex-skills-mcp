@@ -1,0 +1,3903 @@
+{
+  "started_at": "2026-10-16T16:38:50.787Z",
+  "runtime": {
+    "node": "v26.4.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "source_root": "/Users/zz/codexproject/codex-skills",
+  "samples_per_operation": 15,
+  "warmup_rounds": 3,
+  "builds": [
+    {
+      "label": "baseline",
+      "dist": "/var/folders/_l/64fzznvj755c2l5mr4c61p6h0000gn/T/codex-beta6-read-baseline-sYTN6c/dist",
+      "module_sha256": {
+        "loader/index.js": "2f8ab33e8aad0af63d001840cc61e25a09e470a9ae02197d4f83990a0d22685d",
+        "remote/github.js": "d5945732898b29994edea4ea03d00859737d82c9c1d3dc11a8ae2f57eaed6019",
+        "tools/read-skill.js": "2f9d01d2660cac7f19a4af3eb4c931d8fe0b3a72da92149377b8f08311bdf5f8",
+        "openai/mentions.js": "c4082bacfebe0bab8c6b3f4eb0d36cbf7c720ed2cade3dd4cec4cc5bde72cbff"
+      }
+    },
+    {
+      "label": "current",
+      "dist": "/Users/zz/codex-skills-mcp/dist",
+      "module_sha256": {
+        "loader/index.js": "13664b331470b95c13126ffaead2361bc6ccde01f251f6a1d7f99227a07354bf",
+        "remote/github.js": "e61780786be1be28534cfd5ee7846393b002b145901980f30f14c43cc0ddd5c9",
+        "tools/read-skill.js": "ad0db18c382b435d7b53b9641085441c19c756b4d4aa481e42b772afd68f368e",
+        "openai/mentions.js": "418bdd13849c452b4edbc63f08827aebc4268a1b9cd25e54151a1e555ddcde69"
+      }
+    }
+  ],
+  "skills": [
+    {
+      "name": "human-writing",
+      "files": 13,
+      "total_bytes": 100786,
+      "catalog_bytes": 1481,
+      "root_skill_bytes": 15199,
+      "nested_skills": 0,
+      "builds": {
+        "baseline": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 0.091,
+              "p95_ms": 0.109,
+              "mean_ms": 0.092,
+              "samples": 15,
+              "timings_ms": [
+                0.109,
+                0.088,
+                0.094,
+                0.091,
+                0.104,
+                0.1,
+                0.104,
+                0.092,
+                0.091,
+                0.091,
+                0.082,
+                0.087,
+                0.08,
+                0.08,
+                0.089
+              ],
+              "output_bytes": 807,
+              "io": {
+                "existsSync": 4,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 4,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 0.155,
+              "p95_ms": 0.192,
+              "mean_ms": 0.157,
+              "samples": 15,
+              "timings_ms": [
+                0.166,
+                0.158,
+                0.149,
+                0.182,
+                0.158,
+                0.155,
+                0.146,
+                0.137,
+                0.145,
+                0.192,
+                0.142,
+                0.162,
+                0.166,
+                0.146,
+                0.145
+              ],
+              "output_bytes": 2,
+              "io": {
+                "existsSync": 12,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 4,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 0.252,
+              "p95_ms": 1.022,
+              "mean_ms": 0.326,
+              "samples": 15,
+              "timings_ms": [
+                0.27,
+                0.25,
+                0.243,
+                0.452,
+                0.424,
+                0.267,
+                0.265,
+                0.252,
+                0.263,
+                1.022,
+                0.242,
+                0.238,
+                0.234,
+                0.233,
+                0.24
+              ],
+              "output_bytes": 833,
+              "io": {
+                "existsSync": 16,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 8,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.045,
+              "p95_ms": 0.049,
+              "mean_ms": 0.045,
+              "samples": 15,
+              "timings_ms": [
+                0.046,
+                0.049,
+                0.045,
+                0.045,
+                0.045,
+                0.046,
+                0.049,
+                0.046,
+                0.044,
+                0.043,
+                0.043,
+                0.043,
+                0.047,
+                0.046,
+                0.044
+              ],
+              "output_bytes": 196,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 0.31,
+              "p95_ms": 0.393,
+              "mean_ms": 0.315,
+              "samples": 15,
+              "timings_ms": [
+                0.393,
+                0.326,
+                0.313,
+                0.309,
+                0.308,
+                0.308,
+                0.31,
+                0.304,
+                0.312,
+                0.316,
+                0.299,
+                0.297,
+                0.32,
+                0.299,
+                0.316
+              ],
+              "output_bytes": 16281,
+              "io": {
+                "existsSync": 27,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 8,
+                "realpathSync": 12,
+                "readFileSync": 1,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.056,
+              "p95_ms": 0.111,
+              "mean_ms": 0.06,
+              "samples": 15,
+              "timings_ms": [
+                0.057,
+                0.056,
+                0.056,
+                0.055,
+                0.056,
+                0.057,
+                0.057,
+                0.056,
+                0.056,
+                0.055,
+                0.058,
+                0.057,
+                0.058,
+                0.056,
+                0.111
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 5,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.016,
+              "p95_ms": 0.018,
+              "mean_ms": 0.017,
+              "samples": 15,
+              "timings_ms": [
+                0.017,
+                0.016,
+                0.016,
+                0.015,
+                0.017,
+                0.018,
+                0.018,
+                0.017,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 0.128,
+              "p95_ms": 0.151,
+              "mean_ms": 0.13,
+              "samples": 15,
+              "timings_ms": [
+                0.133,
+                0.132,
+                0.128,
+                0.127,
+                0.126,
+                0.151,
+                0.136,
+                0.126,
+                0.125,
+                0.128,
+                0.131,
+                0.121,
+                0.126,
+                0.134,
+                0.123
+              ],
+              "output_bytes": 0,
+              "io": {
+                "existsSync": 0,
+                "statSync": 13,
+                "lstatSync": 25,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 0.348,
+              "p95_ms": 0.914,
+              "mean_ms": 0.398,
+              "samples": 15,
+              "timings_ms": [
+                0.34,
+                0.331,
+                0.348,
+                0.361,
+                0.342,
+                0.35,
+                0.344,
+                0.352,
+                0.431,
+                0.914,
+                0.515,
+                0.333,
+                0.336,
+                0.325,
+                0.355
+              ],
+              "output_bytes": 833,
+              "io": {
+                "existsSync": 16,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 8,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.134,
+              "p95_ms": 0.18,
+              "mean_ms": 0.138,
+              "samples": 15,
+              "timings_ms": [
+                0.135,
+                0.126,
+                0.126,
+                0.136,
+                0.128,
+                0.134,
+                0.18,
+                0.144,
+                0.142,
+                0.176,
+                0.132,
+                0.126,
+                0.133,
+                0.126,
+                0.135
+              ],
+              "output_bytes": 306,
+              "io": {
+                "existsSync": 1,
+                "statSync": 13,
+                "lstatSync": 24,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 0.756,
+              "p95_ms": 1.336,
+              "mean_ms": 0.777,
+              "samples": 15,
+              "timings_ms": [
+                0.814,
+                0.756,
+                0.725,
+                0.767,
+                0.788,
+                0.693,
+                0.943,
+                0.76,
+                0.644,
+                0.712,
+                0.781,
+                1.336,
+                0.626,
+                0.676,
+                0.629
+              ],
+              "output_bytes": 16281,
+              "io": {
+                "existsSync": 27,
+                "statSync": 25,
+                "lstatSync": 25,
+                "readdirSync": 8,
+                "realpathSync": 12,
+                "readFileSync": 2,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.235,
+              "p95_ms": 0.254,
+              "mean_ms": 0.238,
+              "samples": 15,
+              "timings_ms": [
+                0.229,
+                0.231,
+                0.231,
+                0.231,
+                0.239,
+                0.234,
+                0.241,
+                0.254,
+                0.235,
+                0.235,
+                0.232,
+                0.244,
+                0.241,
+                0.244,
+                0.244
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 5,
+                "statSync": 13,
+                "lstatSync": 25,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 0.88,
+              "p95_ms": 1.925,
+              "mean_ms": 1.047,
+              "samples": 15,
+              "timings_ms": [
+                0.785,
+                0.906,
+                0.822,
+                0.773,
+                0.77,
+                0.783,
+                1.288,
+                1.925,
+                1.499,
+                0.938,
+                1.603,
+                1.141,
+                0.854,
+                0.88,
+                0.736
+              ],
+              "output_bytes": 16539,
+              "io": {
+                "existsSync": 28,
+                "statSync": 38,
+                "lstatSync": 49,
+                "readdirSync": 8,
+                "realpathSync": 12,
+                "readFileSync": 3,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 1.407,
+              "concurrent_4_wall_ms": 3.281
+            },
+            "app_resource_preview": {
+              "p50_ms": 0.254,
+              "p95_ms": 1.016,
+              "mean_ms": 0.304,
+              "samples": 15,
+              "timings_ms": [
+                0.28,
+                0.279,
+                0.247,
+                0.259,
+                0.221,
+                0.298,
+                0.254,
+                0.255,
+                0.25,
+                0.234,
+                0.255,
+                0.239,
+                0.235,
+                0.24,
+                1.016
+              ],
+              "output_bytes": 15614,
+              "io": {
+                "existsSync": 5,
+                "statSync": 13,
+                "lstatSync": 25,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 1.582,
+              "concurrent_4_wall_ms": 1.067
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 0.894,
+              "p95_ms": 1.032,
+              "mean_ms": 0.879,
+              "samples": 15,
+              "timings_ms": [
+                0.942,
+                0.901,
+                0.912,
+                1.032,
+                0.942,
+                0.862,
+                0.874,
+                0.933,
+                0.798,
+                0.764,
+                0.76,
+                0.894,
+                0.951,
+                0.841,
+                0.777
+              ],
+              "output_bytes": 16539,
+              "io": {
+                "existsSync": 28,
+                "statSync": 38,
+                "lstatSync": 49,
+                "readdirSync": 8,
+                "realpathSync": 12,
+                "readFileSync": 3,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 1.027,
+              "concurrent_4_wall_ms": 3.574
+            },
+            "complete": true
+          }
+        },
+        "current": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 0.081,
+              "p95_ms": 0.084,
+              "mean_ms": 0.081,
+              "samples": 15,
+              "timings_ms": [
+                0.082,
+                0.084,
+                0.082,
+                0.082,
+                0.079,
+                0.08,
+                0.082,
+                0.081,
+                0.081,
+                0.081,
+                0.081,
+                0.081,
+                0.081,
+                0.081,
+                0.084
+              ],
+              "output_bytes": 807,
+              "io": {
+                "existsSync": 4,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 4,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 0.127,
+              "p95_ms": 0.137,
+              "mean_ms": 0.128,
+              "samples": 15,
+              "timings_ms": [
+                0.128,
+                0.127,
+                0.127,
+                0.126,
+                0.126,
+                0.126,
+                0.13,
+                0.127,
+                0.127,
+                0.13,
+                0.127,
+                0.129,
+                0.137,
+                0.132,
+                0.125
+              ],
+              "output_bytes": 2,
+              "io": {
+                "existsSync": 12,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 4,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 0.215,
+              "p95_ms": 0.244,
+              "mean_ms": 0.218,
+              "samples": 15,
+              "timings_ms": [
+                0.208,
+                0.208,
+                0.207,
+                0.214,
+                0.21,
+                0.215,
+                0.213,
+                0.228,
+                0.215,
+                0.215,
+                0.216,
+                0.237,
+                0.222,
+                0.244,
+                0.221
+              ],
+              "output_bytes": 833,
+              "io": {
+                "existsSync": 16,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 8,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.042,
+              "p95_ms": 0.056,
+              "mean_ms": 0.043,
+              "samples": 15,
+              "timings_ms": [
+                0.055,
+                0.042,
+                0.042,
+                0.042,
+                0.041,
+                0.043,
+                0.046,
+                0.056,
+                0.04,
+                0.04,
+                0.039,
+                0.04,
+                0.043,
+                0.045,
+                0.04
+              ],
+              "output_bytes": 196,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 0.424,
+              "p95_ms": 0.524,
+              "mean_ms": 0.425,
+              "samples": 15,
+              "timings_ms": [
+                0.464,
+                0.434,
+                0.453,
+                0.389,
+                0.424,
+                0.435,
+                0.453,
+                0.414,
+                0.389,
+                0.524,
+                0.435,
+                0.403,
+                0.386,
+                0.413,
+                0.364
+              ],
+              "output_bytes": 16486,
+              "io": {
+                "existsSync": 14,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 12,
+                  "readdir": 4,
+                  "realpath": 8,
+                  "readFile": 1,
+                  "max_active": 8
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.14,
+              "p95_ms": 0.304,
+              "mean_ms": 0.155,
+              "samples": 15,
+              "timings_ms": [
+                0.191,
+                0.17,
+                0.148,
+                0.167,
+                0.163,
+                0.304,
+                0.131,
+                0.127,
+                0.13,
+                0.13,
+                0.14,
+                0.131,
+                0.137,
+                0.143,
+                0.115
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 10,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.016,
+              "p95_ms": 0.02,
+              "mean_ms": 0.016,
+              "samples": 15,
+              "timings_ms": [
+                0.015,
+                0.015,
+                0.015,
+                0.02,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016,
+                0.016
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 0.149,
+              "p95_ms": 0.157,
+              "mean_ms": 0.148,
+              "samples": 15,
+              "timings_ms": [
+                0.154,
+                0.155,
+                0.142,
+                0.143,
+                0.151,
+                0.157,
+                0.156,
+                0.154,
+                0.141,
+                0.154,
+                0.149,
+                0.144,
+                0.136,
+                0.143,
+                0.149
+              ],
+              "output_bytes": 32,
+              "io": {
+                "existsSync": 0,
+                "statSync": 13,
+                "lstatSync": 29,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 0.309,
+              "p95_ms": 0.322,
+              "mean_ms": 0.311,
+              "samples": 15,
+              "timings_ms": [
+                0.313,
+                0.311,
+                0.31,
+                0.322,
+                0.308,
+                0.314,
+                0.306,
+                0.322,
+                0.308,
+                0.304,
+                0.309,
+                0.304,
+                0.309,
+                0.311,
+                0.309
+              ],
+              "output_bytes": 833,
+              "io": {
+                "existsSync": 16,
+                "statSync": 12,
+                "lstatSync": 0,
+                "readdirSync": 8,
+                "realpathSync": 6,
+                "readFileSync": 0,
+                "readdir_unique": 4,
+                "readdir_repeated": 4,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.125,
+              "p95_ms": 0.198,
+              "mean_ms": 0.128,
+              "samples": 15,
+              "timings_ms": [
+                0.125,
+                0.198,
+                0.146,
+                0.134,
+                0.126,
+                0.139,
+                0.138,
+                0.121,
+                0.114,
+                0.112,
+                0.107,
+                0.108,
+                0.109,
+                0.126,
+                0.118
+              ],
+              "output_bytes": 306,
+              "io": {
+                "existsSync": 0,
+                "statSync": 13,
+                "lstatSync": 27,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 0.319,
+              "p95_ms": 0.373,
+              "mean_ms": 0.326,
+              "samples": 15,
+              "timings_ms": [
+                0.354,
+                0.317,
+                0.359,
+                0.321,
+                0.306,
+                0.373,
+                0.366,
+                0.319,
+                0.308,
+                0.325,
+                0.321,
+                0.296,
+                0.304,
+                0.314,
+                0.301
+              ],
+              "output_bytes": 16596,
+              "io": {
+                "existsSync": 6,
+                "statSync": 13,
+                "lstatSync": 39,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.261,
+              "p95_ms": 0.289,
+              "mean_ms": 0.264,
+              "samples": 15,
+              "timings_ms": [
+                0.27,
+                0.263,
+                0.26,
+                0.261,
+                0.26,
+                0.258,
+                0.286,
+                0.256,
+                0.27,
+                0.289,
+                0.263,
+                0.247,
+                0.261,
+                0.254,
+                0.266
+              ],
+              "output_bytes": 15374,
+              "io": {
+                "existsSync": 2,
+                "statSync": 13,
+                "lstatSync": 39,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 0.351,
+              "p95_ms": 1.136,
+              "mean_ms": 0.401,
+              "samples": 15,
+              "timings_ms": [
+                0.351,
+                0.316,
+                0.299,
+                0.357,
+                1.136,
+                0.407,
+                0.386,
+                0.35,
+                0.352,
+                0.37,
+                0.353,
+                0.334,
+                0.34,
+                0.333,
+                0.326
+              ],
+              "output_bytes": 16539,
+              "io": {
+                "existsSync": 6,
+                "statSync": 13,
+                "lstatSync": 39,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              },
+              "event_loop_timer_delay_ms": 1.544,
+              "concurrent_4_wall_ms": 1.158
+            },
+            "app_resource_preview": {
+              "p50_ms": 0.282,
+              "p95_ms": 0.383,
+              "mean_ms": 0.289,
+              "samples": 15,
+              "timings_ms": [
+                0.284,
+                0.285,
+                0.304,
+                0.298,
+                0.281,
+                0.383,
+                0.323,
+                0.283,
+                0.275,
+                0.277,
+                0.254,
+                0.261,
+                0.282,
+                0.281,
+                0.262
+              ],
+              "output_bytes": 15614,
+              "io": {
+                "existsSync": 2,
+                "statSync": 13,
+                "lstatSync": 39,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              },
+              "event_loop_timer_delay_ms": 1.57,
+              "concurrent_4_wall_ms": 1.198
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 0.364,
+              "p95_ms": 0.445,
+              "mean_ms": 0.371,
+              "samples": 15,
+              "timings_ms": [
+                0.347,
+                0.34,
+                0.338,
+                0.335,
+                0.365,
+                0.445,
+                0.409,
+                0.367,
+                0.352,
+                0.397,
+                0.385,
+                0.423,
+                0.359,
+                0.337,
+                0.364
+              ],
+              "output_bytes": 16539,
+              "io": {
+                "existsSync": 6,
+                "statSync": 13,
+                "lstatSync": 39,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              },
+              "event_loop_timer_delay_ms": 1.605,
+              "concurrent_4_wall_ms": 1.239
+            },
+            "complete": true
+          }
+        }
+      },
+      "comparison": {
+        "tool_read_skill": {
+          "baseline_p50_ms": 0.88,
+          "current_p50_ms": 0.351,
+          "reduction_percent": 60.114,
+          "speedup": 2.507
+        },
+        "fresh_tool_read_skill": {
+          "baseline_p50_ms": 0.894,
+          "current_p50_ms": 0.364,
+          "reduction_percent": 59.284,
+          "speedup": 2.456
+        },
+        "app_resource_preview": {
+          "baseline_p50_ms": 0.254,
+          "current_p50_ms": 0.282,
+          "reduction_percent": -11.024,
+          "speedup": 0.901
+        }
+      }
+    },
+    {
+      "name": "x-cmd",
+      "files": 5334,
+      "total_bytes": 16667576,
+      "catalog_bytes": 600373,
+      "root_skill_bytes": 721,
+      "nested_skills": 83,
+      "builds": {
+        "baseline": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 15.283,
+              "p95_ms": 15.907,
+              "mean_ms": 15.26,
+              "samples": 15,
+              "timings_ms": [
+                15.283,
+                15.907,
+                15.832,
+                15.042,
+                14.853,
+                15.184,
+                14.997,
+                14.376,
+                14.955,
+                15.117,
+                15.406,
+                15.356,
+                15.302,
+                15.865,
+                15.433
+              ],
+              "output_bytes": 91733,
+              "io": {
+                "existsSync": 772,
+                "statSync": 756,
+                "lstatSync": 0,
+                "readdirSync": 772,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 772,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 89.147,
+              "p95_ms": 100.746,
+              "mean_ms": 88.928,
+              "samples": 15,
+              "timings_ms": [
+                77.976,
+                89.518,
+                91.268,
+                90.067,
+                92.274,
+                93.454,
+                89.147,
+                85.409,
+                99.229,
+                100.746,
+                83.303,
+                87.239,
+                87.215,
+                85.496,
+                81.584
+              ],
+              "output_bytes": 4483,
+              "io": {
+                "existsSync": 7827,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 1818,
+                "realpathSync": 3934,
+                "readFileSync": 41,
+                "readdir_unique": 1818,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 104.767,
+              "p95_ms": 125.931,
+              "mean_ms": 105.561,
+              "samples": 15,
+              "timings_ms": [
+                93.774,
+                100.113,
+                113.025,
+                107.124,
+                105.044,
+                99.083,
+                104.737,
+                104.767,
+                101.302,
+                97.155,
+                97.816,
+                125.931,
+                106.177,
+                109.945,
+                117.419
+              ],
+              "output_bytes": 96240,
+              "io": {
+                "existsSync": 8599,
+                "statSync": 756,
+                "lstatSync": 0,
+                "readdirSync": 2590,
+                "realpathSync": 3934,
+                "readFileSync": 41,
+                "readdir_unique": 1818,
+                "readdir_repeated": 772,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.035,
+              "p95_ms": 0.036,
+              "mean_ms": 0.035,
+              "samples": 15,
+              "timings_ms": [
+                0.036,
+                0.036,
+                0.035,
+                0.035,
+                0.035,
+                0.036,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035
+              ],
+              "output_bytes": 186,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 98.727,
+              "p95_ms": 114.149,
+              "mean_ms": 101.248,
+              "samples": 15,
+              "timings_ms": [
+                96.707,
+                106.268,
+                98.727,
+                91.149,
+                93.523,
+                97.053,
+                94.593,
+                98.924,
+                110.862,
+                107.385,
+                112.465,
+                114.149,
+                102.332,
+                97.979,
+                96.603
+              ],
+              "output_bytes": 97058,
+              "io": {
+                "existsSync": 8610,
+                "statSync": 756,
+                "lstatSync": 0,
+                "readdirSync": 2590,
+                "realpathSync": 3940,
+                "readFileSync": 42,
+                "readdir_unique": 1818,
+                "readdir_repeated": 772,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.043,
+              "p95_ms": 0.055,
+              "mean_ms": 0.044,
+              "samples": 15,
+              "timings_ms": [
+                0.045,
+                0.044,
+                0.044,
+                0.055,
+                0.044,
+                0.044,
+                0.043,
+                0.043,
+                0.046,
+                0.043,
+                0.043,
+                0.043,
+                0.043,
+                0.043,
+                0.043
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 5,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.01,
+              "p95_ms": 0.01,
+              "mean_ms": 0.01,
+              "samples": 15,
+              "timings_ms": [
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 74.382,
+              "p95_ms": 78.922,
+              "mean_ms": 74.093,
+              "samples": 15,
+              "timings_ms": [
+                72.165,
+                72.654,
+                72.451,
+                73.88,
+                76.692,
+                75.275,
+                74.644,
+                74.874,
+                74.637,
+                72.404,
+                71.219,
+                71.64,
+                75.553,
+                74.382,
+                78.922
+              ],
+              "output_bytes": 0,
+              "io": {
+                "existsSync": 0,
+                "statSync": 5334,
+                "lstatSync": 24105,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 156.813,
+              "p95_ms": 176.632,
+              "mean_ms": 159.614,
+              "samples": 15,
+              "timings_ms": [
+                162.164,
+                156.813,
+                150.142,
+                147.935,
+                151.728,
+                162.998,
+                176.632,
+                155.351,
+                155.436,
+                162.107,
+                174.082,
+                158.652,
+                155.212,
+                153.895,
+                171.06
+              ],
+              "output_bytes": 95974,
+              "io": {
+                "existsSync": 8565,
+                "statSync": 754,
+                "lstatSync": 0,
+                "readdirSync": 2580,
+                "realpathSync": 3918,
+                "readFileSync": 41,
+                "readdir_unique": 1810,
+                "readdir_repeated": 770,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 76.41,
+              "p95_ms": 140.967,
+              "mean_ms": 81.42,
+              "samples": 15,
+              "timings_ms": [
+                78.119,
+                88.757,
+                73.5,
+                74.217,
+                73.803,
+                75.514,
+                140.967,
+                75.485,
+                77.834,
+                76.058,
+                79.192,
+                77.233,
+                76.41,
+                75.81,
+                78.395
+              ],
+              "output_bytes": 302,
+              "io": {
+                "existsSync": 1,
+                "statSync": 5334,
+                "lstatSync": 24104,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 232.348,
+              "p95_ms": 256.702,
+              "mean_ms": 232.136,
+              "samples": 15,
+              "timings_ms": [
+                242.892,
+                247.84,
+                256.702,
+                236.201,
+                220.596,
+                219.699,
+                220.113,
+                218.687,
+                235.571,
+                232.348,
+                251.832,
+                232.57,
+                220.473,
+                222.715,
+                223.799
+              ],
+              "output_bytes": 96792,
+              "io": {
+                "existsSync": 8576,
+                "statSync": 6088,
+                "lstatSync": 24105,
+                "readdirSync": 2580,
+                "realpathSync": 3924,
+                "readFileSync": 43,
+                "readdir_unique": 1810,
+                "readdir_repeated": 770,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 71.079,
+              "p95_ms": 78.091,
+              "mean_ms": 72.141,
+              "samples": 15,
+              "timings_ms": [
+                75.169,
+                71.78,
+                70.557,
+                73.097,
+                70.436,
+                70.707,
+                71.079,
+                70.34,
+                70.439,
+                70.274,
+                70.177,
+                71.685,
+                74.049,
+                74.228,
+                78.091
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 5,
+                "statSync": 5334,
+                "lstatSync": 24105,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 292.339,
+              "p95_ms": 313.823,
+              "mean_ms": 295.702,
+              "samples": 15,
+              "timings_ms": [
+                310.858,
+                291.19,
+                297.473,
+                295.27,
+                293.44,
+                290.365,
+                292.339,
+                305.517,
+                302.751,
+                313.823,
+                289.153,
+                287.118,
+                288.407,
+                290.995,
+                286.836
+              ],
+              "output_bytes": 42275,
+              "io": {
+                "existsSync": 8577,
+                "statSync": 11422,
+                "lstatSync": 48209,
+                "readdirSync": 2580,
+                "realpathSync": 3924,
+                "readFileSync": 44,
+                "readdir_unique": 1810,
+                "readdir_repeated": 770,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 290.03,
+              "concurrent_4_wall_ms": 1205.38
+            },
+            "app_resource_preview": {
+              "p50_ms": 71.915,
+              "p95_ms": 86.753,
+              "mean_ms": 74.442,
+              "samples": 15,
+              "timings_ms": [
+                72.221,
+                74.131,
+                70.916,
+                71.407,
+                77.003,
+                71.382,
+                71.915,
+                71.169,
+                70.856,
+                71.858,
+                71.222,
+                77.426,
+                79.197,
+                86.753,
+                79.173
+              ],
+              "output_bytes": 968,
+              "io": {
+                "existsSync": 5,
+                "statSync": 5334,
+                "lstatSync": 24105,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 71.717,
+              "concurrent_4_wall_ms": 287.211
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 313.205,
+              "p95_ms": 342.005,
+              "mean_ms": 312.433,
+              "samples": 15,
+              "timings_ms": [
+                320.446,
+                311.344,
+                313.205,
+                342.005,
+                326.473,
+                316.643,
+                308.093,
+                327.933,
+                296.783,
+                290.216,
+                303.66,
+                332.381,
+                317.492,
+                289.392,
+                290.433
+              ],
+              "output_bytes": 42275,
+              "io": {
+                "existsSync": 8577,
+                "statSync": 11422,
+                "lstatSync": 48209,
+                "readdirSync": 2580,
+                "realpathSync": 3924,
+                "readFileSync": 44,
+                "readdir_unique": 1810,
+                "readdir_repeated": 770,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 289.951,
+              "concurrent_4_wall_ms": 1259.534
+            },
+            "complete": true
+          }
+        },
+        "current": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 12.812,
+              "p95_ms": 14.557,
+              "mean_ms": 12.936,
+              "samples": 15,
+              "timings_ms": [
+                14.347,
+                14.024,
+                14.557,
+                13.692,
+                13.086,
+                12.829,
+                12.812,
+                13.666,
+                12.704,
+                11.848,
+                11.94,
+                11.8,
+                12.491,
+                12.201,
+                12.038
+              ],
+              "output_bytes": 91733,
+              "io": {
+                "existsSync": 772,
+                "statSync": 756,
+                "lstatSync": 0,
+                "readdirSync": 772,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 772,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 78.546,
+              "p95_ms": 82.301,
+              "mean_ms": 78.961,
+              "samples": 15,
+              "timings_ms": [
+                81.25,
+                79.052,
+                81.267,
+                78.237,
+                77.874,
+                78.409,
+                77.14,
+                76.742,
+                79.929,
+                77.565,
+                78.546,
+                82.301,
+                78.698,
+                78.524,
+                78.879
+              ],
+              "output_bytes": 4483,
+              "io": {
+                "existsSync": 7827,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 1818,
+                "realpathSync": 3934,
+                "readFileSync": 41,
+                "readdir_unique": 1818,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 91.255,
+              "p95_ms": 96.696,
+              "mean_ms": 91.725,
+              "samples": 15,
+              "timings_ms": [
+                91.687,
+                90.503,
+                89.181,
+                89.951,
+                96.265,
+                91.076,
+                91.485,
+                91.255,
+                92.071,
+                90.736,
+                90.891,
+                92.181,
+                91.583,
+                96.696,
+                90.319
+              ],
+              "output_bytes": 96240,
+              "io": {
+                "existsSync": 8599,
+                "statSync": 756,
+                "lstatSync": 0,
+                "readdirSync": 2590,
+                "realpathSync": 3934,
+                "readFileSync": 41,
+                "readdir_unique": 1818,
+                "readdir_repeated": 772,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.035,
+              "p95_ms": 0.045,
+              "mean_ms": 0.036,
+              "samples": 15,
+              "timings_ms": [
+                0.036,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.035,
+                0.034,
+                0.034,
+                0.034,
+                0.037,
+                0.035,
+                0.035,
+                0.045,
+                0.04,
+                0.042
+              ],
+              "output_bytes": 186,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 44.051,
+              "p95_ms": 56.473,
+              "mean_ms": 45.452,
+              "samples": 15,
+              "timings_ms": [
+                42.74,
+                42.078,
+                41.094,
+                42.506,
+                41.663,
+                42.951,
+                44.051,
+                47.479,
+                42.649,
+                45.549,
+                56.473,
+                50.345,
+                50.941,
+                45.365,
+                45.898
+              ],
+              "output_bytes": 97253,
+              "io": {
+                "existsSync": 14,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 756,
+                  "readdir": 1818,
+                  "realpath": 3786,
+                  "readFile": 42,
+                  "max_active": 8
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.121,
+              "p95_ms": 0.139,
+              "mean_ms": 0.121,
+              "samples": 15,
+              "timings_ms": [
+                0.123,
+                0.139,
+                0.127,
+                0.131,
+                0.115,
+                0.123,
+                0.129,
+                0.117,
+                0.113,
+                0.121,
+                0.116,
+                0.112,
+                0.113,
+                0.128,
+                0.114
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 10,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.01,
+              "p95_ms": 0.016,
+              "mean_ms": 0.011,
+              "samples": 15,
+              "timings_ms": [
+                0.016,
+                0.014,
+                0.013,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01,
+                0.01
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 71.437,
+              "p95_ms": 76.461,
+              "mean_ms": 72.185,
+              "samples": 15,
+              "timings_ms": [
+                74.398,
+                71.171,
+                73.574,
+                71.095,
+                71.523,
+                70.905,
+                71.437,
+                71.679,
+                70.711,
+                70.992,
+                71.185,
+                76.461,
+                73.449,
+                73.715,
+                70.478
+              ],
+              "output_bytes": 32,
+              "io": {
+                "existsSync": 0,
+                "statSync": 5334,
+                "lstatSync": 24109,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 145.607,
+              "p95_ms": 165.626,
+              "mean_ms": 147.136,
+              "samples": 15,
+              "timings_ms": [
+                144.379,
+                147.253,
+                146.311,
+                146.088,
+                146.889,
+                144.204,
+                145.607,
+                144.092,
+                165.626,
+                147.665,
+                144.527,
+                145.339,
+                145.456,
+                145.211,
+                148.39
+              ],
+              "output_bytes": 95974,
+              "io": {
+                "existsSync": 8565,
+                "statSync": 754,
+                "lstatSync": 0,
+                "readdirSync": 2580,
+                "realpathSync": 3918,
+                "readFileSync": 41,
+                "readdir_unique": 1810,
+                "readdir_repeated": 770,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 72.253,
+              "p95_ms": 75.875,
+              "mean_ms": 72.532,
+              "samples": 15,
+              "timings_ms": [
+                72.929,
+                72.523,
+                71.84,
+                72.498,
+                73.718,
+                72.666,
+                71.916,
+                73.31,
+                71.29,
+                75.875,
+                71.928,
+                72.047,
+                71.644,
+                71.535,
+                72.253
+              ],
+              "output_bytes": 302,
+              "io": {
+                "existsSync": 0,
+                "statSync": 5334,
+                "lstatSync": 24107,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 75.023,
+              "p95_ms": 102.649,
+              "mean_ms": 77.388,
+              "samples": 15,
+              "timings_ms": [
+                74.746,
+                81.763,
+                102.649,
+                78.044,
+                77.581,
+                76.765,
+                73.169,
+                75.023,
+                73.458,
+                75.771,
+                74.809,
+                73.42,
+                74.356,
+                74.138,
+                75.131
+              ],
+              "output_bytes": 97103,
+              "io": {
+                "existsSync": 6,
+                "statSync": 5334,
+                "lstatSync": 24119,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 41,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 8
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 72.317,
+              "p95_ms": 80.709,
+              "mean_ms": 72.844,
+              "samples": 15,
+              "timings_ms": [
+                72.317,
+                71.606,
+                80.709,
+                71.991,
+                70.729,
+                70.543,
+                71.391,
+                73.088,
+                72.071,
+                73.299,
+                72.209,
+                74.776,
+                72.935,
+                72.583,
+                72.414
+              ],
+              "output_bytes": 744,
+              "io": {
+                "existsSync": 2,
+                "statSync": 5334,
+                "lstatSync": 24119,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 75.454,
+              "p95_ms": 86.065,
+              "mean_ms": 76.496,
+              "samples": 15,
+              "timings_ms": [
+                74.984,
+                74.931,
+                74.748,
+                77.292,
+                77.058,
+                75.454,
+                86.065,
+                78.03,
+                80.99,
+                75.564,
+                74.211,
+                74.402,
+                73.627,
+                73.988,
+                76.09
+              ],
+              "output_bytes": 42275,
+              "io": {
+                "existsSync": 6,
+                "statSync": 5334,
+                "lstatSync": 24119,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 41,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 8
+                }
+              },
+              "event_loop_timer_delay_ms": 71.909,
+              "concurrent_4_wall_ms": 294.003
+            },
+            "app_resource_preview": {
+              "p50_ms": 72.951,
+              "p95_ms": 108.119,
+              "mean_ms": 75.954,
+              "samples": 15,
+              "timings_ms": [
+                77.76,
+                75.779,
+                72.329,
+                71.245,
+                73.705,
+                71.589,
+                72.462,
+                73.401,
+                74.479,
+                72.951,
+                71.371,
+                71.739,
+                71.878,
+                108.119,
+                80.502
+              ],
+              "output_bytes": 968,
+              "io": {
+                "existsSync": 2,
+                "statSync": 5334,
+                "lstatSync": 24119,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              },
+              "event_loop_timer_delay_ms": 72.308,
+              "concurrent_4_wall_ms": 284.021
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 75.691,
+              "p95_ms": 78.009,
+              "mean_ms": 75.822,
+              "samples": 15,
+              "timings_ms": [
+                74.936,
+                74.575,
+                74.853,
+                75.691,
+                76.181,
+                76.011,
+                75.019,
+                77.695,
+                78.009,
+                74.905,
+                74.39,
+                76.842,
+                74.975,
+                76.858,
+                76.396
+              ],
+              "output_bytes": 42275,
+              "io": {
+                "existsSync": 6,
+                "statSync": 5334,
+                "lstatSync": 24119,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 41,
+                  "readdir": 0,
+                  "realpath": 42,
+                  "readFile": 42,
+                  "max_active": 8
+                }
+              },
+              "event_loop_timer_delay_ms": 76.053,
+              "concurrent_4_wall_ms": 299.356
+            },
+            "complete": true
+          }
+        }
+      },
+      "comparison": {
+        "tool_read_skill": {
+          "baseline_p50_ms": 292.339,
+          "current_p50_ms": 75.454,
+          "reduction_percent": 74.19,
+          "speedup": 3.874
+        },
+        "fresh_tool_read_skill": {
+          "baseline_p50_ms": 313.205,
+          "current_p50_ms": 75.691,
+          "reduction_percent": 75.833,
+          "speedup": 4.138
+        },
+        "app_resource_preview": {
+          "baseline_p50_ms": 71.915,
+          "current_p50_ms": 72.951,
+          "reduction_percent": -1.441,
+          "speedup": 0.986
+        }
+      }
+    },
+    {
+      "name": "Awesome-Journal-Skills",
+      "files": 10851,
+      "total_bytes": 108070114,
+      "catalog_bytes": 1614305,
+      "root_skill_bytes": 3226,
+      "nested_skills": 4166,
+      "builds": {
+        "baseline": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 34.907,
+              "p95_ms": 38.422,
+              "mean_ms": 35.243,
+              "samples": 15,
+              "timings_ms": [
+                34.907,
+                34.031,
+                36.466,
+                35.644,
+                34.058,
+                34.008,
+                33.367,
+                36.13,
+                34.694,
+                34.929,
+                34.573,
+                34.534,
+                35.925,
+                38.422,
+                36.963
+              ],
+              "output_bytes": 525511,
+              "io": {
+                "existsSync": 1418,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 1418,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 1418,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 408.514,
+              "p95_ms": 462.492,
+              "mean_ms": 417.941,
+              "samples": 15,
+              "timings_ms": [
+                395.138,
+                403.517,
+                403.273,
+                402.302,
+                462.492,
+                424.672,
+                412.716,
+                408.514,
+                446.696,
+                425.992,
+                448.285,
+                425.446,
+                405.073,
+                407.802,
+                397.19
+              ],
+              "output_bytes": 1878949,
+              "io": {
+                "existsSync": 24342,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 7128,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 442.982,
+              "p95_ms": 551.629,
+              "mean_ms": 450.631,
+              "samples": 15,
+              "timings_ms": [
+                427.171,
+                439.567,
+                438.394,
+                444.427,
+                434.825,
+                449.864,
+                442.982,
+                432.735,
+                440.744,
+                460.927,
+                461.907,
+                431.511,
+                449.461,
+                551.629,
+                453.313
+              ],
+              "output_bytes": 2404484,
+              "io": {
+                "existsSync": 25760,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 8546,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.036,
+              "p95_ms": 0.04,
+              "mean_ms": 0.036,
+              "samples": 15,
+              "timings_ms": [
+                0.037,
+                0.037,
+                0.037,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.035,
+                0.04,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.037
+              ],
+              "output_bytes": 204,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 474.264,
+              "p95_ms": 622.295,
+              "mean_ms": 485.844,
+              "samples": 15,
+              "timings_ms": [
+                492.234,
+                622.295,
+                498.049,
+                482.085,
+                496.241,
+                474.264,
+                495.954,
+                446.093,
+                441.678,
+                440.677,
+                469.948,
+                446.596,
+                545.81,
+                468.732,
+                467.002
+              ],
+              "output_bytes": 2407813,
+              "io": {
+                "existsSync": 25771,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 8546,
+                "realpathSync": 14260,
+                "readFileSync": 4167,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.084,
+              "p95_ms": 0.196,
+              "mean_ms": 0.094,
+              "samples": 15,
+              "timings_ms": [
+                0.196,
+                0.121,
+                0.113,
+                0.066,
+                0.087,
+                0.084,
+                0.122,
+                0.088,
+                0.082,
+                0.074,
+                0.057,
+                0.105,
+                0.083,
+                0.051,
+                0.081
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 5,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.03,
+              "p95_ms": 0.046,
+              "mean_ms": 0.028,
+              "samples": 15,
+              "timings_ms": [
+                0.031,
+                0.012,
+                0.045,
+                0.022,
+                0.046,
+                0.029,
+                0.013,
+                0.044,
+                0.031,
+                0.012,
+                0.037,
+                0.012,
+                0.039,
+                0.015,
+                0.03
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 151.466,
+              "p95_ms": 249.173,
+              "mean_ms": 162.334,
+              "samples": 15,
+              "timings_ms": [
+                144.972,
+                141.157,
+                147.571,
+                169.238,
+                161.07,
+                207.278,
+                157.338,
+                157.539,
+                150.297,
+                149.268,
+                155.4,
+                249.173,
+                151.466,
+                147.4,
+                145.848
+              ],
+              "output_bytes": 0,
+              "io": {
+                "existsSync": 0,
+                "statSync": 10851,
+                "lstatSync": 40386,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 774.395,
+              "p95_ms": 827.96,
+              "mean_ms": 759.568,
+              "samples": 15,
+              "timings_ms": [
+                795.557,
+                806.176,
+                819.502,
+                802.153,
+                810.277,
+                735.972,
+                827.96,
+                773.477,
+                774.395,
+                805.108,
+                687.692,
+                681.161,
+                702.38,
+                706.843,
+                664.866
+              ],
+              "output_bytes": 2404484,
+              "io": {
+                "existsSync": 25760,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 8546,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 140.949,
+              "p95_ms": 175.607,
+              "mean_ms": 144.569,
+              "samples": 15,
+              "timings_ms": [
+                138.622,
+                138.191,
+                137.956,
+                150.901,
+                152.679,
+                140.949,
+                140.285,
+                144.393,
+                149.391,
+                141.778,
+                175.607,
+                137.805,
+                138.974,
+                138.271,
+                142.729
+              ],
+              "output_bytes": 321,
+              "io": {
+                "existsSync": 1,
+                "statSync": 10851,
+                "lstatSync": 40385,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 839.336,
+              "p95_ms": 1128.566,
+              "mean_ms": 859.808,
+              "samples": 15,
+              "timings_ms": [
+                809.683,
+                796.252,
+                811.049,
+                810.591,
+                852.001,
+                839.336,
+                848.662,
+                835.321,
+                866.211,
+                1128.566,
+                947.984,
+                861.604,
+                803.692,
+                815.95,
+                870.226
+              ],
+              "output_bytes": 2407813,
+              "io": {
+                "existsSync": 25771,
+                "statSync": 14027,
+                "lstatSync": 40386,
+                "readdirSync": 8546,
+                "realpathSync": 14260,
+                "readFileSync": 4168,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 140.066,
+              "p95_ms": 152.364,
+              "mean_ms": 141.825,
+              "samples": 15,
+              "timings_ms": [
+                138.374,
+                138.089,
+                139.266,
+                139.653,
+                140.866,
+                152.364,
+                140.192,
+                140.066,
+                146.504,
+                143.668,
+                145.936,
+                140.025,
+                139.496,
+                143.307,
+                139.56
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 5,
+                "statSync": 10851,
+                "lstatSync": 40386,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 1034.205,
+              "p95_ms": 1141.152,
+              "mean_ms": 1032.452,
+              "samples": 15,
+              "timings_ms": [
+                1084.027,
+                988.295,
+                1066.902,
+                1076.648,
+                1069.914,
+                1141.152,
+                981.368,
+                951.515,
+                1034.205,
+                992.43,
+                1044.961,
+                966.51,
+                948.781,
+                1118.665,
+                1021.404
+              ],
+              "output_bytes": 2067915,
+              "io": {
+                "existsSync": 25772,
+                "statSync": 24878,
+                "lstatSync": 80771,
+                "readdirSync": 8546,
+                "realpathSync": 14260,
+                "readFileSync": 4169,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 936.268,
+              "concurrent_4_wall_ms": 3861.177
+            },
+            "app_resource_preview": {
+              "p50_ms": 148.766,
+              "p95_ms": 223.361,
+              "mean_ms": 155.342,
+              "samples": 15,
+              "timings_ms": [
+                223.361,
+                148.766,
+                147.861,
+                150.36,
+                148.024,
+                149.939,
+                147.64,
+                191.454,
+                148.415,
+                152.602,
+                152.755,
+                150,
+                139.833,
+                143.003,
+                136.114
+              ],
+              "output_bytes": 3513,
+              "io": {
+                "existsSync": 5,
+                "statSync": 10851,
+                "lstatSync": 40386,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 2,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 137.296,
+              "concurrent_4_wall_ms": 557.171
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 979.12,
+              "p95_ms": 1197.125,
+              "mean_ms": 994.816,
+              "samples": 15,
+              "timings_ms": [
+                932.296,
+                979.12,
+                1002.243,
+                1197.125,
+                1064.563,
+                990.288,
+                945.594,
+                998.381,
+                977.355,
+                974.129,
+                946.883,
+                975.498,
+                1002.962,
+                1004.76,
+                931.036
+              ],
+              "output_bytes": 2067915,
+              "io": {
+                "existsSync": 25772,
+                "statSync": 24878,
+                "lstatSync": 80771,
+                "readdirSync": 8546,
+                "realpathSync": 14260,
+                "readFileSync": 4169,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              },
+              "event_loop_timer_delay_ms": 942.7,
+              "concurrent_4_wall_ms": 3868.202
+            },
+            "complete": true
+          }
+        },
+        "current": {
+          "local_source": {
+            "scanDirectory": {
+              "p50_ms": 34.884,
+              "p95_ms": 35.864,
+              "mean_ms": 35.086,
+              "samples": 15,
+              "timings_ms": [
+                35.76,
+                35.308,
+                34.884,
+                34.011,
+                35.627,
+                34.822,
+                34.721,
+                34.706,
+                34.218,
+                35.766,
+                35.73,
+                34.861,
+                35.396,
+                34.622,
+                35.864
+              ],
+              "output_bytes": 525511,
+              "io": {
+                "existsSync": 1418,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 1418,
+                "realpathSync": 0,
+                "readFileSync": 0,
+                "readdir_unique": 1418,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "findSubSkills": {
+              "p50_ms": 407.796,
+              "p95_ms": 713.534,
+              "mean_ms": 445.449,
+              "samples": 15,
+              "timings_ms": [
+                451.194,
+                399.222,
+                396.688,
+                407.852,
+                407.796,
+                399.912,
+                396.517,
+                424.971,
+                418.169,
+                401.699,
+                402.512,
+                397.151,
+                408.208,
+                713.534,
+                656.313
+              ],
+              "output_bytes": 1878949,
+              "io": {
+                "existsSync": 24342,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 7128,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 490.675,
+              "p95_ms": 578.411,
+              "mean_ms": 492.313,
+              "samples": 15,
+              "timings_ms": [
+                447.055,
+                443.427,
+                578.411,
+                490.675,
+                465.879,
+                492.539,
+                503.17,
+                539.414,
+                474.488,
+                482.482,
+                458.577,
+                449.403,
+                527.359,
+                491.073,
+                540.746
+              ],
+              "output_bytes": 2404484,
+              "io": {
+                "existsSync": 25760,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 8546,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 0.036,
+              "p95_ms": 0.038,
+              "mean_ms": 0.036,
+              "samples": 15,
+              "timings_ms": [
+                0.038,
+                0.037,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.037,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.036,
+                0.036
+              ],
+              "output_bytes": 204,
+              "io": {
+                "existsSync": 6,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 4,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 314.238,
+              "p95_ms": 351.106,
+              "mean_ms": 315,
+              "samples": 15,
+              "timings_ms": [
+                351.106,
+                311.564,
+                339.926,
+                308.989,
+                316.092,
+                314.238,
+                338.539,
+                324.316,
+                325.279,
+                330.777,
+                305.978,
+                275.314,
+                286.221,
+                300.251,
+                296.413
+              ],
+              "output_bytes": 2408026,
+              "io": {
+                "existsSync": 14,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 3176,
+                  "readdir": 7128,
+                  "realpath": 14256,
+                  "readFile": 4167,
+                  "max_active": 8
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 0.131,
+              "p95_ms": 0.144,
+              "mean_ms": 0.131,
+              "samples": 15,
+              "timings_ms": [
+                0.144,
+                0.137,
+                0.141,
+                0.131,
+                0.13,
+                0.133,
+                0.132,
+                0.127,
+                0.13,
+                0.137,
+                0.128,
+                0.129,
+                0.133,
+                0.117,
+                0.121
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 10,
+                "statSync": 2,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 8,
+                "readFileSync": 0,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "skillMdOnly": {
+              "p50_ms": 0.013,
+              "p95_ms": 0.014,
+              "mean_ms": 0.013,
+              "samples": 15,
+              "timings_ms": [
+                0.014,
+                0.014,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.013,
+                0.012,
+                0.013,
+                0.013,
+                0.012
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 0,
+                "statSync": 0,
+                "lstatSync": 0,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            }
+          },
+          "remote_fixture": {
+            "ensureSkillFetched": {
+              "p50_ms": 143.824,
+              "p95_ms": 157.372,
+              "mean_ms": 143.893,
+              "samples": 15,
+              "timings_ms": [
+                139.446,
+                146.403,
+                147.493,
+                140.984,
+                141.533,
+                143.824,
+                140.194,
+                144.512,
+                139.258,
+                145.155,
+                144.137,
+                157.372,
+                140.451,
+                146.453,
+                141.185
+              ],
+              "output_bytes": 32,
+              "io": {
+                "existsSync": 0,
+                "statSync": 10851,
+                "lstatSync": 40390,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "scanStructure": {
+              "p50_ms": 693.902,
+              "p95_ms": 757.478,
+              "mean_ms": 696.038,
+              "samples": 15,
+              "timings_ms": [
+                757.478,
+                684.986,
+                682.698,
+                689.038,
+                667.869,
+                693.902,
+                695.852,
+                721.128,
+                704.945,
+                680.777,
+                671.54,
+                716.201,
+                706.271,
+                670.378,
+                697.508
+              ],
+              "output_bytes": 2404484,
+              "io": {
+                "existsSync": 25760,
+                "statSync": 3176,
+                "lstatSync": 0,
+                "readdirSync": 8546,
+                "realpathSync": 14254,
+                "readFileSync": 4166,
+                "readdir_unique": 7128,
+                "readdir_repeated": 1418,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "cacheState": {
+              "p50_ms": 140.46,
+              "p95_ms": 183.18,
+              "mean_ms": 144.83,
+              "samples": 15,
+              "timings_ms": [
+                137.379,
+                183.18,
+                141.848,
+                138.952,
+                144.349,
+                140.46,
+                144.515,
+                144.076,
+                156.663,
+                140.435,
+                139.94,
+                138.745,
+                140.097,
+                139.351,
+                142.462
+              ],
+              "output_bytes": 321,
+              "io": {
+                "existsSync": 0,
+                "statSync": 10851,
+                "lstatSync": 40388,
+                "readdirSync": 0,
+                "realpathSync": 0,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 0,
+                  "max_active": 0
+                }
+              }
+            },
+            "readSkill": {
+              "p50_ms": 181.626,
+              "p95_ms": 213.202,
+              "mean_ms": 184.187,
+              "samples": 15,
+              "timings_ms": [
+                177.064,
+                184.645,
+                174.775,
+                172.002,
+                186.025,
+                179.712,
+                187.178,
+                181.626,
+                213.202,
+                183.074,
+                175.246,
+                177.14,
+                210.101,
+                177.193,
+                183.825
+              ],
+              "output_bytes": 2408143,
+              "io": {
+                "existsSync": 6,
+                "statSync": 10851,
+                "lstatSync": 40400,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 4166,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 8
+                }
+              }
+            },
+            "readInstructions": {
+              "p50_ms": 144.166,
+              "p95_ms": 170.739,
+              "mean_ms": 146.474,
+              "samples": 15,
+              "timings_ms": [
+                140.834,
+                139.066,
+                139.764,
+                152.484,
+                149.271,
+                148.912,
+                144.166,
+                145.349,
+                140.441,
+                139.645,
+                170.739,
+                140.749,
+                147.669,
+                144.065,
+                153.951
+              ],
+              "output_bytes": 3255,
+              "io": {
+                "existsSync": 2,
+                "statSync": 10851,
+                "lstatSync": 40400,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              }
+            },
+            "tool_read_skill": {
+              "p50_ms": 185.015,
+              "p95_ms": 257.363,
+              "mean_ms": 191.511,
+              "samples": 15,
+              "timings_ms": [
+                195.121,
+                180.85,
+                177.054,
+                206.428,
+                198.01,
+                180.095,
+                177.609,
+                183.287,
+                185.015,
+                176.029,
+                182.955,
+                257.363,
+                188.673,
+                190.951,
+                193.222
+              ],
+              "output_bytes": 2067915,
+              "io": {
+                "existsSync": 6,
+                "statSync": 10851,
+                "lstatSync": 40400,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 4166,
+                  "readdir": 0,
+                  "realpath": 1,
+                  "readFile": 1,
+                  "max_active": 8
+                }
+              },
+              "event_loop_timer_delay_ms": 138.132,
+              "concurrent_4_wall_ms": 696.566
+            },
+            "app_resource_preview": {
+              "p50_ms": 138.348,
+              "p95_ms": 155.649,
+              "mean_ms": 141.169,
+              "samples": 15,
+              "timings_ms": [
+                140.051,
+                136.687,
+                138.348,
+                155.649,
+                139.038,
+                136.625,
+                143.412,
+                143.229,
+                136.503,
+                136.361,
+                152.791,
+                137.495,
+                135.371,
+                135.484,
+                150.493
+              ],
+              "output_bytes": 3513,
+              "io": {
+                "existsSync": 2,
+                "statSync": 10851,
+                "lstatSync": 40400,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 0,
+                  "readdir": 0,
+                  "realpath": 0,
+                  "readFile": 1,
+                  "max_active": 1
+                }
+              },
+              "event_loop_timer_delay_ms": 153.645,
+              "concurrent_4_wall_ms": 589.052
+            },
+            "fresh_tool_read_skill": {
+              "p50_ms": 286.937,
+              "p95_ms": 304.188,
+              "mean_ms": 288.376,
+              "samples": 15,
+              "timings_ms": [
+                288.783,
+                291.791,
+                286.535,
+                282.117,
+                289.496,
+                286.996,
+                286.865,
+                286.937,
+                286.649,
+                278.056,
+                281.111,
+                296.598,
+                304.188,
+                292.679,
+                286.835
+              ],
+              "output_bytes": 2067915,
+              "io": {
+                "existsSync": 6,
+                "statSync": 10851,
+                "lstatSync": 40400,
+                "readdirSync": 0,
+                "realpathSync": 2,
+                "readFileSync": 1,
+                "readdir_unique": 0,
+                "readdir_repeated": 0,
+                "async": {
+                  "stat": 4166,
+                  "readdir": 0,
+                  "realpath": 4167,
+                  "readFile": 4167,
+                  "max_active": 8
+                }
+              },
+              "event_loop_timer_delay_ms": 137.099,
+              "concurrent_4_wall_ms": 1098.068
+            },
+            "complete": true
+          }
+        }
+      },
+      "comparison": {
+        "tool_read_skill": {
+          "baseline_p50_ms": 1034.205,
+          "current_p50_ms": 185.015,
+          "reduction_percent": 82.11,
+          "speedup": 5.59
+        },
+        "fresh_tool_read_skill": {
+          "baseline_p50_ms": 979.12,
+          "current_p50_ms": 286.937,
+          "reduction_percent": 70.694,
+          "speedup": 3.412
+        },
+        "app_resource_preview": {
+          "baseline_p50_ms": 148.766,
+          "current_p50_ms": 138.348,
+          "reduction_percent": 7.003,
+          "speedup": 1.075
+        }
+      }
+    }
+  ],
+  "notes": [
+    "Warm handler timings exclude JSON serialization, network transport and console.error mirroring.",
+    "Remote fixtures have catalog paths, sizes and modes; only SKILL.md bodies are real. No source files are modified.",
+    "Both builds use identical fixture paths. Local-source and remote-fixture paths differ; do not interpret their gap as an optimization.",
+    "I/O counts are JavaScript fs API calls, not kernel syscalls. Synchronous and asynchronous calls are reported separately; timing and I/O counting run separately.",
+    "Remote reads must stay offline and preserve complete cache state. Event-loop and concurrent-request probes are single observations.",
+    "fresh_tool_read_skill uses a new loader per sample: the disk cache is complete, but the in-memory subskill summary cache is empty. This is not a network-cold download."
+  ],
+  "network_requests": 0,
+  "completed_at": "2026-10-16T16:42:49.213Z"
+}

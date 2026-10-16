@@ -17,6 +17,8 @@ const { values } = parseArgs({ options: {
   branch: { type: 'string', default: 'main' },
   path: { type: 'string', default: 'codex-skills' },
   'runtime-dir': { type: 'string' },
+  'force-manifest-raw-failure': { type: 'boolean', default: false },
+  'expected-manifest-sha256': { type: 'string' },
 } });
 const runtime = values['runtime-dir'] ? resolve(values['runtime-dir']) : fileURLToPath(new URL('../dist/', import.meta.url));
 const { parseManifest } = await import(pathToFileURL(join(runtime, 'config.js')).href);
@@ -39,7 +41,10 @@ globalThis.fetch = async (url, options) => {
   const metadataPath = path.endsWith('/skills_manifest.json') ? 'skills_manifest.json'
     : catalog ? `.catalog/${catalog[1]}` : undefined;
   const local = !!(metadataDir && metadataPath);
-  calls.push({ host: address.hostname, local });
+  const blocked = values['force-manifest-raw-failure'] && metadataPath === 'skills_manifest.json'
+    && address.hostname === 'raw.githubusercontent.com';
+  calls.push({ host: address.hostname, local, blocked });
+  if (blocked) throw new Error('Raw manifest failure injected by the smoke test');
   if (local) {
     options?.signal?.throwIfAborted();
     return new Response(readFileSync(join(metadataDir, metadataPath)));
@@ -50,7 +55,15 @@ try {
   const manifestStart = performance.now();
   await fetchManifest(config, true);
   const manifestMs = +(performance.now() - manifestStart).toFixed(2);
-  const manifest = parseManifest(JSON.parse(readFileSync(config.manifestPath, 'utf8')));
+  const manifestCalls = [...calls];
+  const manifestBody = readFileSync(config.manifestPath, 'utf8');
+  const manifestSha256 = createHash('sha256').update(manifestBody).digest('hex');
+  if (values['expected-manifest-sha256']) assert.equal(manifestSha256, values['expected-manifest-sha256'], 'Unexpected manifest revision');
+  if (values['force-manifest-raw-failure'] && !metadataDir) {
+    assert.ok(manifestCalls.some(call => call.host === 'api.github.com'), 'Contents API fallback was not exercised');
+    assert.ok(manifestCalls.every(call => call.host === 'api.github.com' || call.blocked), 'Authoritative fallback unexpectedly reached a mirror');
+  }
+  const manifest = parseManifest(JSON.parse(manifestBody));
   const indexed = manifest.filter(entry => entry.file_index);
   assert.ok(indexed.length > 0, 'Remote manifest has no file catalogs; publish the source catalogs first.');
   const results = [];
@@ -92,7 +105,9 @@ try {
       localMetadataRequests: coldCalls.filter(call => call.local).length });
   }
   console.log(JSON.stringify({ mode: metadataDir ? 'local-metadata-real-remote-files' : 'fully-remote',
-    manifestEntries: manifest.length, indexedSkills: indexed.length, manifestMs, results }, null, 2));
+    manifestEntries: manifest.length, indexedSkills: indexed.length, manifestMs, manifestSha256,
+    forcedManifestRawFailure: values['force-manifest-raw-failure'],
+    manifestRequests: manifestCalls, results }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
   rmSync(cache, { recursive: true, force: true });

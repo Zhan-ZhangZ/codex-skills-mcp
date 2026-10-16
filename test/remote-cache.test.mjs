@@ -255,7 +255,7 @@ test("failed polling of a new source is throttled without reusing old validators
   };
   assert.equal(await refreshManifestIfStale(changed), false);
   assert.equal(await refreshManifestIfStale(changed), false);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2, "raw and Contents API each fail once, then the source is throttled");
 });
 
 test("a single-file skill is resolved from its parent contents listing", async (t) => {

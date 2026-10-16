@@ -53,8 +53,9 @@ const report = {
     "Warm handler timings exclude JSON serialization, network transport and console.error mirroring.",
     "Remote fixtures have catalog paths, sizes and modes; only SKILL.md bodies are real. No source files are modified.",
     "Both builds use identical fixture paths. Local-source and remote-fixture paths differ; do not interpret their gap as an optimization.",
-    "I/O counts are JavaScript synchronous fs API calls, not kernel syscalls. Timing and I/O counting run separately.",
+    "I/O counts are JavaScript fs API calls, not kernel syscalls. Synchronous and asynchronous calls are reported separately; timing and I/O counting run separately.",
     "Remote reads must stay offline and preserve complete cache state. Event-loop and concurrent-request probes are single observations.",
+    "fresh_tool_read_skill uses a new loader per sample: the disk cache is complete, but the in-memory subskill summary cache is empty. This is not a network-cold download.",
   ],
 };
 const savedFetch = globalThis.fetch;
@@ -90,21 +91,33 @@ async function measure(fn) {
 }
 async function countIO(fn) {
   const methods = ["existsSync", "statSync", "lstatSync", "readdirSync", "realpathSync", "readFileSync"];
+  const asyncMethods = ["stat", "readdir", "realpath", "readFile"];
   const original = Object.fromEntries(methods.map((name) => [name, fs[name]]));
+  const originalAsync = Object.fromEntries(asyncMethods.map((name) => [name, fs.promises[name]]));
   const counts = Object.fromEntries(methods.map((name) => [name, 0]));
+  const asyncCounts = Object.fromEntries(asyncMethods.map((name) => [name, 0]));
+  let activeAsync = 0;
+  let maxActiveAsync = 0;
   const directories = new Map();
   for (const name of methods) fs[name] = (...args) => {
     counts[name]++;
     if (name === "readdirSync") directories.set(String(args[0]), (directories.get(String(args[0])) ?? 0) + 1);
     return original[name](...args);
   };
+  for (const name of asyncMethods) fs.promises[name] = async (...args) => {
+    asyncCounts[name]++;
+    maxActiveAsync = Math.max(maxActiveAsync, ++activeAsync);
+    try { return await originalAsync[name](...args); } finally { activeAsync--; }
+  };
   syncBuiltinESMExports();
   try { await fn(); } finally {
     for (const name of methods) fs[name] = original[name];
+    for (const name of asyncMethods) fs.promises[name] = originalAsync[name];
     syncBuiltinESMExports();
   }
   return { ...counts, readdir_unique: directories.size,
-    readdir_repeated: [...directories.values()].filter((count) => count > 1).length };
+    readdir_repeated: [...directories.values()].filter((count) => count > 1).length,
+    async: { ...asyncCounts, max_active: maxActiveAsync } };
 }
 function within(root, path) {
   const target = resolve(root, path);
@@ -196,6 +209,7 @@ async function inspect(entry, builds, index) {
       readSkill: () => remote.readSkill(entry),
       ...(typeof remote.readInstructions === "function" ? { readInstructions: () => remote.readInstructions(entry) } : {}),
       ...handlers(build, cfg, remote, entry),
+      fresh_tool_read_skill: () => handlers(build, cfg, new build.SkillLoader(cfg, [entry]), entry).tool_read_skill(),
     };
     const result = { local_source: {}, remote_fixture: {} };
     for (const [scope, operations] of [["local_source", localOperations], ["remote_fixture", remoteOperations]]) {
@@ -203,7 +217,7 @@ async function inspect(entry, builds, index) {
         result[scope][operation] = { ...await measure(fn), io: await countIO(fn) };
       }
     }
-    for (const operation of ["tool_read_skill", "app_resource_preview"]) {
+    for (const operation of ["tool_read_skill", "fresh_tool_read_skill", "app_resource_preview"]) {
       const start = performance.now();
       const timer = new Promise((resolve) => setTimeout(() => resolve(performance.now() - start), 0));
       await remoteOperations[operation]();
@@ -218,7 +232,7 @@ async function inspect(entry, builds, index) {
     savedError(`Measured ${build.label}: ${entry.name} (${catalog.files.length} files)`);
   }
   if (item.builds.baseline) {
-    item.comparison = Object.fromEntries(["tool_read_skill", "app_resource_preview"].map((operation) => {
+    item.comparison = Object.fromEntries(["tool_read_skill", "fresh_tool_read_skill", "app_resource_preview"].map((operation) => {
       const before = item.builds.baseline.remote_fixture[operation].p50_ms;
       const after = item.builds.current.remote_fixture[operation].p50_ms;
       return [operation, { baseline_p50_ms: before, current_p50_ms: after,

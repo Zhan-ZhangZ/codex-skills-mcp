@@ -1,8 +1,10 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { resolve, join, relative, extname } from "node:path";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
+import { join, relative, extname, basename, dirname, isAbsolute, sep } from "node:path";
 import type { ManifestEntry, Config } from "../config.js";
-import type { ProgressCallback } from "../remote/github.js";
-import { readSkillCacheState, isSkillCachedLight, type SkillCacheState } from "../remote/github.js";
+import type { ProgressCallback, SkillMaterialization } from "../remote/github.js";
+import { readSkillCacheState, isSkillCachedLight, consumeSkillMaterialization, peekSkillMaterialization, type SkillCacheState } from "../remote/github.js";
 import { resolveWithin } from "../lib/paths.js";
 
 export interface SkillStructure {
@@ -33,6 +35,22 @@ export interface ReadSkillResult {
   instructions: string;
   structure: SkillStructure;
   dependencies: SkillDependencies;
+  /** The state verified by this materialization, reused by the tool response. */
+  cache?: SkillCacheState;
+}
+
+export interface ReadInstructionsResult {
+  instructions: string;
+  cache: SkillCacheState;
+}
+
+interface CatalogFile {
+  path: string;
+  size: number;
+  sha?: string;
+  mode?: string;
+  /** Includes inode, size and local change timestamps from this request. */
+  fingerprint?: string;
 }
 
 // Files/dirs to skip when scanning structure
@@ -44,14 +62,48 @@ const SKIP_NAMES = new Set([
 
 // Max file size to return via load_skill_file (500KB)
 const MAX_FILE_SIZE = 500 * 1024;
+const SUMMARY_CACHE_ENTRIES = 8192;
+const SUMMARY_CACHE_BYTES = 4 * 1024 * 1024;
+
+/** A shared per-loader permit pool also bounds concurrent resource requests. */
+class FileReadPool {
+  private active = 0;
+  private waiting: (() => void)[] = [];
+
+  async run<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.active < 8) this.active++;
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try { return await operation(); } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.active--;
+    }
+  }
+}
+
+function contained(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+function summary(content: string, folder: string): Pick<SubSkillInfo, "name" | "description"> {
+  const name = content.match(/^---[\s\S]*?name:\s*(.+?)$/m)?.[1].trim() ?? folder;
+  const description = content.match(/^---[\s\S]*?description:\s*(.+?)$/m)?.[1].trim() ?? "";
+  // Copy small captured strings so a cache entry does not retain a whole large
+  // SKILL.md through V8 substring backing storage.
+  return { name: Buffer.from(name).toString(), description: Buffer.from(description).toString() };
+}
 
 /**
  * Skill loader — reads SKILL.md, scans structure, detects dependencies.
  */
 export class SkillLoader {
   private skillsDir: string;
+  private readonly fileReads = new FileReadPool();
+  private readonly summaries = new Map<string, { value: Pick<SubSkillInfo, "name" | "description">; bytes: number }>();
+  private summaryBytes = 0;
   private _ensureSkillFetched:
-    | ((config: Config, entry: ManifestEntry, onProgress?: ProgressCallback) => Promise<void>)
+    | ((config: Config, entry: ManifestEntry, onProgress?: ProgressCallback) => Promise<SkillMaterialization>)
     | null = null;
 
   constructor(
@@ -73,12 +125,12 @@ export class SkillLoader {
   private async ensureRemoteFetched(
     entry: ManifestEntry,
     onProgress?: ProgressCallback
-  ): Promise<void> {
+  ): Promise<SkillMaterialization> {
     if (!this._ensureSkillFetched) {
       const { ensureSkillFetched } = await import("../remote/github.js");
       this._ensureSkillFetched = ensureSkillFetched;
     }
-    await this._ensureSkillFetched(this.config, entry, onProgress);
+    return this._ensureSkillFetched(this.config, entry, onProgress);
   }
 
   /**
@@ -95,33 +147,200 @@ export class SkillLoader {
    * readSkill. Resource previews do not need a directory or dependency scan.
    */
   async readInstructions(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<string> {
-    if (this.config.isRemote) {
-      await this.ensureRemoteFetched(entry, onProgress);
-    }
+    return (await this.readInstructionsWithState(entry, onProgress)).instructions;
+  }
 
-    const skillPath = this.resolveSkillPath(entry);
-
-    const skillMdPath = resolveWithin(skillPath, "SKILL.md");
-    if (!existsSync(skillMdPath)) {
-      throw new Error(`SKILL.md not found for ${entry.name}`);
-    }
-    return readFileSync(skillMdPath, "utf-8");
+  async readInstructionsWithState(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<ReadInstructionsResult> {
+    const { instructions, cache } = await this.readMaterialized(entry, false, onProgress);
+    return { instructions, cache };
   }
 
   /**
    * Read a skill's SKILL.md + structure + dependencies.
    */
   async readSkill(entry: ManifestEntry, onProgress?: ProgressCallback): Promise<ReadSkillResult> {
-    const instructions = await this.readInstructions(entry, onProgress);
-    const skillPath = this.resolveSkillPath(entry);
+    return this.readMaterialized(entry, true, onProgress);
+  }
 
-    // Scan structure
-    const structure = this.scanStructure(skillPath, entry);
+  private async rootInstructions(skillPath: string, entry: ManifestEntry): Promise<string> {
+    const target = resolveWithin(skillPath, "SKILL.md");
+    try { return await this.fileReads.run(() => readFile(target, "utf8")); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`SKILL.md not found for ${entry.name}`);
+      throw error;
+    }
+  }
 
-    // Detect dependencies
-    const dependencies = this.detectDependencies(skillPath);
+  private async readMaterialized(
+    entry: ManifestEntry, includeStructure: boolean, onProgress?: ProgressCallback
+  ): Promise<ReadSkillResult & { cache: SkillCacheState }> {
+    const empty = (): SkillStructure => ({ files: [], sub_skills: [] });
+    if (!this.config.isRemote) {
+      const skillPath = this.resolveSkillPath(entry);
+      const instructions = await this.rootInstructions(skillPath, entry);
+      const structure = includeStructure ? await this.localStructure(skillPath) : empty();
+      const dependencies = includeStructure ? this.detectDependencies(skillPath) : { language: "markdown-only" };
+      return { instructions, structure, dependencies, cache: this.cacheState(entry) };
+    }
+    // Asynchronous file reads can overlap a repair or source change. Inspect
+    // the receipt first, but consume it only after the entire response is read.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const receipt = await this.ensureRemoteFetched(entry, onProgress);
+      const prepared = peekSkillMaterialization(this.config, entry, receipt);
+      if (!prepared) continue;
+      const skillPath = prepared.cache.localPath;
+      const sourceKey = JSON.stringify([skillPath, this.config.githubRepo, this.config.githubBranch, this.config.githubPath]);
+      const instructions = await this.rootInstructions(skillPath, entry);
+      const structure = includeStructure
+        ? prepared.cache.complete
+          ? await this.catalogStructure(skillPath, prepared.files, sourceKey)
+          : await this.localStructure(skillPath)
+        : empty();
+      const dependencies = includeStructure ? this.detectDependencies(skillPath) : { language: "markdown-only" };
+      const verified = consumeSkillMaterialization(this.config, entry, receipt);
+      if (verified) return { instructions, structure, dependencies, cache: verified.cache };
+    }
+    throw new Error("Skill cache changed during the read. Retry to read a consistent materialization.");
+  }
 
-    return { instructions, structure, dependencies };
+  /** Build only the displayed tree from an already validated materialization. */
+  private async catalogStructure(
+    skillPath: string, files: readonly CatalogFile[], sourceKey: string, maxDepth = 2
+  ): Promise<SkillStructure> {
+    type Tree = Map<string, FileNode & { entries?: Tree }>;
+    const tree: Tree = new Map();
+    const candidates: CatalogFile[] = [];
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      const parts = file.path.split("/");
+      const parents = parts.slice(0, -1);
+      // findSubSkills historically includes hidden directories and depth five,
+      // while the displayed file tree hides dotfiles and stops at depth two.
+      if (parts.at(-1) === "SKILL.md" && parents.length > 0 && parents.length <= 5 &&
+          parents.every((name) => !SKIP_NAMES.has(name))) candidates.push(file);
+
+      let current = tree;
+      for (let depth = 0; depth < parts.length && depth <= maxDepth; depth++) {
+        const name = parts[depth];
+        if (SKIP_NAMES.has(name) || (name.startsWith(".") && name !== ".env.example")) break;
+        if (depth === parts.length - 1) {
+          current.set(name, { name, type: "file", size_bytes: file.size });
+        } else {
+          let node = current.get(name);
+          if (!node) {
+            node = { name, type: "directory", ...(depth < maxDepth ? { entries: new Map() } : {}) };
+            current.set(name, node);
+          }
+          if (!node.entries) break;
+          current = node.entries;
+        }
+      }
+      if ((index + 1) % 256 === 0) await yieldToEventLoop();
+    }
+    const toNodes = (entries: Tree): FileNode[] => [...entries.values()]
+      .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+      .map(({ entries: children, ...node }) => children ? { ...node, children: toNodes(children) } : node);
+    // A lexical path-segment comparison preserves depth-first directory order
+    // even when the catalog itself is not sorted.
+    candidates.sort((a, b) => {
+      const left = a.path.split("/").slice(0, -1);
+      const right = b.path.split("/").slice(0, -1);
+      for (let i = 0; i < Math.min(left.length, right.length); i++) {
+        if (left[i] !== right[i]) return left[i] < right[i] ? -1 : 1;
+      }
+      return left.length - right.length;
+    });
+    const root = await this.fileReads.run(() => realpath(skillPath));
+    const subSkills = await Promise.all(candidates.map((file) => this.catalogSummary(root, file, sourceKey)));
+    return { files: toNodes(tree), sub_skills: subSkills.filter((item): item is SubSkillInfo => item !== null) };
+  }
+
+  private async catalogSummary(skillPath: string, file: CatalogFile, sourceKey: string): Promise<SubSkillInfo | null> {
+    const path = dirname(file.path);
+    // Legacy tree entries without a content identity still work, but do not
+    // enter the cache. A local edit invalidates even a same-size catalog file.
+    try {
+      let fingerprint = file.fingerprint;
+      if (!fingerprint && file.sha) {
+        const local = await this.fileReads.run(() => stat(join(skillPath, file.path), { bigint: true }));
+        fingerprint = [local.dev, local.ino, local.size, local.mtimeNs, local.ctimeNs].join(":");
+      }
+      const key = file.sha && fingerprint ? JSON.stringify([sourceKey, file.path, file.sha, fingerprint]) : undefined;
+      if (key) {
+        const cached = this.summaries.get(key);
+        if (cached) {
+          this.summaries.delete(key);
+          this.summaries.set(key, cached);
+          return { ...cached.value, path };
+        }
+      }
+      // Re-resolve before asynchronous reads too: a file may have changed since
+      // the materialization snapshot checked its ancestors.
+      const target = await this.fileReads.run(() => realpath(join(skillPath, file.path)));
+      if (!contained(skillPath, target)) return null;
+      const content = await this.fileReads.run(() => readFile(target, "utf8"));
+      const value = summary(content, basename(path));
+      if (key) {
+        const bytes = Buffer.byteLength(key) + Buffer.byteLength(value.name) + Buffer.byteLength(value.description);
+        if (bytes <= SUMMARY_CACHE_BYTES) {
+          const previous = this.summaries.get(key);
+          if (previous) { this.summaryBytes -= previous.bytes; this.summaries.delete(key); }
+          this.summaries.set(key, { value, bytes });
+          this.summaryBytes += bytes;
+          while (this.summaries.size > SUMMARY_CACHE_ENTRIES || this.summaryBytes > SUMMARY_CACHE_BYTES) {
+            const oldest = this.summaries.keys().next().value!;
+            this.summaryBytes -= this.summaries.get(oldest)!.bytes;
+            this.summaries.delete(oldest);
+          }
+        }
+      }
+      return { ...value, path };
+    } catch {
+      // Match the old scanner's handling of files removed during a read.
+      return null;
+    }
+  }
+
+  /** Local checkouts remain editable: inspect the actual tree on every read. */
+  private async localStructure(skillPath: string, maxDepth = 2): Promise<SkillStructure> {
+    const root = await this.fileReads.run(() => realpath(skillPath));
+    const readSummary = async (directory: string): Promise<SubSkillInfo | null> => {
+      try {
+        const target = await this.fileReads.run(() => realpath(join(directory, "SKILL.md")));
+        if (!contained(root, target)) return null;
+        const content = await this.fileReads.run(() => readFile(target, "utf8"));
+        return { ...summary(content, basename(directory)), path: relative(root, directory) };
+      } catch { return null; }
+    };
+    const walk = async (directory: string, depth: number, visible: boolean): Promise<SkillStructure> => {
+      try {
+        const canonical = await this.fileReads.run(() => realpath(directory));
+        if (!contained(root, canonical)) return { files: [], sub_skills: [] };
+        const entries = await this.fileReads.run(() => readdir(canonical, { withFileTypes: true }));
+        const results = await Promise.all(entries.map(async (entry): Promise<SkillStructure> => {
+          if (SKIP_NAMES.has(entry.name)) return { files: [], sub_skills: [] };
+          const show = visible && (!entry.name.startsWith(".") || entry.name === ".env.example");
+          if (entry.isDirectory()) {
+            const child = join(canonical, entry.name);
+            const own = depth <= 4 ? await readSummary(child) : null;
+            const below = depth < Math.max(maxDepth, 4)
+              ? await walk(child, depth + 1, show && depth < maxDepth)
+              : { files: [], sub_skills: [] };
+            const node: FileNode = { name: entry.name, type: "directory",
+              ...(depth < maxDepth ? { children: below.files } : {}) };
+            return { files: show ? [node] : [], sub_skills: [...(own ? [own] : []), ...below.sub_skills] };
+          }
+          if (entry.isFile() && show) {
+            // The async stat preserves actual local file sizes, including edits.
+            let size: number | undefined;
+            try { size = (await this.fileReads.run(() => stat(join(canonical, entry.name)))).size; } catch {}
+            return { files: [{ name: entry.name, type: "file", ...(size === undefined ? {} : { size_bytes: size }) }], sub_skills: [] };
+          }
+          return { files: [], sub_skills: [] };
+        }));
+        return { files: results.flatMap((result) => result.files), sub_skills: results.flatMap((result) => result.sub_skills) };
+      } catch { return { files: [], sub_skills: [] }; }
+    };
+    return walk(root, 0, true);
   }
 
   /**

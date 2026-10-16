@@ -338,13 +338,16 @@ export function registerOpenAIMentions(
         }
 
         const selectedEntry = entry;
-        const instructions = await readWithDeadline(() => loader.readInstructions(selectedEntry), config, extra.signal);
+        const { instructions, cache } = await readWithDeadline(() => loader.readInstructionsWithState(selectedEntry), config, extra.signal);
         if (typeof searchEngine.recordUsage === "function") {
           searchEngine.recordUsage(entry.name);
         }
 
         // Self-describing hint so models reading this resource know where
         // supporting files live (they otherwise probe sub-paths blind).
+        const revisionNote = cache.cached && cache.catalogCurrent === false
+          ? "\n\n> ⚠️ Cached revision — current manifest catalog not validated. These instructions describe the cached revision. Retry this resource read when the source is available."
+          : "";
         const hint =
           `\n\n---\n> 📁 Supporting files for this skill (README.md, scripts/, ` +
           `references/, ...) are readable as MCP resources: ` +
@@ -355,7 +358,7 @@ export function registerOpenAIMentions(
             {
               uri: uri.href,
               mimeType: "text/markdown",
-              text: instructions + hint,
+              text: instructions + revisionNote + hint,
             },
           ],
         };

@@ -211,7 +211,7 @@ test("root router still serves only its root SKILL.md and the MCP guidance", asy
   const butler = { ...entry, name: "00_codex_skills", relative_path: "./" };
   writeFileSync(join(config.skillsDir, "SKILL.md"), "# Router");
   const loader = new SkillLoader(config, [butler]);
-  t.mock.method(loader, "readInstructions", () => assert.fail("router must not materialize the library"));
+  t.mock.method(loader, "readInstructionsWithState", () => assert.fail("router must not materialize the library"));
   const result = await resource(config, loader, butler).read();
   assert.match(result.contents[0].text, /^# Router/);
   assert.match(result.contents[0].text, /MCP host note/);
