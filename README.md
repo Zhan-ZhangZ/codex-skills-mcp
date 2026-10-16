@@ -1,13 +1,13 @@
 # codex-skills-mcp
 
-> 🧠 Codex-Skills 技能库的 MCP (Model Context Protocol) Server — 让任意 AI 编程工具都能检索、阅读和使用 180+ 专业技能。
+> 🧠 Codex-Skills 技能库的 MCP (Model Context Protocol) Server — 让 AI 编程工具检索、阅读和使用持续更新的专业技能库。
 
 ## 这是什么
 
 一个独立的 MCP Server，为 [codex-skills](https://github.com/Zhan-ZhangZ/codex-skills) 技能库提供标准化的 AI 工具接入协议。
 
 - **无需先下载全部技能文件**：启动只拉取轻量清单（约 108KB），技能全文按需加载；
-- **180+ 技能、14 个分类**：技能库由专家在远端持续维护，用户端零操作；
+- **技能与分类持续更新**：目录数量以实时清单为准，内容按需获取；
 - **内置国内网络加速**：自动回退链，国内网络免翻墙可用。
 
 | 特性 | 说明 |
@@ -20,8 +20,18 @@
 | **中文搜索优化** | CJK bigram 分词 + Leading Words 权重 |
 | **零外部 AI 依赖** | 纯关键词搜索，不需要 embedding 模型 |
 | **双传输模式** | stdio（本地）+ HTTP（远程） |
-| **自动网络加速** | GitHub 直连 → jsDelivr → gh-proxy.com → ghfast.top 四级回退 |
+| **自动网络加速** | 官方加速端点优先，延迟加入 GitHub / CDN / 公共镜像竞速；完整正文通过校验后才接受 |
 | **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
+
+## beta.4 改进（2026-10-16）
+
+当前开发版本为 **1.5.0-beta.4**，需要 **Node.js 22+**。本地构建可通过 `npm ci && npm test` 验证，尚未发布到 npm。审计依据、性能数据与下一轮优化见 [完整审查报告](docs/BETA-4-REVIEW.md)。
+
+- 搜索立即读取本地索引，后台轮询更新；`force_refresh=true` 明确等待刷新。索引重复刷新不再累积评分统计。
+- 下载校验完整正文、大小及 Git blob SHA；刷新失败保留可用缓存，断网时可使用合法同源清单启动。
+- App 完成宿主初始化握手，修复搜索/详情竞态、返回导航、原地重试及输入法体验。
+- HTTP 增加会话容量、正确的 404/400 语义、关闭清理及 Host/Origin 校验；默认监听 `127.0.0.1`。
+- 离线回归、前端类型检查、包内文件和真实 stdio 协议验收接入 CI。
 
 ## 快速开始
 
@@ -62,6 +72,8 @@ node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
 
 - MCP 端点：`http://localhost:3456/mcp`（POST / GET / DELETE，支持 `mcp-session-id` 会话管理）
 - 健康检查：`http://localhost:3456/health`
+
+默认只监听 `127.0.0.1`。局域网/容器部署可显式设置 `--host 0.0.0.0`，并通过 `--allowed-hosts localhost,127.0.0.1,skills.example.com` 配置 Host/Origin 白名单。隧道保留远端 Host 时也需加入对应域名。
 
 ```bash
 curl http://localhost:3456/health
@@ -162,7 +174,7 @@ flowchart LR
 
 ### 网络加速（并发竞速）
 
-所有远端文件请求由多个下载节点**并发竞速，最快成功者胜出**，无需任何参数：
+技能文件默认先尝试官方加速端点，延迟后将公共节点加入竞速。完整响应体通过大小和 Git blob SHA 校验后才可胜出；清单与内容更新优先读取 GitHub 权威源。可用 `--no-hedge` 立即并发所有节点：
 
 1. **官方加速端点** `gh.251716.xyz`（自建于香港的 raw.githubusercontent.com 只读反向代理，大陆方向 RTT 最低，小文件场景最快）；
 2. **GitHub 官方直连**；
@@ -175,8 +187,8 @@ flowchart LR
 #### 官方加速端点披露
 
 - **是什么**：`gh.251716.xyz` 是本项目自建的只读反向代理，用于改善中国大陆无代理环境下访问 GitHub raw 的速度。
-- **凭证说明**：若本机配置了 GitHub token（`--github-token` / `GITHUB_TOKEN` / git 凭据自动检测），该 token 会随请求**经 HTTPS 端到端透传**给 GitHub——这样 GitHub 按 token 配额（5000 次/小时）计费，而不是把所有用户挤在本服务器共享的匿名 IP 配额上。加速服务器不记录、不存储 Authorization 请求头（nginx 默认访问日志不含请求头）。未配置 token 的用户请求不带认证，行为不变。
-- **如何关闭**：启动参数加 `--no-official-mirror`，即回退为纯公共节点行为（token 也只会发送给 GitHub 官方直连节点）。
+- **凭证说明**：GitHub token（`--github-token` / `GITHUB_TOKEN` / 自动检测的 git 凭据）只发送给 GitHub 官方 API 与 raw 地址。官方加速端点、CDN 和公共镜像均不接收 Authorization。
+- **如何关闭**：启动参数加 `--no-official-mirror`。
 - **服务端日志**：命中官方端点的下载会在 stderr 输出 `official endpoint won: <文件名>`，便于观测命中率。
 
 ### Agent 标准工作流（行为合约）
@@ -203,7 +215,7 @@ flowchart LR
 - 已完整下载的技能直接本地读取，不重复请求远端；
 - 中断的下载支持断点续传：按文件大小比对，只补拉缺失/不完整的文件；
 - 技能文件并发下载，默认 16（可用 `--download-concurrency` 调整）；
-- 需要强制同步远端最新内容时，删除 `.codex-skills-cache/` 后重启即可。
+- 清单可通过 `search_skills(..., force_refresh=true)` 或 `refresh_skills_list` 立即刷新；技能内容在 TTL 到期后的下一次读取时重验证。刷新失败保留原来的完整文件。
 
 ## MCP Tools
 
@@ -322,13 +334,20 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | `--github-path` | `codex-skills` | 技能库在仓库内的目录 |
 | `--github-token` | 自动从 git 凭据 / `GITHUB_TOKEN` 获取 | GitHub API 鉴权 |
 | `--http` | - | 启动 HTTP 模式 |
-| `--port` | `3456` | HTTP 端口 |
-| `--download-concurrency` | `16` | 技能文件并发下载数 |
+| `--host` | `127.0.0.1` | HTTP 监听地址 |
+| `--allowed-hosts` | 本地主机白名单 | HTTP 允许的 Host/Origin 主机名，逗号分隔 |
+| `--port` | `3456` | HTTP 端口，0–65535；0 自动选择空闲端口 |
+| `--cache-dir` | `~/.codex-skills-cache` | 缓存目录，也可用 `CODEX_SKILLS_CACHE_DIR` |
+| `--download-concurrency` | `16` | 技能文件并发下载数，1–64 |
+| `--download-timeout` | `30` | 单请求超时秒数，1–300，覆盖完整正文 |
+| `--soft-deadline-seconds` | `55` | 无 progress token 请求的响应期限；0 禁用 |
+| `--hard-deadline-seconds` | `285` | 所有下载调用的响应期限；0 禁用 |
+| `--no-official-mirror` | 关闭 | 禁用官方加速端点 |
+| `--no-hedge` | 关闭 | 所有节点立即开始竞速 |
 | `--manifest-ttl <秒>` | `86400` | 清单缓存 TTL（0 = 永不按年龄刷新）。新技能可见性由下面的轮询负责 |
-| `--manifest-poll <秒>` | `300` | **清单新鲜度轮询间隔**：search/plan 调用时对权威源发条件请求（304 级开销），新集成技能最迟此时限内可被搜到；0 = 关闭。环境变量 `CODEX_SKILLS_MANIFEST_POLL_SECONDS` |
-| `--cn-mirror` | - | ⚠️ 已废弃（兼容保留）：网络加速现为自动回退链，此参数不再生效 |
+| `--manifest-poll <秒>` | `300` | 后台清单轮询间隔：search/plan/mentions/App 调用触发节流检查；完成后后续请求使用新索引。0 = 关闭，范围 0–3600 |
 
-环境变量：`CODEX_SKILLS_DIR`（本地技能库路径）、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`。
+环境变量：`CODEX_SKILLS_DIR`、`CODEX_SKILLS_CACHE_DIR`、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`、`CODEX_SKILLS_DOWNLOAD_TIMEOUT`、`CODEX_SKILLS_MANIFEST_POLL_SECONDS`。设置文件默认位于 `~/.codex-skills-mcp/settings.json`，可通过 `CODEX_SKILLS_SETTINGS_DIR` 隔离。CLI 显式参数优先于启动时保存的设置；设置面板更新实时同步各会话。
 
 技能库清单（`skills_manifest.json`）为 JSON 数组，每项包含 `name` / `description` / `category` / `folder` / `relative_path` 五个字段。
 
@@ -340,8 +359,8 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | 想看 Agent 到底做了什么 | `diagnostics` 或直接读 `~/.codex-skills-cache/logs/mcp-activity-*.jsonl` |
 | npx 首次运行较慢 | 首次需下载 npm 包 + 拉取清单，属正常；之后走缓存 |
 | 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
-| 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启，或设 `--manifest-ttl 60` 让清单自动高频刷新 |
-| 仓库新增了技能但搜不到 | v1.4.1 起 search/plan 每次调用先做节流条件轮询（默认 5 分钟一次，`--manifest-poll` 可调），新技能最迟一个轮询间隔内可见；read_skill 查无此名也会自动轮询复查。仍异常时 `search_skills(query, force_refresh=true)` 强刷，或删 `.codex-skills-cache/skills_manifest.json` 重启 |
+| 想更新技能内容 | 使用 `--manifest-ttl 60`，到期后重新读取技能会按远端文件树重验证；失败时保留原缓存 |
+| 仓库新增了技能但搜不到 | 普通搜索先返回现有索引，后台检查更新；立即获取可用 `search_skills(query, force_refresh=true)` 或设置面板的刷新动作 |
 | `load_skill_file` 读大文件失败 | 单文件上限 500KB，属保护设计 |
 | GitHub API 限流 | 每个技能仅 2 次 API 调用，已缓存技能不再请求；未登录配额 60 次/小时 |
 | 工具列表里看不到 MCP | 客户端未重启，重启会话即可 |
@@ -349,10 +368,23 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 ## 技术栈
 
 - TypeScript + ESM
-- `@modelcontextprotocol/sdk` v1.12+
+- `@modelcontextprotocol/sdk` v1.30+
 - `express` v5（仅 HTTP 模式）
-- `zod` v3 运行时 schema 验证
-- Node.js 18+
+- `zod` v4 运行时 schema 验证
+- Node.js 22+
+
+## 开发与验收
+
+```bash
+npm ci
+npm test                  # 前后端类型检查、构建、离线回归
+npm run benchmark         # 固定双语样本搜索基准
+npm run build:plugin       # 从源码重新构建插件
+npm run check:package      # npm 压缩包 + 插件的 stdio 端到端验收
+npm audit
+```
+
+测试使用临时目录、模拟网络或本地随机端口。旧测试文件保留为兼容入口，统一转发到新的离线套件。CI 配置覆盖 Node 22 / 24。
 
 ## License
 

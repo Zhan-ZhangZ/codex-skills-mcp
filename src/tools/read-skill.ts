@@ -32,6 +32,7 @@ export function registerReadSkill(
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "read_skill", skill: name, error: "skill not found" });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -44,12 +45,13 @@ export function registerReadSkill(
         // MCP progress notifications — clients opt in by sending a progressToken
         // in the request meta. Without one we stay silent (backwards compatible).
         const progressToken = extra?._meta?.progressToken;
+        let progressOpen = true;
         const sendProgress = (progress: number, total: number, message: string) => {
-          if (progressToken !== undefined) {
+          if (progressOpen && progressToken !== undefined && !extra.signal.aborted) {
             void extra.sendNotification({
               method: "notifications/progress",
               params: { progressToken, progress, total, message },
-            });
+            }).catch(() => {});
           }
         };
 
@@ -190,6 +192,7 @@ export function registerReadSkill(
           const message = err instanceof Error ? err.message : String(err);
           logEvent("error", "tool_error", { tool: "read_skill", skill: entry.name, error: message });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -197,6 +200,8 @@ export function registerReadSkill(
               },
             ],
           };
+        } finally {
+          progressOpen = false;
         }
       })
   );

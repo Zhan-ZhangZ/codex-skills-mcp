@@ -66,7 +66,7 @@ export function registerDiagnostics(
     "Audit and troubleshoot the skill library: recent tool calls and recent errors from the activity log, cache statistics (cached skill count / total size), manifest freshness and config summary. Use it when a call fails, when a download looks wrong, or to verify what the agent actually did (which tools ran, which skills downloaded).",
     {
       include_log: z.boolean().optional().default(true).describe("Include recent activity-log entries (default: true)"),
-      log_lines: z.number().optional().default(20).describe("Max log entries per section (default: 20)"),
+      log_lines: z.number().int().min(1).max(200).optional().default(20).describe("Max log entries per section (1–200, default: 20)"),
     },
     { readOnlyHint: true },
     async ({ include_log, log_lines }) =>

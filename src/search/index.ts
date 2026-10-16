@@ -28,6 +28,8 @@ interface FieldBag {
 
 interface IndexEntry {
   entry: ManifestEntry;
+  nameLower: string;
+  aliasTargets: string[];
   leadingWords: string[];
   isSubSkill: boolean;
   fields: Record<FieldName, FieldBag>;
@@ -239,6 +241,9 @@ export class SkillSearchEngine {
     tags: 1,
   };
   private totalDocs = 0;
+  private entriesByName = new Map<string, ManifestEntry>();
+  private refreshInFlight?: Promise<boolean>;
+  private refreshIsForced = false;
 
   // BM25 parameters
   private readonly k1 = 1.5;
@@ -312,6 +317,11 @@ export class SkillSearchEngine {
   }
 
   private buildIndex(manifest: ManifestEntry[]): void {
+    // Every rebuild replaces all corpus statistics, including removed entries.
+    this.index = [];
+    this.docFrequencies.clear();
+    this.entriesByName.clear();
+    this.butlerEntry = undefined;
     const categoryCounts = new Map<string, number>();
     const fieldTotals: Record<FieldName, number> = {
       name: 0,
@@ -387,7 +397,9 @@ export class SkillSearchEngine {
       const pathSegments = entry.relative_path.split("/").filter(Boolean);
       const isSubSkill = pathSegments.length > 3;
 
-      this.index.push({ entry, leadingWords, isSubSkill, fields });
+      const nameLower = entry.name.toLowerCase();
+      this.entriesByName.set(nameLower, entry);
+      this.index.push({ entry, nameLower, aliasTargets: [nameLower, ...(entry.aliases || []).map(a => a.toLowerCase())], leadingWords, isSubSkill, fields });
       categoryCounts.set(entry.category, (categoryCounts.get(entry.category) || 0) + 1);
     }
 
@@ -440,24 +452,29 @@ export class SkillSearchEngine {
   }
 
   private levenshtein(a: string, b: string): number {
+    // Fuzzy matching only accepts distance <= 2. Reject impossible pairs
+    // before allocating, then use two rows instead of a quadratic matrix.
+    if (Math.abs(a.length - b.length) > 2) return 3;
     if (a.length === 0) return b.length;
     if (b.length === 0) return a.length;
-    const matrix: number[][] = Array.from({ length: a.length + 1 }, () =>
-      new Array<number>(b.length + 1).fill(0)
-    );
-    for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
-    for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+    let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+    let current = new Array<number>(b.length + 1);
     for (let i = 1; i <= a.length; i++) {
+      current[0] = i;
+      let minimum = i;
       for (let j = 1; j <= b.length; j++) {
         const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + cost
+        current[j] = Math.min(
+          previous[j] + 1,
+          current[j - 1] + 1,
+          previous[j - 1] + cost
         );
+        minimum = Math.min(minimum, current[j]);
       }
+      if (minimum > 2) return 3;
+      [previous, current] = [current, previous];
     }
-    return matrix[a.length][b.length];
+    return previous[b.length];
   }
 
   /** Expand query tokens into [token, boost] pairs (synonyms weigh 0.75). */
@@ -493,7 +510,7 @@ export class SkillSearchEngine {
     }
     if (rawTokens.length === 0) return [];
 
-    const queryTokens = this.expandQuery(rawTokens);
+    const queryTokens = this.expandQuery(rawTokens).map(q => ({ ...q, idf: this.idf(q.token) }));
     const results: SearchResult[] = [];
 
     for (const item of this.index) {
@@ -503,11 +520,7 @@ export class SkillSearchEngine {
       let exactNameMatch = false;
       let leadingMatch = false;
       const matchedTerms: { token: string; kind: string }[] = [];
-      const nameLower = item.entry.name.toLowerCase();
-      const aliasTargets = [
-        nameLower,
-        ...(item.entry.aliases || []).map((a) => a.toLowerCase()),
-      ];
+      const { nameLower, aliasTargets } = item;
 
       for (const q of queryTokens) {
         let fieldScore = 0;
@@ -517,7 +530,7 @@ export class SkillSearchEngine {
           const tf = item.fields[field].termFreq.get(q.token) || 0;
           if (tf > 0) {
             const dl = item.fields[field].tokens.length;
-            const idf = this.idf(q.token);
+            const idf = q.idf;
             const num = tf * (this.k1 + 1);
             const den =
               tf + this.k1 * (1 - this.b + (this.b * dl) / Math.max(this.avgFieldLen[field], 1e-9));
@@ -589,8 +602,7 @@ export class SkillSearchEngine {
   }
 
   findByName(name: string): ManifestEntry | undefined {
-    const nameLower = name.toLowerCase();
-    return this.index.find((item) => item.entry.name.toLowerCase() === nameLower)?.entry;
+    return this.entriesByName.get(name.toLowerCase());
   }
 
   /**
@@ -638,13 +650,30 @@ export class SkillSearchEngine {
    */
   async maybeRefreshManifest(): Promise<boolean> {
     if (!this.config || !this.config.isRemote) return false;
+    if (this.refreshInFlight) return this.refreshInFlight;
+    return this.runRefresh(false);
+  }
+
+  /** Share one refresh/rebuild across concurrent searches and HTTP sessions. */
+  private runRefresh(force: boolean): Promise<boolean> {
+    const operation = this.reloadManifest(force);
+    this.refreshIsForced = force;
+    this.refreshInFlight = operation;
+    void operation.finally(() => {
+      if (this.refreshInFlight === operation) this.refreshInFlight = undefined;
+    });
+    return operation;
+  }
+
+  private async reloadManifest(force: boolean): Promise<boolean> {
     try {
-      const { refreshManifestIfStale } = await import("../remote/github.js");
-      const changed = await refreshManifestIfStale(this.config);
+      const { refreshManifestIfStale, fetchManifest } = await import("../remote/github.js");
+      const changed = force
+        ? await fetchManifest(this.config!, true)
+        : await refreshManifestIfStale(this.config!);
       if (!changed) return false;
       const { loadManifest } = await import("../config.js");
-      const manifest = loadManifest(this.config.manifestPath);
-      this.index = [];
+      const manifest = loadManifest(this.config!.manifestPath);
       this.buildIndex(manifest);
       return true;
     } catch (err) {
@@ -659,27 +688,9 @@ export class SkillSearchEngine {
    */
   async refreshManifest(): Promise<boolean> {
     if (!this.config || !this.config.isRemote) return false;
-    try {
-      const { fetchManifest } = await import("../remote/github.js");
-      const { loadManifest } = await import("../config.js");
-      
-      // Temporarily bypass TTL to force a fetch
-      const originalTTL = this.config.manifestTTL;
-      this.config.manifestTTL = 0;
-      
-      console.error("[codex-skills-mcp] Forcing manifest refresh for search...");
-      await fetchManifest(this.config);
-      
-      this.config.manifestTTL = originalTTL;
-      
-      // Reload and rebuild index
-      const manifest = loadManifest(this.config.manifestPath);
-      this.index = [];
-      this.buildIndex(manifest);
-      return true;
-    } catch (err) {
-      console.error("[codex-skills-mcp] Failed to refresh manifest:", err);
-      return false;
-    }
+    // Wait for an automatic poll before starting the explicitly forced read.
+    if (this.refreshInFlight && this.refreshIsForced) return this.refreshInFlight;
+    if (this.refreshInFlight) await this.refreshInFlight;
+    return this.refreshInFlight ?? this.runRefresh(true);
   }
 }

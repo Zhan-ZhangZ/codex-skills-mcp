@@ -19,7 +19,8 @@
  * effect without a restart and survive restarts.
  */
 
-import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
@@ -41,14 +42,16 @@ export interface EffectiveSettings {
 /** File shape — a partial subset of EffectiveSettings. */
 type PersistedSettings = Partial<EffectiveSettings>;
 
-const SETTINGS_DIR = resolve(homedir(), ".codex-skills-mcp");
+const SETTINGS_DIR = process.env.CODEX_SKILLS_SETTINGS_DIR
+  ? resolve(process.env.CODEX_SKILLS_SETTINGS_DIR)
+  : resolve(homedir(), ".codex-skills-mcp");
 const SETTINGS_PATH = join(SETTINGS_DIR, "settings.json");
 
 /** Zod schemas per field — single source for validation and type inference. */
 const SCHEMAS = {
   download_concurrency: z.number().int().min(1).max(64),
-  download_timeout_seconds: z.number().int().min(5).max(300),
-  manifest_ttl_hours: z.number().int().min(0).max(168),
+  download_timeout_seconds: z.number().int().min(1).max(300),
+  manifest_ttl_hours: z.number().min(0).max(168),
   manifest_poll_seconds: z.number().int().min(0).max(3600),
 };
 
@@ -64,7 +67,7 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
   download_timeout_seconds: {
     schema: SCHEMAS.download_timeout_seconds,
     title: "Download timeout (seconds)",
-    description: "Per-request timeout for skill file downloads (5–300s).",
+    description: "Per-request timeout for skill file downloads (1–300s).",
   },
   manifest_ttl_hours: {
     schema: SCHEMAS.manifest_ttl_hours,
@@ -83,13 +86,21 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
 function loadPersisted(): PersistedSettings {
   try {
     if (!existsSync(SETTINGS_PATH)) return {};
-    const data = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8")) as Record<string, unknown>;
+    const data: unknown = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
     // Migration: "cn_mirror" was a dead flag (parsed but never consumed by
     // any download logic) removed in 1.5.0-beta.3. Strip it from legacy
     // files so it disappears on the next persist instead of lingering in
     // the settings UI as a misleading no-op toggle.
-    delete data.cn_mirror;
-    return data as PersistedSettings;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+    const valid: PersistedSettings = {};
+    for (const key of Object.keys(SCHEMAS) as (keyof EffectiveSettings)[]) {
+      const value = (data as Record<string, unknown>)[key];
+      if (value === undefined) continue;
+      const parsed = SCHEMAS[key].safeParse(value);
+      if (parsed.success) valid[key] = parsed.data;
+      else console.error(`[codex-skills-mcp] Ignoring invalid persisted setting "${key}"`);
+    }
+    return valid;
   } catch (err) {
     console.error(`[codex-skills-mcp] Could not read settings file, using defaults: ${err}`);
     return {};
@@ -98,18 +109,22 @@ function loadPersisted(): PersistedSettings {
 
 function persist(partial: PersistedSettings): void {
   mkdirSync(SETTINGS_DIR, { recursive: true });
-  const tmp = `${SETTINGS_PATH}.tmp`;
-  writeFileSync(tmp, JSON.stringify(partial, null, 2) + "\n", "utf-8");
-  renameSync(tmp, SETTINGS_PATH); // atomic on POSIX
+  const tmp = `${SETTINGS_PATH}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(partial, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+    renameSync(tmp, SETTINGS_PATH);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
 /** Config-derived defaults for every field. */
 function defaultsFromConfig(config: Config): EffectiveSettings {
   return {
     download_concurrency: config.downloadConcurrency,
-    download_timeout_seconds: Math.round(config.downloadTimeout / 1000),
-    manifest_ttl_hours: Math.round(config.manifestTTL / 3_600_000),
-    manifest_poll_seconds: Math.round(config.manifestPollMs / 1000),
+    download_timeout_seconds: config.downloadTimeout / 1000,
+    manifest_ttl_hours: config.manifestTTL / 3_600_000,
+    manifest_poll_seconds: config.manifestPollMs / 1000,
   };
 }
 
@@ -171,8 +186,6 @@ export function registerOpenAISettings(
   config: Config,
   searchEngine: SkillSearchEngine
 ): void {
-  let current = effective(config, loadPersisted());
-
   extensions.settings.register({
     readTool: "settings.read",
     updateTool: "settings.update",
@@ -201,17 +214,21 @@ export function registerOpenAISettings(
         ],
       },
     ],
-    read: () => current,
+    // Config is shared by all HTTP sessions and already includes the startup
+    // CLI/persisted precedence. Re-reading disk here would hide CLI overrides
+    // and retaining a per-session snapshot would overwrite newer updates.
+    read: () => defaultsFromConfig(config),
     update: (set) => {
-      const next = { ...current, ...set };
+      const next = { ...defaultsFromConfig(config), ...set };
       // Full validation (cross-field rules would also live here).
       const parsed: EffectiveSettings = VALUES_SCHEMA.parse(next);
-      persist(parsed);
+      // Persist explicit UI changes only; unrelated CLI overrides belong to
+      // this process and should not silently become defaults for future runs.
+      persist({ ...loadPersisted(), ...set });
       applyToConfig(config, parsed);
-      current = parsed;
       logEvent("info", "settings_updated", { detail: JSON.stringify(set) });
       console.error(`[codex-skills-mcp] Settings updated: ${JSON.stringify(set)}`);
-      return current;
+      return defaultsFromConfig(config);
     },
   });
 

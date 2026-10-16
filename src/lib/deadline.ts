@@ -40,7 +40,7 @@ export function raceDownloadDeadline<T>(
   deadlineMs: number,
   kind: "soft" | "hard"
 ): Promise<T> {
-  if (!deadlineMs || deadlineMs <= 0) return download;
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) return download;
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new DownloadDeadlineExceeded(kind, deadlineMs));

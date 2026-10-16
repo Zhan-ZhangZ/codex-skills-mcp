@@ -15,7 +15,7 @@ export function registerListSkillFiles(
     {
       skill_name: z.string().describe("Skill name, e.g. 'KrillinAI'"),
       path: z.string().optional().default("").describe("Subdirectory path within the skill (default: root)"),
-      max_depth: z.number().optional().default(2).describe("Directory scan depth (default: 2)"),
+      max_depth: z.number().int().min(0).max(8).optional().default(2).describe("Directory scan depth (0–8, default: 2)"),
     },
     { readOnlyHint: true },
     async ({ skill_name, path, max_depth }) =>
@@ -24,6 +24,7 @@ export function registerListSkillFiles(
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "list_skill_files", skill: skill_name, error: "skill not found" });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -49,6 +50,7 @@ export function registerListSkillFiles(
           const message = err instanceof Error ? err.message : String(err);
           logEvent("warn", "tool_error", { tool: "list_skill_files", skill: skill_name, error: message });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,

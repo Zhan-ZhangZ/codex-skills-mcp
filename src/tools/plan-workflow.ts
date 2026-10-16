@@ -14,14 +14,14 @@ export function registerPlanWorkflow(
     "plan_workflow",
     "STEP 1 DISCOVER of the agent protocol. Given a task description, returns an ordered multi-skill execution plan draft (skills carry a [cached] badge when already on local disk — prefer them when scores are close). After planning you MUST call read_skill for EVERY skill in your final plan — each call downloads the complete skill — before starting work.",
     {
-      task_description: z.string().describe("Full description of the task to accomplish, e.g. '把技术博客文章转换成小红书图文并发布'"),
+      task_description: z.string().trim().min(1).max(8000).describe("Full description of the task to accomplish, e.g. '把技术博客文章转换成小红书图文并发布'"),
     },
     { readOnlyHint: true },
     async ({ task_description }) =>
       withToolLogging("plan_workflow", { task_description }, async () => {
         // Throttled freshness poll so newly integrated skills appear in plans
         if (typeof searchEngine.maybeRefreshManifest === "function") {
-          await searchEngine.maybeRefreshManifest();
+          void searchEngine.maybeRefreshManifest();
         }
 
         // Use a broader search to find related skills

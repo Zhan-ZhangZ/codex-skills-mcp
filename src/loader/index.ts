@@ -3,6 +3,7 @@ import { resolve, join, relative, extname } from "node:path";
 import type { ManifestEntry, Config } from "../config.js";
 import type { ProgressCallback } from "../remote/github.js";
 import { readSkillCacheState, isSkillCachedLight, type SkillCacheState } from "../remote/github.js";
+import { resolveWithin } from "../lib/paths.js";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -86,7 +87,7 @@ export class SkillLoader {
   resolveSkillPath(entry: ManifestEntry): string {
     // relative_path starts with "./" and is relative to the manifest dir
     const relPath = entry.relative_path.replace(/^\.\//, "");
-    return resolve(this.skillsDir, relPath);
+    return resolveWithin(this.skillsDir, relPath);
   }
 
   /**
@@ -101,11 +102,11 @@ export class SkillLoader {
 
     // Read SKILL.md
     let instructions = "";
-    const skillMdPath = join(skillPath, "SKILL.md");
+    const skillMdPath = resolveWithin(skillPath, "SKILL.md");
     if (existsSync(skillMdPath)) {
       instructions = readFileSync(skillMdPath, "utf-8");
     } else {
-      instructions = `[No SKILL.md found for ${entry.name}]\n\nDescription: ${entry.description}`;
+      throw new Error(`SKILL.md not found for ${entry.name}`);
     }
 
     // Scan structure
@@ -200,7 +201,7 @@ export class SkillLoader {
         if (SKIP_NAMES.has(entry.name)) continue;
 
         const subDir = join(currentPath, entry.name);
-        const subSkillMd = join(subDir, "SKILL.md");
+        const subSkillMd = resolveWithin(rootPath, join(relative(rootPath, subDir), "SKILL.md"));
 
         if (existsSync(subSkillMd)) {
           // Extract name from frontmatter or use folder name
@@ -284,20 +285,15 @@ export class SkillLoader {
     }
 
     const skillPath = this.resolveSkillPath(entry);
-    const fullPath = resolve(skillPath, filePath);
-
-    // Security: ensure the resolved path is within the skill directory
-    if (!fullPath.startsWith(skillPath)) {
-      throw new Error("Path traversal detected: file must be within skill directory");
-    }
+    const fullPath = resolveWithin(skillPath, filePath);
 
     if (!existsSync(fullPath)) {
       throw new Error(`File not found: ${filePath}`);
     }
 
     const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      throw new Error(`Path is a directory, not a file: ${filePath}`);
+    if (!stat.isFile()) {
+      throw new Error(`Path is not a regular file: ${filePath}`);
     }
 
     if (stat.size > MAX_FILE_SIZE) {
@@ -340,16 +336,12 @@ export class SkillLoader {
     }
 
     const skillPath = this.resolveSkillPath(entry);
-    const targetPath = subPath ? resolve(skillPath, subPath) : skillPath;
-
-    // Security check
-    if (!targetPath.startsWith(skillPath)) {
-      throw new Error("Path traversal detected");
-    }
+    const targetPath = resolveWithin(skillPath, subPath);
 
     if (!existsSync(targetPath)) {
       throw new Error(`Path not found: ${subPath || "."}`);
     }
+    if (!statSync(targetPath).isDirectory()) throw new Error(`Path is not a directory: ${subPath}`);
 
     return this.scanDirectory(targetPath, 0, maxDepth);
   }
@@ -360,13 +352,16 @@ export class SkillLoader {
    */
   cacheState(entry: ManifestEntry): SkillCacheState {
     if (!this.config.isRemote) {
+      const localPath = this.resolveSkillPath(entry);
+      const instructions = resolveWithin(localPath, "SKILL.md");
+      const complete = existsSync(instructions) && statSync(instructions).isFile();
       return {
-        cached: true,
-        complete: true,
-        localPath: this.resolveSkillPath(entry),
-        filesTotal: 0,
-        filesMissing: [],
-        sizeBytes: 0,
+        cached: existsSync(localPath),
+        complete,
+        localPath,
+        filesTotal: 1,
+        filesMissing: complete ? [] : ["SKILL.md"],
+        sizeBytes: complete ? statSync(instructions).size : 0,
       };
     }
     return readSkillCacheState(this.config, entry);
@@ -377,7 +372,7 @@ export class SkillLoader {
    * search results. In local mode always true.
    */
   isCached(entry: ManifestEntry): boolean {
-    if (!this.config.isRemote) return true;
+    if (!this.config.isRemote) return this.cacheState(entry).complete;
     return isSkillCachedLight(this.config, entry);
   }
 }

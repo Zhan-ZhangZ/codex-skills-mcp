@@ -14,9 +14,9 @@ export function registerSearchSkills(
     "search_skills",
     "STEP 1 DISCOVER of the agent protocol. Search the codex-skills library by natural language query; results are ranked and carry a [cached] badge when the skill is already fully downloaded on local disk — prefer cached skills when scores are close. After selecting skills you MUST materialize each one with read_skill (downloads the COMPLETE skill) before starting the task.",
     {
-      query: z.string().describe("Natural language description of what you need, e.g. '前端性能优化' or 'video subtitle translation'"),
+      query: z.string().trim().min(1).max(4000).describe("Natural language description of what you need, e.g. '前端性能优化' or 'video subtitle translation'"),
       category: z.string().optional().describe("Optional category filter, e.g. '05_多媒体与设计资产'"),
-      limit: z.number().optional().default(8).describe("Max number of results to return (default: 8)"),
+      limit: z.number().int().min(1).max(50).optional().default(8).describe("Max number of results to return (1–50, default: 8)"),
       force_refresh: z.boolean().optional().describe("If true, forcefully refreshes the remote skills list cache. Use this when the user just integrated a new skill and it's not showing up."),
     },
     { readOnlyHint: true },
@@ -24,22 +24,14 @@ export function registerSearchSkills(
       withToolLogging("search_skills", { query, category, limit, force_refresh }, async () => {
         // Throttled freshness poll (conditional GET): picks up newly integrated
         // remote skills within --manifest-poll seconds instead of the 24h TTL.
-        if (typeof searchEngine.maybeRefreshManifest === "function") {
-          await searchEngine.maybeRefreshManifest();
+        if (force_refresh) {
+          await searchEngine.refreshManifest();
+        } else {
+          // Serve the current index immediately; revalidate in the background.
+          // Typos and empty result sets must never cause unthrottled downloads.
+          void searchEngine.maybeRefreshManifest();
         }
-
-        let results = searchEngine.search(query, { category, limit });
-
-        // Auto-refresh if explicitly requested or if no results are found (might be a newly added skill)
-        if (force_refresh || results.length === 0) {
-          if (typeof searchEngine.refreshManifest === "function") {
-            console.error(`[codex-skills-mcp] ${force_refresh ? "Explicitly" : "Automatically"} refreshing manifest for query: "${query}"`);
-            const refreshed = await searchEngine.refreshManifest();
-            if (refreshed) {
-              results = searchEngine.search(query, { category, limit });
-            }
-          }
-        }
+        const results = searchEngine.search(query, { category, limit });
 
         if (results.length === 0) {
           return {

@@ -93,6 +93,7 @@ export function registerCodexSkillsApp(
   }));
 
   const initialData = () => {
+    void searchEngine.maybeRefreshManifest();
     const categories = searchEngine.getCategories();
     const totalSkills = categories.reduce((s, c) => s + c.skill_count, 0);
     return { page: "library", categories, totalSkills, butler: "00_codex_skills" };
@@ -100,7 +101,7 @@ export function registerCodexSkillsApp(
 
   const readonly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
   const appOnly = {
-    ...readonly,
+    annotations: readonly,
     _meta: { ui: { visibility: ["app"] as const } },
   };
   const ui = (entrypoints: Array<Record<string, unknown>>) => ({
@@ -115,8 +116,8 @@ export function registerCodexSkillsApp(
     {
       title: "技能库 Codex Skills",
       description:
-        "Open the skill library browser (199+ on-demand expert skills, 15 " +
-        "categories) fullscreen from the sidebar. Search, preview SKILL.md, " +
+        "Open the on-demand skill library fullscreen from the sidebar. " +
+        "Browse categories, search, preview SKILL.md, " +
         "and pick skills for the conversation.",
       annotations: readonly,
       _meta: { ...ui([{ type: "global" }]), icons: [ICON] },
@@ -147,11 +148,12 @@ export function registerCodexSkillsApp(
       title: "Browse skill library",
       description: "App-facing: category overview or a category's skill list.",
       inputSchema: z.object({
-        category: z.string().optional().describe("Category name to list; omit for the home view"),
+        category: z.string().trim().min(1).max(200).optional().describe("Category name to list; omit for the home view"),
       }),
       ...appOnly,
     },
     async ({ category }) => {
+      void searchEngine.maybeRefreshManifest();
       if (!category) {
         const categories = searchEngine.getCategories();
         return {
@@ -189,12 +191,13 @@ export function registerCodexSkillsApp(
       title: "Search skill library",
       description: "App-facing: BM25 search over name/aliases/keywords/description.",
       inputSchema: z.object({
-        query: z.string().min(1),
+        query: z.string().trim().min(1).max(500),
         limit: z.number().int().min(1).max(30).optional(),
       }),
       ...appOnly,
     },
     async ({ query, limit }) => {
+      void searchEngine.maybeRefreshManifest();
       const results = searchEngine.search(query, { limit: limit ?? 20 });
       return {
         content: [],

@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 export interface Config {
   skillsDir: string;
@@ -68,9 +68,13 @@ export interface Config {
  */
 function getGitGithubToken(): string | undefined {
   try {
-    const output = execSync('printf "protocol=https\nhost=github.com\n" | git credential fill', {
+    const output = execFileSync("git", ["credential", "fill"], {
+      input: "protocol=https\nhost=github.com\n\n",
       encoding: "utf-8",
-      stdio: ["pipe", "pipe", "ignore"]
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 2000,
+      maxBuffer: 64 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
     });
     const match = output.match(/^password=(.+)$/m);
     if (match && match[1]) {
@@ -93,7 +97,18 @@ export function parseConfig(args: string[]): Config {
   // Parse github arguments
   const getArg = (flag: string) => {
     const idx = args.indexOf(flag);
-    return idx !== -1 && args[idx + 1] ? args[idx + 1] : undefined;
+    if (idx === -1) return undefined;
+    const value = args[idx + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+    return value;
+  };
+  const integerOption = (flag: string, fallback: string, min: number, max: number) => {
+    const raw = getArg(flag) ?? fallback;
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`${flag} must be an integer between ${min} and ${max}`);
+    }
+    return value;
   };
   
   const explicitCli = new Set<string>();
@@ -120,14 +135,15 @@ export function parseConfig(args: string[]): Config {
     githubToken = process.env.GITHUB_TOKEN;
   }
   
-  // Fallback to Git credentials
-  if (!githubToken) {
+  const isLocal = args.includes("--local") || args.includes("--skills-dir") || !!process.env.CODEX_SKILLS_DIR;
+  // Local mode never needs a credential helper or interactive prompt.
+  if (!githubToken && !isLocal) {
     githubToken = getGitGithubToken();
   }
 
   // It defaults to remote mode unless explicitly run locally
   let isRemote = true;
-  if (args.includes("--local") || args.indexOf("--skills-dir") !== -1 || process.env.CODEX_SKILLS_DIR) {
+  if (isLocal) {
     isRemote = false;
   }
 
@@ -146,7 +162,7 @@ export function parseConfig(args: string[]): Config {
     // Local mode logic
     const dirIdx = args.indexOf("--skills-dir");
     if (dirIdx !== -1 && args[dirIdx + 1]) {
-      skillsDir = resolve(args[dirIdx + 1]);
+      skillsDir = resolve(getArg("--skills-dir")!);
     }
 
     if (!skillsDir && process.env.CODEX_SKILLS_DIR) {
@@ -183,47 +199,29 @@ export function parseConfig(args: string[]): Config {
 
   // Soft/hard overall call deadlines (seconds; 0 disables). Soft applies
   // only to clients without a progressToken — see read-skill.ts.
-  const softArg = getArg("--soft-deadline-seconds");
-  const softDeadlineMs = softArg !== undefined ? parseInt(softArg, 10) * 1000 : 55 * 1000;
-  const hardArg = getArg("--hard-deadline-seconds");
+  const softDeadlineMs = integerOption("--soft-deadline-seconds", "55", 0, 86400) * 1000;
   // 285s default: just under common 300s client timeouts (e.g. Codex) so
   // our partial response wins the race against the client giving up.
-  const hardDeadlineMs = hardArg !== undefined ? parseInt(hardArg, 10) * 1000 : 285 * 1000;
+  const hardDeadlineMs = integerOption("--hard-deadline-seconds", "285", 0, 86400) * 1000;
 
   // Manifest cache TTL (default: 24 hours). --manifest-ttl <seconds> or 0 to disable.
-  const ttlArg = getArg("--manifest-ttl");
-  const manifestTTL = ttlArg !== undefined ? parseInt(ttlArg, 10) * 1000 : 24 * 60 * 60 * 1000;
+  const manifestTTL = integerOption("--manifest-ttl", "86400", 0, 604800) * 1000;
 
   // Freshness poll interval (default: 5 minutes). --manifest-poll <seconds>
   // or CODEX_SKILLS_MANIFEST_POLL_SECONDS; 0 disables the poll.
-  const pollArg = getArg("--manifest-poll");
   const pollEnv = process.env.CODEX_SKILLS_MANIFEST_POLL_SECONDS;
-  const manifestPollSeconds = parseInt(pollArg || pollEnv || "300", 10);
-  if (!Number.isInteger(manifestPollSeconds) || manifestPollSeconds < 0) {
-    console.error("Error: --manifest-poll must be a non-negative integer (seconds)");
-    process.exit(1);
-  }
+  const manifestPollSeconds = integerOption("--manifest-poll", pollEnv ?? "300", 0, 3600);
   const manifestPollMs = manifestPollSeconds * 1000;
 
   // Concurrent downloads for skill files (default 16). Configurable via
   // --download-concurrency <n> or CODEX_SKILLS_DOWNLOAD_CONCURRENCY env var.
-  const concurrencyArg = getArg("--download-concurrency");
   const concurrencyEnv = process.env.CODEX_SKILLS_DOWNLOAD_CONCURRENCY;
-  const downloadConcurrency = parseInt(concurrencyArg || concurrencyEnv || "16", 10);
-  if (!Number.isInteger(downloadConcurrency) || downloadConcurrency < 1) {
-    console.error("Error: --download-concurrency must be a positive integer");
-    process.exit(1);
-  }
+  const downloadConcurrency = integerOption("--download-concurrency", concurrencyEnv ?? "16", 1, 64);
 
   // Base download timeout for skill files (default 30 seconds). Configurable via
   // --download-timeout <seconds> or CODEX_SKILLS_DOWNLOAD_TIMEOUT env var.
-  const timeoutArg = getArg("--download-timeout");
   const timeoutEnv = process.env.CODEX_SKILLS_DOWNLOAD_TIMEOUT;
-  const downloadTimeoutSeconds = parseInt(timeoutArg || timeoutEnv || "30", 10);
-  if (!Number.isInteger(downloadTimeoutSeconds) || downloadTimeoutSeconds < 1) {
-    console.error("Error: --download-timeout must be a positive integer");
-    process.exit(1);
-  }
+  const downloadTimeoutSeconds = integerOption("--download-timeout", timeoutEnv ?? "30", 1, 300);
   const downloadTimeout = downloadTimeoutSeconds * 1000;
 
   return { 
@@ -263,5 +261,32 @@ export interface ManifestEntry {
 
 export function loadManifest(manifestPath: string): ManifestEntry[] {
   const raw = readFileSync(manifestPath, "utf-8");
-  return JSON.parse(raw) as ManifestEntry[];
+  return parseManifest(JSON.parse(raw));
+}
+
+/** Validate remote/local data at the boundary, before indexing or writing it. */
+export function parseManifest(value: unknown): ManifestEntry[] {
+  if (!Array.isArray(value)) throw new Error("Manifest must be an array");
+  const names = new Set<string>();
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`Invalid manifest entry ${index}`);
+    }
+    for (const field of ["name", "description", "category", "folder", "relative_path"]) {
+      if (typeof entry[field] !== "string") throw new Error(`Manifest entry ${index}: ${field} must be a string`);
+    }
+    const path = entry.relative_path as string;
+    if (!entry.name.trim() || !path || /^[\/\\]|^[a-z]:/i.test(path) || path.includes("\\") || path.includes("\0") || path.split("/").includes("..")) {
+      throw new Error(`Manifest entry ${index}: invalid name or relative_path`);
+    }
+    const name = entry.name.toLowerCase();
+    if (names.has(name)) throw new Error(`Manifest contains duplicate name: ${entry.name}`);
+    names.add(name);
+    for (const field of ["aliases", "tags", "dependencies"]) {
+      if (entry[field] !== undefined && (!Array.isArray(entry[field]) || !entry[field].every((v: unknown) => typeof v === "string"))) {
+        throw new Error(`Manifest entry ${index}: ${field} must be a string array`);
+      }
+    }
+  }
+  return value as ManifestEntry[];
 }

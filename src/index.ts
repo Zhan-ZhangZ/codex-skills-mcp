@@ -20,7 +20,6 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { createRequire } from "node:module";
 
@@ -83,8 +82,8 @@ function createServer(
   // Self-disabling when the asset is absent — all other surfaces intact.
   const appRegistered = registerCodexSkillsApp(server, searchEngine, loader);
   console.error(
-    `[codex-skills-mcp] ${12 + (appRegistered ? 2 : 0)} tools registered ` +
-      `(8 core + 4 openai-extension${appRegistered ? " + 2 app entrypoints" : ""})`
+    `[codex-skills-mcp] ${12 + (appRegistered ? 4 : 0)} tools registered ` +
+      `(8 core + 4 openai-extension${appRegistered ? " + 4 app tools" : ""})`
   );
 
   return server;
@@ -111,118 +110,72 @@ async function startHTTP(
   loader: SkillLoader,
   port: number
 ): Promise<void> {
-  // Dynamic import to avoid loading express in stdio mode
-  const { default: express } = await import("express");
-
-  const app = express();
-  app.use(express.json());
-
-  // Session management with activity tracking for timeout cleanup
-  const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes idle timeout
-  interface SessionEntry {
-    transport: StreamableHTTPServerTransport;
-    lastActivity: number;
-  }
-  const sessions = new Map<string, SessionEntry>();
-
-  /** Touch session activity timestamp */
-  function touchSession(sid: string): void {
-    const entry = sessions.get(sid);
-    if (entry) entry.lastActivity = Date.now();
-  }
-
-  // Periodic cleanup of idle sessions (every 5 minutes)
-  setInterval(() => {
-    const now = Date.now();
-    for (const [sid, entry] of sessions) {
-      if (now - entry.lastActivity > SESSION_TTL_MS) {
-        console.error(`[codex-skills-mcp] Evicting idle session: ${sid.substring(0, 8)}...`);
-        try { entry.transport.close?.(); } catch { /* ignore */ }
-        sessions.delete(sid);
-      }
-    }
-  }, 5 * 60 * 1000).unref(); // unref so it doesn't prevent process exit
-
-  // MCP endpoint — handles POST (messages) and GET (SSE stream) and DELETE (session close)
-  app.post("/mcp", async (req, res) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-    let transport: StreamableHTTPServerTransport;
-
-    if (sessionId && sessions.has(sessionId)) {
-      transport = sessions.get(sessionId)!.transport;
-      touchSession(sessionId);
-    } else {
-      // New session
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        onsessioninitialized: (sid) => {
-          sessions.set(sid, { transport, lastActivity: Date.now() });
-          console.error(`[codex-skills-mcp] New session: ${sid}`);
-        },
-      });
-
-      transport.onclose = () => {
-        const sid = (transport as any).sessionId;
-        if (sid) sessions.delete(sid);
-      };
-
-      // Each session gets its own server instance
-      const server = createServer(config, searchEngine, loader);
-      await server.connect(transport);
-    }
-
-    await transport.handleRequest(req, res, req.body);
+  const { startHttpServer } = await import("./lib/http-server.js");
+  const args = process.argv.slice(2);
+  const option = (name: string): string | undefined => {
+    const index = args.indexOf(name);
+    if (index === -1) return undefined;
+    const value = args[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(name + " requires a value");
+    return value;
+  };
+  const host = option("--host") ?? "127.0.0.1";
+  const allowedHosts = option("--allowed-hosts")?.split(",").map(v => v.trim()).filter(Boolean);
+  const http = await startHttpServer({
+    port, host, allowedHosts,
+    createServer: () => createServer(config, searchEngine, loader),
+    health: () => ({
+      status: "ok", name: "codex-skills-mcp", version: PKG_VERSION,
+      skills: searchEngine.allSkills().length,
+    }),
   });
-
-  // GET endpoint for SSE stream (needed by some clients)
-  app.get("/mcp", async (req, res) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (!sessionId || !sessions.has(sessionId)) {
-      res.status(400).json({ error: "Invalid or missing session ID" });
-      return;
-    }
-    touchSession(sessionId);
-    const transport = sessions.get(sessionId)!.transport;
-    await transport.handleRequest(req, res);
-  });
-
-  // DELETE endpoint for session cleanup
-  app.delete("/mcp", async (req, res) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (sessionId && sessions.has(sessionId)) {
-      const transport = sessions.get(sessionId)!.transport;
-      await transport.handleRequest(req, res);
-      sessions.delete(sessionId);
-    } else {
-      res.status(200).end();
-    }
-  });
-
-  // Health check
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
-      name: "codex-skills-mcp",
-      version: PKG_VERSION,
-      skills: searchEngine.getCategories().reduce((s, c) => s + c.skill_count, 0),
-      activeSessions: sessions.size,
-    });
-  });
-
-  console.error("[codex-skills-mcp] starting HTTP server...");
-
-  app.listen(port, () => {
-    console.error(`[codex-skills-mcp] HTTP server running at http://localhost:${port}/mcp`);
-    console.error(`[codex-skills-mcp] Health check: http://localhost:${port}/health`);
-    console.error(
-      `[codex-skills-mcp] For remote clients: use ngrok or similar to expose this endpoint`
-    );
-  });
+  const address = http.listener.address();
+  const actualPort = typeof address === "object" && address ? address.port : port;
+  console.error("[codex-skills-mcp] HTTP server running at http://" + host + ":" + actualPort + "/mcp");
+  let closing = false;
+  const shutdown = () => {
+    if (closing) return;
+    closing = true;
+    const timer = setTimeout(() => process.exit(1), 5000);
+    timer.unref();
+    void http.close().then(() => {
+      clearTimeout(timer);
+      process.exit(0);
+    }, err => { console.error(err); process.exit(1); });
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
+  if (args.includes("--version")) { console.log(PKG_VERSION); return; }
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`codex-skills-mcp ${PKG_VERSION}
+Usage: codex-skills-mcp [options]
+
+  --skills-dir <path>            Use a local skill library (offline)
+  --cache-dir <path>             Remote cache directory
+  --github-repo <owner/repo>     Remote repository
+  --github-branch <ref>          Remote branch (default: main)
+  --github-path <path>           Skill library path within the repository
+  --github-token <token>         GitHub token (or GITHUB_TOKEN)
+  --no-official-mirror           Disable the official acceleration endpoint
+  --no-hedge                     Race all download nodes immediately
+  --download-concurrency <1–64>  Parallel file downloads (default: 16)
+  --download-timeout <1–300>     Per-request seconds (default: 30)
+  --manifest-ttl <seconds>       Cache TTL (0–604800; 0 disables expiry)
+  --manifest-poll <seconds>      Background freshness check (0–3600)
+  --soft-deadline-seconds <n>    No-progress call deadline (default: 55)
+  --hard-deadline-seconds <n>    All-call deadline (default: 285)
+  --http                        Use Streamable HTTP instead of stdio
+  --host <address>              HTTP bind address (default: 127.0.0.1)
+  --port <0–65535>               HTTP port (default: 3456; 0 selects a port)
+  --allowed-hosts <a,b>          Allowed Host/Origin hostnames for HTTP
+  --version                     Print version
+  --help                        Show this help`);
+    return;
+  }
 
   // Parse configuration
   const config = parseConfig(args);
@@ -264,7 +217,11 @@ async function main(): Promise<void> {
   if (useHTTP) {
     // Parse port
     const portIdx = args.indexOf("--port");
-    const port = portIdx !== -1 && args[portIdx + 1] ? parseInt(args[portIdx + 1], 10) : 3456;
+    const portText = portIdx !== -1 ? args[portIdx + 1] : "3456";
+    const port = Number(portText);
+    if (!portText || !/^\d+$/.test(portText) || !Number.isInteger(port) || port < 0 || port > 65535) {
+      throw new Error("--port must be an integer between 0 and 65535");
+    }
 
     await startHTTP(config, searchEngine, loader, port);
   } else {

@@ -3,6 +3,24 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
+## v1.5.0-beta.4 — 搜索、缓存、协议与 App 全链路优化（2026-10-16，未发布）
+
+当前记录为本地第一阶段改动，未推送、未发布。源仓库 `/Users/zz/codexproject` 联合审查正在进行；最终整合回归与后续源侧改动待增补。详细依据、测量方法与验收边界见 [BETA-4-REVIEW.md](BETA-4-REVIEW.md)。
+
+| 改动 | 主要文件 | 结果 |
+| --- | --- | --- |
+| 搜索索引重建清理、Map 查名、预计算、编辑距离剪枝；后台轮询与并发刷新合并 | `src/search/index.ts`、`src/tools/search-skills.ts`、`src/tools/plan-workflow.ts` | 固定离线基准 p50 从 5.1513 ms 降至 0.5371 ms，p95 从 11.9639 ms 降至 3.1837 ms |
+| 完整响应体超时、长度/Git blob SHA 校验、来源隔离、暂存更新与同源离线缓存 | `src/remote/github.ts` | 防止旧镜像、截断传输与跨来源复用污染缓存；传输失败保留可用旧内容 |
+| 清单、路径、符号链接与数值参数校验；本地启动跳过凭据程序 | `src/config.ts`、`src/lib/paths.ts`、`src/loader/index.ts` | 边界错误及时返回，避免越界读写与错误成功响应 |
+| Streamable HTTP 生命周期重构，Host/Origin 校验、会话容量、长连接与关闭回收 | `src/lib/http-server.ts`、`src/index.ts` | 失效会话返回正确状态码，活跃 SSE 不被空闲回收 |
+| 设置保持 CLI 优先级与跨会话一致，资源 URI 编解码、截止时间和取消 | `src/openai/settings.ts`、`src/openai/mentions.ts` | 设置有效值及时同步；资源读取有界等待与可重试 |
+| App 初始化握手、请求竞态、搜索返回、重试、IME、主题与可访问性 | `app-src/*`、`src/openai/app.ts` | 旧响应不覆盖新页面；修复 App 工具注解，减少重复读取 |
+| App 类型检查与新鲜产物构建、插件压缩、npm/插件协议验收及 CI | `package.json`、`scripts/build-*.mjs`、`scripts/check-package.mjs`、`.github/workflows/ci.yml` | 插件 1,462,614 B → 775,184 B（约 -47%）；App 19,436 B；Node ≥22，CI 配置 Node 22/24 |
+| stdio CLI 按行解码、UTF-8 跨块、进程失败与 stdout 排空；工具错误日志语义 | `scripts/mcp-client.mjs`、`src/lib/logger.ts` | 大响应完整返回；工具失败退出 1、超时退出 2，启动失败及时结束 |
+| SDK 升级与依赖审计 | `package.json`、`package-lock.json` | MCP SDK `^1.30.0`；依赖审计漏洞 6 项 → 0 项 |
+
+验证快照：已形成 65 项自动回归，分项测试与 npm 包/插件 stdio 协议验收已有通过记录，待联合重构结束后最终整合复跑。性能测量使用 Node 26.4.0 / macOS arm64、240 个双语 fixture、6 类查询、每类 250 次；平均延迟 5.3111 ms → 1.2236 ms。真实网络隔离临时目录抽测取得 291 条清单（623 ms），human-writing 冷读取 3,122 ms、热读取 0.56 ms，物化 13 文件 / 100,786 B；此为单次样本，不作为 SLA。尚未完成真实 ChatGPT 宿主视觉验收。
+
 ### 测试逻辑制度化：不知情子代理 E2E 成为标准验收层（2026-09-24）
 
 应技能库所有者要求，将四轮实战沉淀为可复用资产：

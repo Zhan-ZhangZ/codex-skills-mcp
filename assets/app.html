@@ -4,69 +4,79 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Codex Skills 技能库</title>
+  <style>@layer base{:root{color-scheme:light dark;--background: var( --color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)) );--foreground: var( --color-text-primary, light-dark(rgb(26 28 31), rgb(255 255 255)) );--card: color-mix(in oklab, var(--foreground) 5%, var(--background));--card-foreground: var(--color-text-primary, var(--foreground));--primary: var( --color-text-info, light-dark(rgb(51 156 255), rgb(131 195 255)) );--primary-foreground: var( --color-text-inverse, light-dark(rgb(255 255 255), rgb(13 13 13)) );--secondary: var( --color-background-secondary, light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%)) );--secondary-foreground: var(--color-text-primary, var(--foreground));--muted: color-mix(in srgb, var(--foreground) 10%, transparent);--muted-foreground: var( --color-text-secondary, light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%)) );--accent: var( --color-background-info, light-dark(rgb(229 242 255), rgb(13 39 63)) );--accent-foreground: var(--color-text-info, var(--primary));--destructive: var( --color-text-warning, light-dark(rgb(226 85 7), rgb(255 133 73)) );--border: var( --color-border-secondary, light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%)) );--input: var( --color-border-primary, light-dark(rgb(26 28 31 / 11.8%), rgb(255 255 255 / 12%)) );--ring: var(--color-ring-primary, var(--primary));--font-size-base: var(--font-text-md-size, 14px);--radius: var(--border-radius-lg, 12.5px)}:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}body{margin:0;color:var(--foreground);background:var(--background);font-size:max(11px,var(--font-size-base));font-weight:var(--font-weight-normal, 430);line-height:1.5}body,body>*{font-family:var( --font-sans, -apple-system, system-ui, "Segoe UI", sans-serif )}h1,h2,h3,p{margin-block:0}h1,h2,h3{font-weight:var(--font-weight-medium, 500);line-height:1.25}h1{font-size:calc(var(--font-size-base) * 1.7142857143)}h2{font-size:calc(var(--font-size-base) * 1.4285714286)}h3{font-size:calc(var(--font-size-base) * 1.2857142857)}}@layer components{.cursor-interaction{cursor:var(--cursor-interaction, pointer)}.card{min-width:0;padding:12px;overflow-wrap:break-word;border-radius:calc(var(--radius) * 1.6);corner-shape:superellipse(1.5);color:var(--card-foreground);background:var(--card)}.btn,.form-check-input,.form-control,.form-select{box-sizing:border-box;font:inherit}.btn{appearance:button;display:inline-flex;inline-size:fit-content;max-inline-size:100%;min-height:28px;align-items:center;justify-content:center;gap:4px;margin:0;padding:0 8px;border:1px solid var(--input);border-radius:var(--radius);corner-shape:superellipse(1.5);color:var(--secondary-foreground);background:var(--secondary);cursor:var(--cursor-interaction, pointer);text-align:center;text-decoration:none;white-space:nowrap;user-select:none}.btn:not(:disabled):hover{background:color-mix(in srgb,var(--foreground) 6%,var(--secondary))}.btn-primary{border-color:transparent;color:var(--primary-foreground);background:var(--foreground);background-clip:padding-box}.btn-primary:not(:disabled):hover{background:color-mix(in srgb,var(--foreground) 80%,transparent);background-clip:padding-box}.btn-ghost{border-color:transparent;color:var(--muted-foreground);background:transparent}.btn-ghost:not(:disabled):hover{color:var(--foreground);background:color-mix(in srgb,var(--foreground) 6%,var(--secondary))}.btn:not(.btn-primary):is([aria-pressed=true],[aria-selected=true]){border-color:var(--primary);color:var(--primary-foreground);background:var(--primary)}.btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.btn:disabled,.form-check-input:disabled,.form-control:disabled,.form-select:disabled{cursor:not-allowed;opacity:.4}.form-label{display:block;margin-bottom:6px;color:var(--foreground)}.form-control,.form-select{display:block;width:100%;min-height:28px;padding:0 8px;outline:none;border:1px solid var(--input);border-radius:var(--radius);corner-shape:superellipse(1.5);color:var(--foreground);background:var(--secondary)}.form-control::placeholder{color:var(--muted-foreground)}.form-select{appearance:none;padding-right:32px;background-image:linear-gradient(45deg,transparent 50%,var(--muted-foreground) 50%),linear-gradient(135deg,var(--muted-foreground) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 10px) 50%;background-repeat:no-repeat;background-size:4px 4px;cursor:var(--cursor-interaction, pointer)}.form-select:not(:disabled):hover{background-color:color-mix(in srgb,var(--foreground) 6%,var(--secondary))}textarea.form-control{min-height:72px;padding:8px 10px;resize:vertical}.form-control:focus-visible,.form-select:focus-visible{border-color:var(--ring);box-shadow:inset 0 0 0 1px var(--ring)}.form-check{display:flex;min-height:20px;align-items:center;gap:8px}.form-check-input{appearance:none;display:grid;width:16px;height:16px;flex:0 0 auto;place-items:center;margin:0;border:1px solid var(--input);border-radius:5px;corner-shape:superellipse(1.5);color:var(--primary-foreground);background:var(--secondary);cursor:var(--cursor-interaction, pointer)}.form-check-input:checked{border-color:var(--primary);background:var(--primary)}.form-check-input:checked:after{width:7px;height:4px;border-bottom:2px solid currentColor;border-left:2px solid currentColor;content:"";transform:translateY(-1px) rotate(-45deg)}.form-check-input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.form-check-label{color:var(--foreground)}svg.lucide{display:block;width:16px;height:16px;flex:none;stroke-width:1.6}.text-small{font-size:max(11px,calc(var(--font-size-base) - 2px))}.text-muted{color:var(--muted-foreground)}.text-destructive{color:var(--destructive)}.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}}
+</style>
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font: 14px var(--font-sans, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif);
-      background: var(--color-background-primary, #fafafa);
-      color: var(--color-text-primary, #1f1f1f);
-      min-height: 100vh; padding: 20px;
+      background: var(--background);
+      color: var(--foreground);
+      min-height: 100vh; padding: clamp(12px, 3vw, 24px); max-width: 1200px; margin: 0 auto;
     }
     [hidden] { display: none !important; }
     header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-    h1 { font-size: 18px; font-weight: 650; flex: 1; }
-    .muted { opacity: .65; font-size: 12px; }
+    h1 { font-size: 18px; font-weight: 650; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .muted { color: var(--muted-foreground); font-size: 12px; }
     button, input {
-      font: inherit; border: 1px solid var(--color-border-primary, #c9c9c9);
+      font: inherit; border: 1px solid var(--input);
       border-radius: 9px; padding: 8px 12px;
-      background: var(--color-background-secondary, #fff); color: inherit;
+      background: var(--secondary); color: inherit;
     }
     button { cursor: var(--cursor-interaction, pointer); }
-    button:hover:not(:disabled) { border-color: #5296c6; }
+    button:hover:not(:disabled) { border-color: var(--primary); }
+    :focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     button:disabled { opacity: .45; cursor: default; }
     #search { width: 100%; margin-bottom: 14px; }
-    #cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 9px; margin-bottom: 18px; }
+    #cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 9px; margin-bottom: 18px; }
     .cat {
       display: flex; justify-content: space-between; align-items: center;
       padding: 11px 13px; border-radius: 10px; text-align: left;
-      border: 1px solid var(--color-border-primary, #ddd);
-      background: var(--color-background-secondary, #fff);
+      border: 1px solid var(--border);
+      background: var(--secondary);
     }
     .cat b { font-weight: 600; font-size: 13.5px; }
-    #cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 9px; }
+    #cards, #cards-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 9px; }
     .card {
       padding: 12px 13px; border-radius: 10px; text-align: left;
-      border: 1px solid var(--color-border-primary, #ddd);
-      background: var(--color-background-secondary, #fff);
+      border: 1px solid var(--border);
+      background: var(--secondary);
       display: flex; flex-direction: column; gap: 6px;
     }
-    .card b { font-size: 13.5px; font-weight: 600; }
+    .card b { overflow-wrap: anywhere; font-size: 13.5px; font-weight: 600; }
     .card p { font-size: 12px; line-height: 1.5; opacity: .72;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .badge {
       align-self: flex-start; font-size: 10.5px; padding: 2px 8px; border-radius: 99px;
-      border: 1px solid var(--color-border-primary, #ccc);
+      border: 1px solid var(--border);
     }
-    .badge.on { border-color: #3d9a50; color: #3d9a50; }
+    .badge.on { border-color: light-dark(#277a38, #78d68b); color: light-dark(#277a38, #78d68b); }
     .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
     #detail pre {
       white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.65;
-      padding: 14px; border-radius: 10px; border: 1px solid var(--color-border-primary, #ddd);
-      background: var(--color-background-secondary, #fff); max-height: 55vh; overflow: auto;
+      padding: 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--secondary); max-height: 55vh; overflow: auto;
     }
-    footer { margin-top: 16px; font-size: 12px; opacity: .6; display: flex; justify-content: space-between; gap: 10px; }
+    footer { margin-top: 16px; font-size: 12px; color: var(--muted-foreground); display: flex; align-items: center; gap: 10px; }
+    #empty { padding: 24px 0; line-height: 1.7; color: var(--muted-foreground); }
+    #retry { flex-shrink: 0; }
+    @media (max-width: 360px) { header { flex-wrap: wrap; } #count { width: 100%; } }
     #status { overflow-wrap: anywhere; }
   </style>
 </head>
   <body>
     <header>
       <button id="back" hidden>← 返回</button>
-      <h1 id="heading">Codex Skills 技能库</h1>
+      <h1 id="heading" tabindex="-1">Codex Skills 技能库</h1>
       <span class="muted" id="count"></span>
     </header>
 
-    <input id="search" placeholder="搜索技能（中英文、功能描述…）" />
+    <label for="search" class="sr-only">搜索技能</label>
+    <input id="search" type="search" maxlength="500" autocomplete="off" spellcheck="false" placeholder="搜索技能（中英文、功能描述…）" disabled />
+
+    <main id="content" aria-busy="true">
 
     <section id="home">
       <p class="muted" style="margin-bottom:10px">常用技能</p>
@@ -77,6 +87,7 @@
 
     <section id="list" hidden>
       <div id="cards-list"></div>
+      <p id="empty" hidden></p>
     </section>
 
     <section id="detail" hidden>
@@ -85,12 +96,16 @@
         <span style="flex:1"></span>
         <button id="d-attach">加入对话</button>
       </div>
-      <pre id="d-md">加载中…</pre>
+      <pre id="d-md" tabindex="0" aria-label="技能说明预览">加载中…</pre>
     </section>
 
-    <footer><span id="status">连接中…</span><span id="ctx"></span></footer>
-    <script>"use strict";(()=>{function C(){let e=0,t=new Map,a=new Map,c=new Map,o=r=>window.parent.postMessage({jsonrpc:"2.0",...r},"*"),m=async r=>{if(r.source!==window.parent||r.data?.jsonrpc!=="2.0")return;let n=r.data;if(!n.method&&n.id!=null){let d=t.get(n.id);if(!d)return;t.delete(n.id),clearTimeout(d.timer),n.error?d.reject(new Error(n.error.message)):d.resolve(n.result)}else if(n.method&&n.id!=null){let d=a.get(n.method);if(!d){o({id:n.id,error:{code:-32601,message:`Unsupported app method: ${n.method}`}});return}try{o({id:n.id,result:await d(n.params??{})})}catch(u){o({id:n.id,error:{code:-32603,message:u instanceof Error?u.message:String(u)}})}}else if(n.method)for(let d of c.get(n.method)??[])d(n.params??{})};return window.addEventListener("message",m),{request(r,n={},d=15e3){if(window.parent===window)return Promise.reject(new Error(`Open this app in an MCP host to use ${r}`));let u=++e;return new Promise((k,f)=>{let T=setTimeout(()=>{t.delete(u),f(new Error(`${r} timed out`))},d);t.set(u,{resolve:$=>k($),reject:f,timer:T}),o({id:u,method:r,params:n})})},notify(r,n={}){o({method:r,params:n})},handle(r,n){a.set(r,n)},on(r,n){return c.has(r)||c.set(r,new Set),c.get(r).add(n),()=>{c.get(r)?.delete(n)}},dispose(){window.removeEventListener("message",m);for(let r of t.values())clearTimeout(r.timer),r.reject(new Error("App disposed"));t.clear(),a.clear(),c.clear()}}}var s=e=>document.getElementById(e),h=C(),l={view:"home",category:"",query:"",detail:null},i=e=>s("status").textContent=e;async function w(e,t){let a=await h.request("tools/call",{name:e,arguments:t},3e4);if(a?.isError)throw new Error(`tool ${e} failed`);return a?.structuredContent??{}}async function b(e){let a=(await h.request("resources/read",{uri:`skill://${encodeURIComponent(e)}`},6e4))?.contents?.[0]?.text;if(typeof a!="string")throw new Error("SKILL.md unreadable");return a.length>6e3?a.slice(0,6e3)+`
-\u2026\uFF08\u9884\u89C8\u622A\u65AD\uFF09`:a}function q(e){let t=document.createElement("button");t.className="card";let a=document.createElement("b");a.textContent=e.name;let c=document.createElement("p");c.textContent=e.description;let o=document.createElement("span");return o.className="badge"+(e.cached?" on":""),o.textContent=e.cached?"\u5DF2\u7F13\u5B58":"\u6309\u9700\u4E0B\u8F7D",t.append(a,c,o),t.onclick=()=>L(e),t}function y(e,t){e.textContent="",t.forEach(a=>e.appendChild(q(a)))}function g(e){l.view=e,s("home").hidden=e!=="home",s("list").hidden=e!=="category"&&e!=="search",s("detail").hidden=e!=="detail",s("back").hidden=e==="home",s("heading").textContent=e==="category"?l.category:e==="search"?`\u641C\u7D22\u201C${l.query}\u201D`:e==="detail"?l.detail?.name??"\u6280\u80FD\u8BE6\u60C5":"Codex Skills \u6280\u80FD\u5E93",window.scrollTo(0,0)}async function p(){g("home"),i("\u52A0\u8F7D\u4E2D\u2026");try{let e=await w("skills.browse",{});s("count").textContent=`${e.totalSkills} \u6280\u80FD`,y(s("cards"),e.top??[]);let t=e.categories??[],a=s("cats");a.textContent="",t.forEach(c=>{let o=document.createElement("button");o.className="cat";let m=document.createElement("b");m.textContent=c.name;let r=document.createElement("span");r.className="muted",r.textContent=`${c.skill_count} \u4E2A`,o.append(m,r),o.onclick=()=>x(c.name),a.appendChild(o)}),i("\u5C31\u7EEA")}catch(e){i(`\u52A0\u8F7D\u5931\u8D25: ${e?.message??e}\uFF08\u70B9\u51FB\u91CD\u8BD5\uFF09`)}}async function x(e){l.category=e,g("category"),i("\u52A0\u8F7D\u4E2D\u2026");try{let t=await w("skills.browse",{category:e});s("count").textContent=`${t.skills?.length??0} \u4E2A`,y(s("cards-list"),t.skills??[]),i("\u5C31\u7EEA")}catch(t){i(`\u52A0\u8F7D\u5931\u8D25: ${t?.message??t}`)}}async function S(e){l.query=e,g("search"),i("\u641C\u7D22\u4E2D\u2026");try{let t=await w("skills.query",{query:e,limit:24});s("count").textContent=`${t.results?.length??0} \u7ED3\u679C`,y(s("cards-list"),t.results??[]),i("\u5C31\u7EEA")}catch(t){i(`\u641C\u7D22\u5931\u8D25: ${t?.message??t}`)}}async function L(e){l.detail=e,g("detail"),s("count").textContent="",s("d-cached").textContent=e.cached?"\u5DF2\u7F13\u5B58":"\u672A\u7F13\u5B58",s("d-cached").className="badge"+(e.cached?" on":""),s("d-md").textContent="\u52A0\u8F7D\u4E2D\u2026",i("");try{s("d-md").textContent=await b(e.name)}catch(t){s("d-md").textContent=`\u8BFB\u53D6\u5931\u8D25\uFF1A${t?.message??t}`}}s("d-attach").onclick=async()=>{let e=l.detail?.name;if(e)try{await h.request("ui/update-model-context",{content:[{type:"text",text:`\u5DF2\u9009\u62E9\u6280\u80FD: ${e}`}]},15e3),i(`\u5DF2\u5C06\u300C${e}\u300D\u52A0\u5165\u5BF9\u8BDD\u4E0A\u4E0B\u6587`)}catch(t){i(`\u52A0\u5165\u5931\u8D25: ${t?.message??t}`)}};s("back").onclick=()=>l.view==="detail"&&l.category?x(l.category):p();var E;s("search").addEventListener("input",e=>{let t=e.target.value.trim();if(clearTimeout(E),!t){p();return}E=setTimeout(()=>S(t),300)});s("status").addEventListener("click",()=>{(s("status").textContent??"").includes("\u5931\u8D25")&&p()});p();})();
+    </main>
+    <footer>
+      <span id="status" role="status" aria-live="polite" aria-atomic="true">连接中…</span>
+      <button id="retry" hidden>重试</button>
+    </footer>
+    <script>"use strict";(()=>{function q(){let e=0,t=new Map,n=new Map,r=new Map,o=a=>window.parent.postMessage({jsonrpc:"2.0",...a},"*"),v=async a=>{if(a.source!==window.parent||a.data?.jsonrpc!=="2.0")return;let s=a.data;if(!s.method&&s.id!=null){let l=t.get(s.id);if(!l)return;t.delete(s.id),clearTimeout(l.timer),s.error?l.reject(new Error(s.error.message)):l.resolve(s.result)}else if(s.method&&s.id!=null){let l=n.get(s.method);if(!l){o({id:s.id,error:{code:-32601,message:`Unsupported app method: ${s.method}`}});return}try{o({id:s.id,result:await l(s.params??{})})}catch(f){o({id:s.id,error:{code:-32603,message:f instanceof Error?f.message:String(f)}})}}else if(s.method)for(let l of r.get(s.method)??[])l(s.params??{})};return window.addEventListener("message",v),{request(a,s={},l=15e3){if(window.parent===window)return Promise.reject(new Error(`Open this app in an MCP host to use ${a}`));let f=++e;return new Promise((x,M)=>{let U=setTimeout(()=>{t.delete(f),M(new Error(`${a} timed out`))},l);t.set(f,{resolve:D=>x(D),reject:M,timer:U}),o({id:f,method:a,params:s})})},notify(a,s={}){o({method:a,params:s})},handle(a,s){n.set(a,s)},on(a,s){return r.has(a)||r.set(a,new Set),r.get(a).add(s),()=>{r.get(a)?.delete(s)}},dispose(){window.removeEventListener("message",v);for(let a of t.values())clearTimeout(a.timer),a.reject(new Error("App disposed"));t.clear(),n.clear(),r.clear()}}}var i=e=>{let t=document.getElementById(e);if(!t)throw new Error(`Missing app element: ${e}`);return t},u=q(),m=i("search"),C=i("d-attach"),P="2026-01-26",w={view:"home"},g=0,p=!1,b=!1,$=!1,S=!1,E=!1,_,I,d=new Map,k=new Map;async function N(e,t,n=3e4){let r=d.get(e);if(r&&r.expires>Date.now())return r.value;let o=k.get(e);if(o)return o;let v=t().then(a=>(d.delete(e),d.set(e,{value:a,expires:Date.now()+n}),d.size>32&&d.delete(d.keys().next().value),a)).finally(()=>k.delete(e));return k.set(e,v),v}function c(e,t){i("status").textContent=e,I=t,i("retry").hidden=!t}function y(e){i("content").setAttribute("aria-busy",String(e))}function L(){clearTimeout(_),_=void 0,g++}var R=e=>e instanceof Error?e.message:String(e);async function V(e,t){let n=await u.request("tools/call",{name:e,arguments:t},3e4);if(n?.isError)throw new Error(n.content?.find(r=>r.type==="text")?.text||`\u5DE5\u5177 ${e} \u8C03\u7528\u5931\u8D25`);if(!n?.structuredContent)throw new Error("\u670D\u52A1\u672A\u8FD4\u56DE\u6280\u80FD\u6570\u636E");return n.structuredContent}async function z(e){let n=(await u.request("resources/read",{uri:`skill://${encodeURIComponent(e)}`},6e4))?.contents?.find(r=>typeof r.text=="string")?.text;if(typeof n!="string")throw new Error("\u670D\u52A1\u672A\u8FD4\u56DE SKILL.md \u6587\u672C");return n.length>12e3?n.slice(0,12e3)+`
+\u2026\uFF08\u9884\u89C8\u5DF2\u622A\u65AD\uFF0C\u52A0\u5165\u5BF9\u8BDD\u540E\u53EF\u8BFB\u53D6\u5B8C\u6574\u5185\u5BB9\uFF09`:n}function K(e){let t=document.createElement("button");t.className="card";let n=document.createElement("b");n.textContent=e.name;let r=document.createElement("p");r.textContent=e.description;let o=document.createElement("span");return o.className="badge"+(e.cached?" on":""),o.textContent=e.cached?"\u5DF2\u7F13\u5B58":"\u6309\u9700\u4E0B\u8F7D",t.append(n,r,o),t.onclick=()=>{w.view!=="detail"&&h({view:"detail",skill:e,from:w})},t}function B(e,t){e.replaceChildren(...t.map(K))}function W(e){i("cats").replaceChildren(...e.map(t=>{let n=document.createElement("button");n.className="cat";let r=document.createElement("b");r.textContent=t.name;let o=document.createElement("span");return o.className="muted",o.textContent=`${t.skill_count} \u4E2A`,n.append(r,o),n.onclick=()=>{h({view:"category",category:t.name})},n}))}function H(e){i("d-cached").textContent=e?"\u5DF2\u7F13\u5B58":"\u6309\u9700\u4E0B\u8F7D",i("d-cached").className="badge"+(e?" on":"")}function J(e){w=e,i("home").hidden=e.view!=="home",i("list").hidden=e.view!=="category"&&e.view!=="search",i("detail").hidden=e.view!=="detail",i("back").hidden=e.view==="home",i("heading").textContent=e.view==="category"?e.category:e.view==="search"?`\u641C\u7D22\u201C${e.query}\u201D`:e.view==="detail"?e.skill.name:"Codex Skills \u6280\u80FD\u5E93",i("count").textContent="",i("empty").hidden=!0,e.view!=="detail"&&(m.value=e.view==="search"?e.query:""),e.view==="detail"?(H(e.skill.cached),i("d-md").textContent="\u6B63\u5728\u8BFB\u53D6 SKILL.md\u2026",C.disabled=E):e.view==="home"?(i("cards").replaceChildren(),i("cats").replaceChildren()):i("cards-list").replaceChildren(),document.activeElement?.tagName==="BUTTON"&&i("heading").focus({preventScroll:!0}),window.scrollTo(0,0)}async function h(e){L();let t=g,n=()=>!p&&g===t;J(e),y(!0),c(e.view==="search"?"\u641C\u7D22\u4E2D\u2026":"\u52A0\u8F7D\u4E2D\u2026");try{if(e.view==="detail"){let r=await N(`detail:${e.skill.name}`,()=>z(e.skill.name),3e5);e.skill.cached=!0;for(let[o]of d)o.startsWith("detail:")||d.delete(o);if(!n())return;i("d-md").textContent=r,H(!0),c("\u6280\u80FD\u5DF2\u5C31\u7EEA\uFF0C\u53EF\u52A0\u5165\u5BF9\u8BDD")}else{let r=await N(JSON.stringify(e),()=>e.view==="search"?V("skills.query",{query:e.query,limit:24}):V("skills.browse",e.view==="category"?{category:e.category}:{}));if(!n())return;if(e.view==="home")i("count").textContent=`${r.totalSkills??0} \u6280\u80FD`,B(i("cards"),r.top??[]),W(r.categories??[]),c(r.totalSkills?"\u9009\u62E9\u5206\u7C7B\u6216\u641C\u7D22\u6280\u80FD":"\u6280\u80FD\u5E93\u4E3A\u7A7A\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u7AEF\u6280\u80FD\u6E90\u914D\u7F6E");else{let o=(e.view==="search"?r.results:r.skills)??[];i("count").textContent=`${o.length} ${e.view==="search"?"\u7ED3\u679C":"\u4E2A"}`,B(i("cards-list"),o),i("empty").hidden=o.length!==0,i("empty").textContent=e.view==="search"?"\u6CA1\u6709\u627E\u5230\u5339\u914D\u6280\u80FD\uFF0C\u8BD5\u8BD5\u66F4\u77ED\u7684\u5173\u952E\u8BCD\u6216\u63CF\u8FF0\u8981\u5B8C\u6210\u7684\u4EFB\u52A1\u3002":"\u8BE5\u5206\u7C7B\u6682\u65E0\u6280\u80FD\u3002",c(o.length?"\u9009\u62E9\u6280\u80FD\u67E5\u770B\u8BE6\u60C5":"\u6CA1\u6709\u5339\u914D\u7ED3\u679C")}}}catch(r){if(!n())return;e.view==="detail"&&(i("d-md").textContent="\u8BFB\u53D6\u672A\u5B8C\u6210\u3002\u91CD\u8BD5\u53EF\u7EE7\u7EED\u83B7\u53D6\u6280\u80FD\u5185\u5BB9\u3002"),c(`\u52A0\u8F7D\u5931\u8D25\uFF1A${R(r)}`,()=>{h(e)})}finally{n()&&y(!1)}}C.onclick=async()=>{if(w.view!=="detail"||E||!b)return;let e=w.skill,t=g;E=!0,C.disabled=!0;try{if((await u.request("ui/update-model-context",{content:[{type:"text",text:`\u5DF2\u9009\u62E9\u6280\u80FD\uFF1A${e.name}\u3002\u901A\u8FC7 resources/read \u8BFB\u53D6 skill://${encodeURIComponent(e.name)} \u83B7\u53D6\u5B8C\u6574\u4F7F\u7528\u8BF4\u660E\u3002`}],structuredContent:{skill:{name:e.name,uri:`skill://${encodeURIComponent(e.name)}`}}},15e3))?.isError)throw new Error("\u5BBF\u4E3B\u672A\u63A5\u53D7\u6280\u80FD\u4E0A\u4E0B\u6587");g===t&&!p&&c(`\u5DF2\u5C06\u300C${e.name}\u300D\u52A0\u5165\u5BF9\u8BDD\u4E0A\u4E0B\u6587`)}catch(n){g===t&&!p&&c(`\u52A0\u5165\u5931\u8D25\uFF1A${R(n)}`)}finally{E=!1,C.disabled=!b}};i("back").onclick=()=>{h(w.view==="detail"?w.from:{view:"home"})};i("retry").onclick=()=>I?.();function T(e=!1){if(!b||S)return;L();let t=m.value.trim();if(!t){h({view:"home"});return}let n=()=>{h({view:"search",query:t})};e?n():(y(!0),c("\u7B49\u5F85\u8F93\u5165\u2026"),_=setTimeout(n,250))}m.addEventListener("input",()=>T());m.addEventListener("compositionstart",()=>{S=!0,L()});m.addEventListener("compositionend",()=>{S=!1,T()});m.addEventListener("keydown",e=>{e.isComposing||S||(e.key==="Enter"&&(e.preventDefault(),T(!0)),e.key==="Escape"&&(m.value="",T(!0)))});function O(e){(e.theme==="light"||e.theme==="dark")&&(document.documentElement.dataset.theme=e.theme,document.documentElement.style.colorScheme=e.theme);for(let[t,n]of Object.entries(e.styles?.variables??{}))t.startsWith("--")&&typeof n=="string"&&document.documentElement.style.setProperty(t,n)}u.on("ui/notifications/host-context-changed",O);u.handle("ping",()=>({}));function A(){p=!0,L(),d.clear(),k.clear(),u.dispose()}u.handle("ui/resource-teardown",()=>(setTimeout(A,0),{}));window.addEventListener("pagehide",A,{once:!0});async function j(){if(!($||p)){$=!0,y(!0),m.disabled=!0,c("\u6B63\u5728\u8FDE\u63A5\u6280\u80FD\u5E93\u2026");try{let e=await u.request("ui/initialize",{protocolVersion:P,appInfo:{name:"codex-skills",version:"1.5.0-beta.4"},appCapabilities:{availableDisplayModes:["inline","fullscreen"]}});if(p)return;if(e.protocolVersion!==P)throw new Error(`\u4E0D\u652F\u6301\u7684\u754C\u9762\u534F\u8BAE\uFF1A${e.protocolVersion}`);O(e.hostContext??{}),u.notify("ui/notifications/initialized"),b=!0,m.disabled=!1,await h({view:"home"})}catch(e){p||(y(!1),c(`\u8FDE\u63A5\u5931\u8D25\uFF1A${R(e)}`,()=>{j()}))}finally{$=!1}}}j();})();
 </script>
   </body>
 </html>

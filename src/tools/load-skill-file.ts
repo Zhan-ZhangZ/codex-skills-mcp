@@ -24,6 +24,7 @@ export function registerLoadSkillFile(
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "load_skill_file", skill: skill_name, error: "skill not found" });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -78,6 +79,7 @@ export function registerLoadSkillFile(
           const message = err instanceof Error ? err.message : String(err);
           logEvent("warn", "tool_error", { tool: "load_skill_file", skill: skill_name, error: message });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
