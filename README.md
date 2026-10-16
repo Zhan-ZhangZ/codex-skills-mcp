@@ -25,7 +25,9 @@
 
 ## beta.5 改进（2026-10-16）
 
-当前开发版本为 **1.5.0-beta.5**，需要 **Node.js 22+**。beta.4 已发布；本版新增源仓库 immutable file catalog 联动，尚未发布。审计依据见 [BETA-5 审查记录](docs/BETA-5-REVIEW.md)，beta.4 服务端优化见 [BETA-4 审查记录](docs/BETA-4-REVIEW.md)。
+本轮版本为 **1.5.0-beta.5**，需要 **Node.js 22+**，通过 npm 的 `beta` 预发布通道分发。本版新增源仓库 immutable file catalog 联动。审计依据见 [BETA-5 审查记录](docs/BETA-5-REVIEW.md)，beta.4 服务端优化见 [BETA-4 审查记录](docs/BETA-4-REVIEW.md)。
+
+体验预发布版本：`npx -y codex-skills-mcp@beta`；正式通道仍使用 `@latest`。
 
 - 搜索立即读取本地索引，后台轮询更新；`force_refresh=true` 明确等待刷新。索引重复刷新不再累积评分统计。
 - 下载校验完整正文、大小及 Git blob SHA；刷新失败保留可用缓存，断网时可使用合法同源清单启动。

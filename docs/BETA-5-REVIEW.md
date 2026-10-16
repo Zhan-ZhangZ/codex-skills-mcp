@@ -100,7 +100,7 @@ node scripts/check-remote-catalog.mjs --metadata-dir /Users/zz/codexproject/code
 
 历史 blob 接口另经真实网络验证：匿名请求返回 403，使用现有 GitHub 凭据后返回 200，15,199 字节且 SHA 匹配。这说明历史回取仍受 API 可用性和限流约束；保留旧 catalog 本身不能保证所有旧版本永久可下载。
 
-复审时 npm registry 为 `latest=1.4.2`、`beta=1.5.0-beta.4`；源仓库远端 main 为 `2e5772a3c`，新 catalog 尚在本地。完整远端 catalog 冒烟、GitHub Actions 与真实 ChatGPT 宿主视觉验收仍待执行。beta.5 保持本地待发布。
+复审初期 npm registry 为 `latest=1.4.2`、`beta=1.5.0-beta.4`；源仓库远端 main 为 `2e5772a3c`。后续推送与完整远端验证记录见下文；真实 ChatGPT 宿主视觉验收仍待执行。
 
 ## 最终本地验收
 
@@ -111,3 +111,16 @@ node scripts/check-remote-catalog.mjs --metadata-dir /Users/zz/codexproject/code
 - CI 改为浅克隆当前版本，校验只依赖索引和 blob，不再为此下载完整历史。源侧与 MCP 同时拒绝保留 marker `.codex-skills.tree.json` 及其子路径。
 
 下一阶段优先评估每技能归档分发，减少大技能 N 个文件请求及镜像竞速放大；在设计完成和实测前不承诺“所有技能 15 秒以内”。metadata 的 aliases/tags 补齐可作为单独的检索质量迭代。
+
+## 完整远端联动验证
+
+用户已授权推送两个仓库，并在远端 CI 与冒烟通过后发布到 npm beta。源仓库 main 已推送到 `bd2ad1b9128b2145499022af2a7b408cf889adcd`。
+
+执行 `node scripts/check-remote-catalog.mjs --skill human-writing --skill webapp-testing`，模式为 `fully-remote`，没有本地元数据覆盖；得到 291 条目、290 个 indexed skills。
+
+| 技能 | 文件/字节 | 含 catalog 的冷读取 | 热读 | HTTP 尝试数 |
+| --- | --- | --- | --- | --- |
+| human-writing | 13 / 100,786 | 1,753.82 ms | 1.02 ms | 70 |
+| webapp-testing | 6 / 22,518 | 1,395.79 ms | 0.55 ms | 35 |
+
+正常链路零 GitHub API、热读零请求；所有文件长度、Git blob SHA、catalog SHA-256、执行权限均通过校验。上述为单次网络样本；HTTP 计数包含镜像竞速及取消尝试。源仓库门禁：[Codex Skills catalog](https://github.com/Zhan-ZhangZ/codexprojec/actions/runs/38923297457)。
