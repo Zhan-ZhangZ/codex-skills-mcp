@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-17",
+  "sourceRef": "main",
+  "variant": "baseline",
+  "stage": "remote manifest precondition",
+  "completedSamples": 0,
+  "directFetchError": "fetch failed",
+  "fallbackManifestEntries": 291,
+  "fallbackIndexedSkills": 0,
+  "assertion": "Remote manifest has no file catalogs; publish the source catalogs first.",
+  "interpretation": "The authoritative source already contains catalogs. A fallback mirror served an older valid manifest after direct fetching failed. The comparison stopped before any timing sample and does not demonstrate a candidate runtime regression."
+}

@@ -13,12 +13,13 @@ const { values } = parseArgs({ options: {
   'baseline-dist': { type: 'string' },
   'candidate-dist': { type: 'string', default: fileURLToPath(new URL('../dist/', import.meta.url)) },
   runs: { type: 'string', default: '3' },
+  branch: { type: 'string', default: 'main' },
   skill: { type: 'string', multiple: true },
   output: { type: 'string' },
 } });
 const runs = Number(values.runs);
 if (!values['baseline-dist'] || !Number.isSafeInteger(runs) || runs < 1 || runs > 20) {
-  throw new Error('Usage: node scripts/benchmark-remote.mjs --baseline-dist PATH [--candidate-dist PATH] [--runs 1..20] [--skill NAME] [--output PATH]');
+  throw new Error('Usage: node scripts/benchmark-remote.mjs --baseline-dist PATH [--candidate-dist PATH] [--runs 1..20] [--branch REF] [--skill NAME] [--output PATH]');
 }
 const skills = values.skill ?? ['human-writing', 'superpowers'];
 const runtimes = { baseline: resolve(values['baseline-dist']), candidate: resolve(values['candidate-dist']) };
@@ -33,7 +34,7 @@ const fingerprints = Object.fromEntries(Object.entries(runtimes).map(([variant, 
 const smoke = fileURLToPath(new URL('./check-remote-catalog.mjs', import.meta.url));
 function sample(runtime, name) {
   return new Promise((accept, reject) => {
-    const child = spawn(process.execPath, [smoke, '--runtime-dir', runtime, '--skill', name], {
+    const child = spawn(process.execPath, [smoke, '--runtime-dir', runtime, '--branch', values.branch, '--skill', name], {
       stdio: ['ignore', 'pipe', 'pipe'], timeout: 300_000,
     });
     let stdout = '';
@@ -72,7 +73,7 @@ const summary = skills.flatMap(name => Object.keys(runtimes).map(variant => {
     warmP50Ms: percentile(selected.map(item => item.warmMs), .5) };
 }));
 const report = JSON.stringify({ measuredAt: new Date().toISOString(), node: process.version,
-  platform: `${process.platform}-${process.arch}`, runtimes, fingerprints,
+  platform: `${process.platform}-${process.arch}`, sourceRef: values.branch, runtimes, fingerprints,
   method: 'Alternating separate processes, isolated disk caches, fully remote manifest/catalog/files; requests include cancelled losers; small sample, no production SLA.',
   summary, samples }, null, 2);
 if (values.output) writeFileSync(resolve(values.output), report + '\n');
