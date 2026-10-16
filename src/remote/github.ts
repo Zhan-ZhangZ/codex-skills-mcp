@@ -17,6 +17,8 @@ interface TreeFileEntry {
    * degrades to size-only.
    */
   sha?: string;
+  /** Git mode from the immutable catalog; symlinks materialize as their target text */
+  mode?: string;
 }
 
 interface SkillTreeCache {
@@ -148,6 +150,7 @@ function validFiles(files: unknown): files is TreeFileEntry[] {
     try { if (relativePath(file.path) !== file.path) return false; } catch { return false; }
     if (file.path === TREE_CACHE_FILE || seen.has(file.path)) return false;
     seen.add(file.path);
+    if (file.mode !== undefined && !["100644", "100755", "120000"].includes(file.mode)) return false;
     return file.sha === undefined || (typeof file.sha === "string" && /^[a-f0-9]{40}$/i.test(file.sha));
   });
 }
@@ -434,6 +437,80 @@ function buildSkillRemotePath(config: Config, relPath: string): string {
   let prefix = config.githubPath ? `${config.githubPath}/${relPath}` : relPath;
   prefix = prefix.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
   return prefix;
+}
+
+
+const MAX_CATALOG_BYTES = 32 * 1024 * 1024;
+
+function parseSkillFileCatalog(data: Buffer, entry: ManifestEntry): SkillTreeCache {
+  let value: unknown;
+  try { value = JSON.parse(data.toString("utf8")); } catch {
+    throw new Error(`File catalog for ${entry.name} is not valid JSON`);
+  }
+  const catalog = value as { version?: unknown; skill_path?: unknown; files?: unknown };
+  if (catalog.version !== 1 || catalog.skill_path !== entry.relative_path || !validFiles(catalog.files)) {
+    throw new Error(`File catalog for ${entry.name} failed structural validation`);
+  }
+  const files = catalog.files;
+  if (!files.some((item) => item.path === "SKILL.md")) {
+    throw new Error(`File catalog for ${entry.name} has no SKILL.md`);
+  }
+  const index = entry.file_index;
+  if (!index || files.length !== index.file_count ||
+      files.reduce((sum, item) => sum + item.size, 0) !== index.total_bytes) {
+    throw new Error(`File catalog for ${entry.name} does not match manifest metadata`);
+  }
+  return { version: 1, files };
+}
+
+function readCachedSkillFileCatalog(config: Config, entry: ManifestEntry): SkillTreeCache | null {
+  const index = entry.file_index;
+  if (!index) return null;
+  try {
+    const file = localFilePath(config.skillsDir, index.path);
+    const data = readFileSync(file);
+    if (data.byteLength > MAX_CATALOG_BYTES) return null;
+    if (createHash("sha256").update(data).digest("hex") !== index.sha256) return null;
+    return parseSkillFileCatalog(data, entry);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a skill file list from the immutable manifest catalog. Returns null
+ * for legacy manifests or transient catalog failures so callers can use the
+ * GitHub Tree API fallback without changing the public materialize contract.
+ */
+async function fetchSkillTreeFromFileIndex(
+  config: Config,
+  entry: ManifestEntry
+): Promise<SkillTreeCache | null> {
+  const index = entry.file_index;
+  if (!index) return null;
+  const cached = readCachedSkillFileCatalog(config, entry);
+  if (cached) return cached;
+  try {
+    const remotePath = buildSkillRemotePath(config, index.path);
+    const response = await fetchRawWithFallback(config, remotePath);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = Buffer.from(await response.arrayBuffer());
+    if (data.byteLength === 0 || data.byteLength > MAX_CATALOG_BYTES) {
+      throw new Error(`unexpected catalog size ${data.byteLength}`);
+    }
+    if (createHash("sha256").update(data).digest("hex") !== index.sha256) {
+      throw new Error("SHA-256 mismatch");
+    }
+    const tree = parseSkillFileCatalog(data, entry);
+    atomicWrite(localFilePath(config.skillsDir, index.path), data);
+    console.error(`[codex-skills-mcp] File catalog loaded for ${entry.name}: ${index.file_count} files`);
+    return tree;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logEvent("warn", "file_catalog_fallback", { skill: entry.name, error: message });
+    console.error(`[codex-skills-mcp] File catalog unavailable for ${entry.name} (${message}); GitHub tree fallback.`);
+    return null;
+  }
 }
 
 /**
@@ -1095,6 +1172,7 @@ async function revalidateSkillTree(
   const skillName = basename(skillLocalPath);
   try {
     const remote =
+      (await fetchSkillTreeFromFileIndex(config, entry)) ??
       (await fetchSkillTreeFromCategory(config, entry)) ??
       (await fetchSkillTree(config, relPath));
     if (!remote.files || remote.files.length === 0) {
@@ -1228,7 +1306,9 @@ async function doFetchSkill(
 
   mkdirSync(skillLocalPath, { recursive: true });
   console.error(`[codex-skills-mcp] Listing files for skill: ${entry.name}...`);
-  const tree = (await fetchSkillTreeFromCategory(config, entry)) ?? (await fetchSkillTree(config, relPath));
+  const tree = (await fetchSkillTreeFromFileIndex(config, entry)) ??
+    (await fetchSkillTreeFromCategory(config, entry)) ??
+    (await fetchSkillTree(config, relPath));
   if (!validFiles(tree.files)) throw new Error("Invalid remote file tree");
   const treeWithSource = { ...tree, source: cacheSource(config) };
   // A different source can have same-size files. Never treat them as a resume.

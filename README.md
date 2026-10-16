@@ -23,14 +23,15 @@
 | **自动网络加速** | 官方加速端点优先，延迟加入 GitHub / CDN / 公共镜像竞速；完整正文通过校验后才接受 |
 | **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
 
-## beta.4 改进（2026-10-16）
+## beta.5 改进（2026-10-16）
 
-当前开发版本为 **1.5.0-beta.4**，需要 **Node.js 22+**。本地构建可通过 `npm ci && npm test` 验证，尚未发布到 npm。审计依据、性能数据与下一轮优化见 [完整审查报告](docs/BETA-4-REVIEW.md)。
+当前开发版本为 **1.5.0-beta.5**，需要 **Node.js 22+**。beta.4 已发布；本版新增源仓库 immutable file catalog 联动，尚未发布。审计依据见 [BETA-5 审查记录](docs/BETA-5-REVIEW.md)，beta.4 服务端优化见 [BETA-4 审查记录](docs/BETA-4-REVIEW.md)。
 
 - 搜索立即读取本地索引，后台轮询更新；`force_refresh=true` 明确等待刷新。索引重复刷新不再累积评分统计。
 - 下载校验完整正文、大小及 Git blob SHA；刷新失败保留可用缓存，断网时可使用合法同源清单启动。
 - App 完成宿主初始化握手，修复搜索/详情竞态、返回导航、原地重试及输入法体验。
 - HTTP 增加会话容量、正确的 404/400 语义、关闭清理及 Host/Origin 校验；默认监听 `127.0.0.1`。
+- 源仓库 manifest 可携带不可变 `file_index`；MCP 优先读取 SHA-256 catalog 并并发下载文件，消除常规冷下载的 GitHub Tree API 依赖，旧清单自动回退。
 - 离线回归、前端类型检查、包内文件和真实 stdio 协议验收接入 CI。
 
 ## 快速开始
@@ -170,7 +171,7 @@ flowchart LR
 |------|------|------|
 | 启动 | 拉取/加载清单 + 建索引 | 秒级 |
 | 搜索 | 本地索引关键词打分 | 毫秒级 |
-| 取技能 | 2 次 GitHub API 列出文件 → 并发下载缺失文件 | 首次数秒，之后走缓存 |
+| 取技能 | 优先读取静态 catalog → 并发下载并校验缺失文件；旧清单才回退 GitHub API | 首次数秒，之后走缓存 |
 
 ### 网络加速（并发竞速）
 
@@ -349,7 +350,7 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 
 环境变量：`CODEX_SKILLS_DIR`、`CODEX_SKILLS_CACHE_DIR`、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`、`CODEX_SKILLS_DOWNLOAD_TIMEOUT`、`CODEX_SKILLS_MANIFEST_POLL_SECONDS`。设置文件默认位于 `~/.codex-skills-mcp/settings.json`，可通过 `CODEX_SKILLS_SETTINGS_DIR` 隔离。CLI 显式参数优先于启动时保存的设置；设置面板更新实时同步各会话。
 
-技能库清单（`skills_manifest.json`）为 JSON 数组，每项包含 `name` / `description` / `category` / `folder` / `relative_path` 五个字段。
+技能库清单（`skills_manifest.json`）为 JSON 数组，每项包含 `name` / `description` / `category` / `folder` / `relative_path` 五个必需字段。较新清单还会为非根技能提供 `file_index`，指向不可变 catalog 及其 SHA-256。
 
 ## 常见问题
 

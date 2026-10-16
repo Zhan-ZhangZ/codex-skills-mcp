@@ -3,9 +3,16 @@
 本文件记录每次改动 ↔ 文档的映射。一切改动需有文档跟随（docs/IMPROVEMENT-PLAN.md §5）。
 
 
-## v1.5.0-beta.4 — 搜索、缓存、协议与 App 全链路优化（2026-10-16，未发布）
+## 1.5.0-beta.5 — 源仓库 immutable file catalog 联动（2026-10-16）
 
-当前记录为本地第一阶段改动，未推送、未发布。源仓库 `/Users/zz/codexproject` 联合审查正在进行；最终整合回归与后续源侧改动待增补。详细依据、测量方法与验收边界见 [BETA-4-REVIEW.md](BETA-4-REVIEW.md)。
+- `codexproject` 新增 Git staging 驱动的 `scripts/build_file_indexes.py`，为 290 个非根技能生成内容寻址 catalog，并新增 CI `--check` 门禁。
+- MCP 严格校验 manifest `file_index`，冷物化优先读取本地/远端 immutable catalog，校验 SHA-256、结构与清单元数据；旧清单或 catalog 故障自动回退 GitHub Tree API。
+- 新增 catalog 正常链路、零 API 调用、热缓存零请求、损坏修复与 API 兜底回归；全量测试 68/68 通过。
+- 详见 [BETA-5-REVIEW.md](BETA-5-REVIEW.md)。
+
+## v1.5.0-beta.4 — 搜索、缓存、协议与 App 全链路优化（2026-10-16，已发布 beta 预发布）
+
+该版本已按 beta 预发布通道发布。源仓库联动改造在本文件上方的 beta.5 记录中完成。详细依据、测量方法与验收边界见 [BETA-4-REVIEW.md](BETA-4-REVIEW.md)。
 
 | 改动 | 主要文件 | 结果 |
 | --- | --- | --- |

@@ -252,3 +252,19 @@ test("loader rejects adjacent-prefix directories and symlink escapes for reads a
   await assert.rejects(loader.loadSkillFile(skill, "."), /not a regular file/);
   assert.throws(() => loader.resolveSkillPath({ ...skill, relative_path: "../outside" }), /Path traversal/);
 });
+
+test("manifest file_index metadata is validated before indexing", () => {
+  const digest = "a".repeat(64);
+  const valid = entry("indexed", "Indexed fixture", {
+    file_index: { path: `.catalog/${digest}.json`, sha256: digest, file_count: 2, total_bytes: 10 },
+  });
+  assert.equal(parseManifest([valid])[0].file_index.path, `.catalog/${digest}.json`);
+  for (const file_index of [
+    { path: `../${digest}.json`, sha256: digest, file_count: 1, total_bytes: 1 },
+    { path: `.catalog/${digest}.json`, sha256: "not-hash", file_count: 1, total_bytes: 1 },
+    { path: `.catalog/${digest}.json`, sha256: digest, file_count: 0, total_bytes: 1 },
+  ]) {
+    assert.throws(() => parseManifest([{ ...valid, file_index }]), /invalid file_index/);
+  }
+  assert.throws(() => parseManifest([entry("router", "Root router", { relative_path: "./", ...{ file_index: valid.file_index } })]), /invalid file_index/);
+});

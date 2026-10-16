@@ -244,6 +244,15 @@ export function parseConfig(args: string[]): Config {
   };
 }
 
+export interface ManifestFileIndex {
+  /** Content-addressed catalog path relative to the library root */
+  path: string;
+  /** SHA-256 of the exact catalog bytes */
+  sha256: string;
+  file_count: number;
+  total_bytes: number;
+}
+
 export interface ManifestEntry {
   name: string;
   description: string;
@@ -257,6 +266,8 @@ export interface ManifestEntry {
   dependencies?: string[];
   updated_at?: string;
   stars?: number;
+  /** Optional immutable file catalog emitted by codexproject */
+  file_index?: ManifestFileIndex;
 }
 
 export function loadManifest(manifestPath: string): ManifestEntry[] {
@@ -282,6 +293,17 @@ export function parseManifest(value: unknown): ManifestEntry[] {
     const name = entry.name.toLowerCase();
     if (names.has(name)) throw new Error(`Manifest contains duplicate name: ${entry.name}`);
     names.add(name);
+    const fileIndex = entry.file_index;
+    if (fileIndex !== undefined) {
+      const validIndex = !!fileIndex && typeof fileIndex === "object" && !Array.isArray(fileIndex) &&
+        typeof fileIndex.path === "string" && /^[0-9a-f]{64}$/.test(fileIndex.sha256 ?? "") &&
+        fileIndex.path === `.catalog/${fileIndex.sha256}.json` &&
+        Number.isSafeInteger(fileIndex.file_count) && fileIndex.file_count > 0 &&
+        Number.isSafeInteger(fileIndex.total_bytes) && fileIndex.total_bytes >= 0;
+      if (!validIndex || path === "./") {
+        throw new Error(`Manifest entry ${index}: invalid file_index`);
+      }
+    }
     for (const field of ["aliases", "tags", "dependencies"]) {
       if (entry[field] !== undefined && (!Array.isArray(entry[field]) || !entry[field].every((v: unknown) => typeof v === "string"))) {
         throw new Error(`Manifest entry ${index}: ${field} must be a string array`);

@@ -317,3 +317,71 @@ test("explicit refresh rejects malformed JSON and preserves the existing manifes
   await assert.rejects(fetchManifest(config, true), /failed validation/);
   assert.deepEqual(JSON.parse(readFileSync(config.manifestPath, "utf8")), [entry]);
 });
+
+test("immutable manifest catalogs bypass GitHub tree APIs", async (t) => {
+  const config = setup(t, { manifestTTL: 60_000 });
+  const content = "# Demo skill\n";
+  const files = [file("SKILL.md", content)];
+  const catalogBody = Buffer.from(JSON.stringify({
+    version: 1, skill_path: "./demo", files: files.map((item) => ({ ...item, mode: "100644" })),
+  }) + "\n");
+  const catalogSha256 = createHash("sha256").update(catalogBody).digest("hex");
+  const indexed = {
+    ...entry,
+    relative_path: "./demo",
+    file_index: { path: `.catalog/${catalogSha256}.json`, sha256: catalogSha256,
+      file_count: files.length, total_bytes: files[0].size },
+  };
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    urls.push(value);
+    if (value.includes(`/.catalog/${catalogSha256}.json`)) return new Response(catalogBody);
+    if (value.endsWith("/demo/SKILL.md")) return new Response(content);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+
+  await ensureSkillFetched(config, indexed);
+  const requestCount = urls.length;
+  assert.equal(readFileSync(join(config.skillsDir, "demo", "SKILL.md"), "utf8"), content);
+  assert.deepEqual(JSON.parse(readFileSync(join(config.skillsDir, ".catalog", `${catalogSha256}.json`), "utf8")).files,
+      files.map((item) => ({ ...item, mode: "100644" })));
+  assert.ok(urls.length >= 2);
+  assert.ok(!urls.some((url) => url.includes("api.github.com")));
+
+  await ensureSkillFetched(config, indexed);
+  assert.equal(urls.length, requestCount, "fresh complete cache must not issue network requests");
+
+  writeFileSync(join(config.skillsDir, ".catalog", `${catalogSha256}.json`), "corrupt");
+  config.manifestTTL = 1;
+  await delay(5);
+  await ensureSkillFetched(config, indexed);
+  assert.equal(readFileSync(join(config.skillsDir, ".catalog", `${catalogSha256}.json`), "utf8"), catalogBody.toString("utf8"));
+});
+
+test("a corrupt immutable catalog falls back to the GitHub tree API", async (t) => {
+  const config = setup(t);
+  const content = "# API fallback\n";
+  const catalogSha256 = createHash("sha256").update("bad catalog").digest("hex");
+  const indexed = {
+    ...entry, relative_path: "./demo",
+    file_index: { path: `.catalog/${catalogSha256}.json`, sha256: catalogSha256, file_count: 1, total_bytes: content.length },
+  };
+  const treeSha = "0123456789abcdef0123456789abcdef01234567";
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value.includes(`/.catalog/${catalogSha256}.json`)) return new Response("bad catalog");
+    if (value.includes("api.github.com")) {
+      if (value.includes(`/git/trees/${treeSha}`)) {
+        return new Response(JSON.stringify({ tree: [{ type: "blob", path: "SKILL.md", sha: sha(content), size: Buffer.byteLength(content) }] }));
+      }
+      return new Response(JSON.stringify([{ name: "demo", type: "dir", sha: treeSha }]));
+    }
+    if (value.endsWith("/demo/SKILL.md")) return new Response(content);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+
+  await ensureSkillFetched(config, indexed);
+  assert.equal(readFileSync(join(config.skillsDir, "demo", "SKILL.md"), "utf8"), content);
+  assert.ok(readSkillCacheState(config, indexed).complete);
+});
