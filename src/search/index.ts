@@ -500,15 +500,23 @@ export class SkillSearchEngine {
     return Math.log(1 + (this.totalDocs - df + 0.5) / (df + 0.5)) + 1e-9;
   }
 
-  search(query: string, options: { category?: string; limit?: number } = {}): SearchResult[] {
-    const { category, limit = 10 } = options;
+  search(query: string, options: { category?: string; limit?: number; offset?: number } = {}): SearchResult[] {
+    return this.searchWithTotal(query, options).results;
+  }
+
+  /** Search once and retain the full match count for UI pagination. */
+  searchWithTotal(
+    query: string,
+    options: { category?: string; limit?: number; offset?: number } = {},
+  ): { results: SearchResult[]; total: number } {
+    const { category, limit = 10, offset = 0 } = options;
     let rawTokens = this.tokenize(query);
 
     // Single CJK character query ("图") would otherwise tokenize to nothing.
     if (rawTokens.length === 0 && /^[\u4e00-\u9fff]$/.test(String(query).trim())) {
       rawTokens = [String(query).trim()];
     }
-    if (rawTokens.length === 0) return [];
+    if (rawTokens.length === 0) return { results: [], total: 0 };
 
     const queryTokens = this.expandQuery(rawTokens).map(q => ({ ...q, idf: this.idf(q.token) }));
     const results: SearchResult[] = [];
@@ -592,7 +600,7 @@ export class SkillSearchEngine {
     }
 
     results.sort((a, b) => b.score - a.score);
-    return results.slice(0, limit);
+    return { results: results.slice(offset, offset + limit), total: results.length };
   }
 
   getCategories(): { name: string; skill_count: number }[] {

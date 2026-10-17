@@ -7,7 +7,10 @@ type SkillCard = { name: string; description: string; cached: boolean };
 type Category = { name: string; skill_count: number };
 type Listing = { view: "home" } | { view: "category"; category: string } | { view: "search"; query: string };
 type View = Listing | { view: "detail"; skill: SkillCard; from: Listing };
-type BrowseResult = { categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[]; results?: SkillCard[] };
+type BrowseResult = {
+  categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[];
+  results?: SkillCard[]; total?: number; offset?: number; has_more?: boolean;
+};
 type HostContext = { theme?: string; styles?: { variables?: Record<string, string> } };
 type ToolResult<T> = { structuredContent?: T; isError?: boolean; content?: { type: string; text?: string }[] };
 type DetailTab = "instructions" | "files" | "sub_skills";
@@ -76,6 +79,7 @@ const search = $<HTMLInputElement>("search");
 const attach = $<HTMLButtonElement>("d-attach");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
+const searchMore = $<HTMLButtonElement>("search-more");
 const PROTOCOL_VERSION = "2026-01-26";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
@@ -100,6 +104,8 @@ let previewRevision = 0;
 let previewPath = "";
 let previewText = "";
 let previewNextOffset: number | undefined;
+let currentSearch: BrowseResult | undefined;
+let searchMoreLoading = false;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -204,6 +210,16 @@ function renderCategories(categories: Category[]) {
     button.onclick = () => void navigate({ view: "category", category: category.name });
     return button;
   }));
+}
+
+function updateSearchMore() {
+  const shown = currentSearch?.results?.length ?? 0;
+  const total = currentSearch?.total ?? shown;
+  searchMore.hidden = view.view !== "search" || !currentSearch?.has_more;
+  searchMore.disabled = searchMoreLoading;
+  searchMore.textContent = searchMoreLoading
+    ? "正在加载…"
+    : `加载更多搜索结果（${shown}/${total}）`;
 }
 
 function cacheBadge(state?: CacheSkill) {
@@ -554,11 +570,14 @@ function showView(next: View) {
     clearExplorer();
     setDetailTab("instructions", false);
   } else if (next.view === "home") {
+    currentSearch = undefined;
     $("cards").replaceChildren();
     $("cats").replaceChildren();
   } else {
+    if (next.view === "search") currentSearch = undefined;
     $("cards-list").replaceChildren();
   }
+  searchMore.hidden = true;
   if (document.activeElement?.tagName === "BUTTON") $("heading").focus({ preventScroll: true });
   window.scrollTo(0, 0);
 }
@@ -595,11 +614,17 @@ async function navigate(next: View) {
         status(data.totalSkills ? "选择分类或搜索技能" : "技能库为空，请检查服务端技能源配置");
       } else {
         const skills = (next.view === "search" ? data.results : data.skills) ?? [];
-        $("count").textContent = `${skills.length} ${next.view === "search" ? "结果" : "个"}`;
+        if (next.view === "search") {
+          currentSearch = data;
+          $("count").textContent = `${skills.length}/${data.total ?? skills.length} 结果`;
+        } else {
+          $("count").textContent = `${skills.length} 个`;
+        }
         renderCards($("cards-list"), skills);
         $("empty").hidden = skills.length !== 0;
         $("empty").textContent = next.view === "search" ? "没有找到匹配技能，试试更短的关键词或描述要完成的任务。" : "该分类暂无技能。";
         status(skills.length ? "选择技能查看详情" : "没有匹配结果");
+        if (next.view === "search") updateSearchMore();
       }
     }
   } catch (error) {
@@ -636,6 +661,43 @@ attach.onclick = async () => {
 
 $("back").onclick = () => void navigate(view.view === "detail" ? view.from : { view: "home" });
 $("retry").onclick = () => retry?.();
+searchMore.onclick = async () => {
+  if (view.view !== "search" || !currentSearch || searchMoreLoading) return;
+  const selected = view;
+  const token = revision;
+  const offset = currentSearch.results?.length ?? 0;
+  searchMoreLoading = true;
+  updateSearchMore();
+  try {
+    const page = await call<BrowseResult>("skills.query", {
+      query: selected.query,
+      limit: 24,
+      offset,
+    });
+    if (disposed || revision !== token || view !== selected) return;
+    const merged: BrowseResult = {
+      ...currentSearch,
+      ...page,
+      results: [...(currentSearch.results ?? []), ...(page.results ?? [])],
+      offset: 0,
+    };
+    merged.has_more = (merged.results?.length ?? 0) < (merged.total ?? 0);
+    currentSearch = merged;
+    cache.set(JSON.stringify(selected), { value: merged, expires: Date.now() + 30_000 });
+    renderCards($("cards-list"), merged.results ?? []);
+    $("count").textContent = `${merged.results?.length ?? 0}/${merged.total ?? 0} 结果`;
+    status(`已加载 ${merged.results?.length ?? 0}/${merged.total ?? 0} 个搜索结果`);
+  } catch (error) {
+    if (!disposed && revision === token && view === selected) {
+      status(`加载更多失败：${errorMessage(error)}`, () => searchMore.click());
+    }
+  } finally {
+    if (!disposed) {
+      searchMoreLoading = false;
+      if (view === selected) updateSearchMore();
+    }
+  }
+};
 $("tab-instructions").onclick = () => setDetailTab("instructions");
 $("tab-files").onclick = () => setDetailTab("files");
 $("tab-sub-skills").onclick = () => setDetailTab("sub_skills");

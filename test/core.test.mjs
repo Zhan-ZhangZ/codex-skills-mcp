@@ -151,6 +151,19 @@ test("search tool rejects empty, excessive and noninteger input bounds", async (
   }
 });
 
+test("searchWithTotal paginates with a stable total and no overlapping results", () => {
+  const many = Array.from({ length: 7 }, (_, index) =>
+    entry(`topic-${index}`, `Shared searchable topic item ${index}`));
+  const engine = new SkillSearchEngine(many);
+  const first = engine.searchWithTotal("searchable topic", { limit: 3, offset: 0 });
+  const second = engine.searchWithTotal("searchable topic", { limit: 3, offset: 3 });
+  assert.equal(first.total, 7);
+  assert.equal(second.total, 7);
+  assert.equal(first.results.length, 3);
+  assert.equal(second.results.length, 3);
+  assert.equal(new Set([...first.results, ...second.results].map((item) => item.name)).size, 6);
+});
+
 test("all numeric CLI options reject partial numbers and enforce both boundaries", (t) => {
   const config = setup(t);
   isolateConfigEnvironment(t);

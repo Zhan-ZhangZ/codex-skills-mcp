@@ -1,0 +1,16 @@
+{
+  "measured_at": "2026-10-17",
+  "source_commit": "6147e85d5",
+  "runtime": "Node 26.4.0, local stdio MCP",
+  "skill": "ai-news-radar",
+  "file": "data/archive.json",
+  "file_bytes": 56882791,
+  "chunk_bytes": 131072,
+  "calls": [
+    { "offset": 0, "elapsed_ms": 6, "returned": 131072, "next_offset": 131072 },
+    { "offset": 131072, "elapsed_ms": 3, "returned": 131072, "next_offset": 262144 }
+  ],
+  "contiguous_offsets": true,
+  "utf8_replacement_characters": false,
+  "note": "The MCP call reads only the requested byte range after the local skill directory is available; it does not reload the 56.9MB file per chunk."
+}

@@ -9,6 +9,7 @@ beta.6 解决了 Agent 读取大技能时的输出、分页和并发问题。bet
 - “使用说明 / 文件 / 子技能”三个页签共享同一个技能上下文，切换页签不会重新介绍技能。
 - 根说明最多展示 200,000 字符，足以覆盖当前源库最大约 64KB 的 `SKILL.md`；来源内容仍由服务端原样返回。
 - 文件页支持目录面包屑、文件名/路径检索、每页 50 项和前后翻页；文件可直接预览并复制完整路径。
+- 全局技能搜索显示“已加载/总数”，可在列表底部继续加载剩余结果；搜索索引一次计算完整排名，再按 offset 稳定切片。
 - 大文本文件不再整体拒绝：`load_skill_file` 按 UTF-8 边界返回字节段和 `next_offset`，App 一次加载 128 KiB，并提供“加载更多”。
 - 子技能页检索全部嵌套名称、路径和完整描述；点击子技能会打开对应 `SKILL.md` 的预览。
 - 页面使用有界 DOM：每次只渲染当前页，不把数千个文件或子技能一次放入界面。
@@ -44,6 +45,8 @@ beta.6 解决了 Agent 读取大技能时的输出、分页和并发问题。bet
 
 ![大文件分段预览](benchmarks/app-preview-large-file.png)
 
+真实源库的 `ai-news-radar/data/archive.json` 为 56,882,791 bytes。通过 beta.7 的本地 stdio MCP 连续读取两个 128 KiB 分段，分别耗时 6 ms 和 3 ms，偏移连续，未出现 UTF-8 replacement character；数据见 `benchmarks/beta7-large-file-real-source.json`。
+
 ![子技能页](benchmarks/app-preview-subskills.png)
 
 宽屏文件页见 `benchmarks/app-preview-files-wide.png`。渲染检查修复了 430px 宽度下工具栏按钮溢出，以及长文件列表把预览区推到页面底部的问题。
@@ -57,7 +60,7 @@ node scripts/preview-mcp-app.mjs --state files --output /tmp/app.png
 
 ## 验证
 
-- MCP 全量回归 **243/243** 通过。
+- MCP 全量回归 **245/245** 通过。
 - App 重点覆盖：初始化、主题、搜索 IME、详情与附件竞争、缓存状态竞争、文件目录/预览、子技能检索/翻页、旧请求失效。
 - npm 包和插件产物在本轮发布前仍需重新执行 `check:package`。
 - 固定 Chrome 渲染已检查 430px 与 1180px 布局；真实 ChatGPT 宿主内的最终视觉验收仍需在发布前完成。

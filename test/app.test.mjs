@@ -107,6 +107,32 @@ test("typing invalidates an old response before the debounce fires", async () =>
   await app.dispose();
 });
 
+test("search results expose their total and continue without duplicates", async () => {
+  const app = harness(); await app.ready();
+  await app.search("broad");
+  const first = app.latestTool("skills.query");
+  assert.equal(first.params.arguments.offset, undefined);
+  await app.reply(first, { structuredContent: {
+    results: [skill("alpha"), skill("beta")], total: 4, offset: 0, has_more: true,
+  } });
+  assert.equal(app.node("count").textContent, "2/4 结果");
+  assert.equal(app.node("search-more").hidden, false);
+  assert.match(app.node("search-more").textContent, /2\/4/);
+
+  app.node("search-more").onclick(); await app.flush();
+  const second = app.latestTool("skills.query");
+  assert.equal(second.params.arguments.offset, 2);
+  assert.equal(second.params.arguments.query, "broad");
+  await app.reply(second, { structuredContent: {
+    results: [skill("gamma"), skill("delta")], total: 4, offset: 2, has_more: false,
+  } });
+  assert.equal(app.node("cards-list").children.length, 4);
+  assert.deepEqual(app.node("cards-list").children.map((item) => item.children[0].textContent),
+    ["alpha", "beta", "gamma", "delta"]);
+  assert.equal(app.node("search-more").hidden, true);
+  await app.dispose();
+});
+
 test("detail back returns to its search and successful preview updates cache badge", async () => {
   const app = harness(); await app.ready();
   await app.search("needle");

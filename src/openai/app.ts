@@ -193,18 +193,27 @@ export function registerCodexSkillsApp(
       inputSchema: z.object({
         query: z.string().trim().min(1).max(500),
         limit: z.number().int().min(1).max(30).optional(),
+        offset: z.number().int().min(0).max(10_000).optional(),
       }),
       ...appOnly,
     },
-    async ({ query, limit }) => {
+    async ({ query, limit, offset }) => {
       void searchEngine.maybeRefreshManifest();
-      const results = searchEngine.search(query, { limit: limit ?? 20 });
+      const page = typeof searchEngine.searchWithTotal === "function"
+        ? searchEngine.searchWithTotal(query, { limit: limit ?? 20, offset: offset ?? 0 })
+        : (() => {
+            const results = searchEngine.search(query, { limit: limit ?? 20 });
+            return { results, total: results.length };
+          })();
       return {
         content: [],
         structuredContent: {
           view: "search",
           query,
-          results: results.map((r) => {
+          offset: offset ?? 0,
+          total: page.total,
+          has_more: (offset ?? 0) + page.results.length < page.total,
+          results: page.results.map((r) => {
             const entry = searchEngine.findByName(r.name);
             return {
               name: r.name,
