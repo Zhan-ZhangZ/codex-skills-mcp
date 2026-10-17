@@ -294,7 +294,7 @@ export function registerOpenAIMentions(
       }),
     }),
     // No template description: the SDK merges it into every resources/list
-    // entry (199 × ~50 bytes); omitting keeps the catalog ~5k tokens, safely
+    // entry; omitting keeps the catalog bounded as the live library grows,
     // under the ~12k-token host truncation observed in ChatGPT.
     { mimeType: "text/markdown" },
     async (uri, variables, extra) => {

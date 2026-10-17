@@ -8,6 +8,7 @@ import { basename, dirname, join } from "node:path";
 import { SkillLoader } from "../dist/loader/index.js";
 import { registerReadSkill } from "../dist/tools/read-skill.js";
 import { registerOpenAIMentions } from "../dist/openai/mentions.js";
+import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../dist/remote/skill-progress.js";
 
 const entry = { name: "materialized-demo", description: "fixture", category: "test", folder: "demo", relative_path: "./demo" };
 const child = (name, description = "child instructions") => `---\nname: ${name}\ndescription: ${description}\n---\nExecute all steps.\n`;
@@ -116,6 +117,44 @@ test("summary cache reuses warm content and invalidates same-size edits even wit
   const edited = await countFs(() => loader.readSkill(entry));
   assert.equal(edited.result.structure.sub_skills[0].name, "other");
   assert.equal(edited.calls.asyncFiles.filter((file) => file === fs.realpathSync(path)).length, 1);
+});
+
+test("remote cache clearing removes only that skill directory and is idempotent", async (t) => {
+  const { loader, directory } = fixture(t, {
+    "SKILL.md": "# root",
+    "nested/data.txt": "payload",
+  });
+  const marker = fs.readFileSync(join(directory, ".codex-skills.tree.json"), "utf8");
+  assert.match(marker, /completedAt/);
+  const first = await loader.clearCache(entry);
+  assert.equal(first.cleared, true);
+  assert.equal(first.files_removed, 2);
+  assert.ok(first.bytes_removed > 0);
+  assert.equal(fs.existsSync(directory), false);
+  const second = await loader.clearCache(entry);
+  assert.equal(second.cleared, false);
+  assert.equal(second.files_removed, 0);
+});
+
+test("cache clearing rejects local libraries, active downloads and symlink targets", async (t) => {
+  const local = fixture(t, { "SKILL.md": "# root" });
+  const localLoader = new SkillLoader({ ...local.config, isRemote: false }, [entry]);
+  await assert.rejects(localLoader.clearCache(entry), /本地技能目录/);
+  assert.equal(fs.existsSync(local.directory), true);
+
+  const active = fixture(t, { "SKILL.md": "# root" });
+  reportSkillDownloadProgress(entry.name, 0, 1, "starting");
+  await assert.rejects(active.loader.clearCache(entry), /正在下载/);
+  finishSkillDownloadProgress(entry.name);
+  assert.equal(fs.existsSync(active.directory), true);
+
+  const linked = fixture(t, { "SKILL.md": "# root" });
+  const outside = join(linked.config.skillsDir, "outside");
+  fs.mkdirSync(outside);
+  fs.rmSync(linked.directory, { recursive: true, force: true });
+  fs.symlinkSync(outside, linked.directory);
+  await assert.rejects(linked.loader.clearCache(entry), /Symbolic|Symlink|符号链接/i);
+  assert.equal(fs.existsSync(outside), true);
 });
 
 test("summary cache is bound to source identity and catalog content SHA", async (t) => {

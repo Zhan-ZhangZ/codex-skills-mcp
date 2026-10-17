@@ -82,8 +82,8 @@ function createServer(
   // Self-disabling when the asset is absent — all other surfaces intact.
   const appRegistered = registerCodexSkillsApp(server, searchEngine, loader);
   console.error(
-    `[codex-skills-mcp] ${12 + (appRegistered ? 5 : 0)} tools registered ` +
-    `(8 core + 4 openai-extension${appRegistered ? " + 5 app tools" : ""})`
+    `[codex-skills-mcp] ${12 + (appRegistered ? 6 : 0)} tools registered ` +
+    `(8 core + 4 openai-extension${appRegistered ? " + 6 app tools" : ""})`
   );
 
   return server;

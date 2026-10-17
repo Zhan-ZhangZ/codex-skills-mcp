@@ -66,12 +66,12 @@ function harness() {
   const node = (id) => elements.get(id);
   return {
     node, sent, reply, latest, latestTool, toolRequests, flush, document,
-    async ready() {
+    async ready(homeData = home) {
       assert.equal(sent.length, 1, "no tool call before initialization");
       assert.equal(sent[0].method, "ui/initialize");
       await reply(sent[0], { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } });
       assert.equal(sent[1].method, "ui/notifications/initialized");
-      await reply(latest("tools/call"), { structuredContent: home });
+      await reply(latest("tools/call"), { structuredContent: homeData });
     },
     async search(query, immediate = true) {
       node("search").value = query;
@@ -154,6 +154,57 @@ test("detail back returns to its search and successful preview updates cache bad
   assert.equal(app.node("search").value, "needle");
   assert.equal(app.toolRequests("skills.query").at(-1).params.arguments.query, "needle");
   assert.equal(app.node("cards-list").children[0].children[0].textContent, "alpha");
+  await app.dispose();
+});
+
+test("home surfaces measured usage and the detail cache can be cleared after confirmation", async () => {
+  const app = harness();
+  await app.ready({
+    totalSkills: 2,
+    cache_mode: "remote",
+    usage: { total_reads: 12, used_skills: 2, total_failures: 1 },
+    top: [
+      { ...skill("alpha"), cached: true, reads: 9, failures: 0, last_used_at: Date.now() - 62_000 },
+      { ...skill("beta"), cached: false, reads: 3, failures: 1, last_used_at: Date.now() - 3_600_000 },
+    ],
+    categories: [{ name: "tools", skill_count: 2 }],
+  });
+  assert.equal(app.node("stat-total").textContent, "2");
+  assert.equal(app.node("stat-usage").textContent, "12");
+  assert.equal(app.node("section-title").textContent, "常用技能");
+  assert.match(app.node("usage-summary").textContent, /2 个.*12 次/);
+  assert.match(app.node("cards").children[0].children[2].children[1].textContent, /调用 9 次/);
+
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 6, files_missing_count: 0, size_bytes: 4096 }],
+  }});
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-clear-cache").disabled, false);
+  app.node("d-clear-cache").onclick(); await app.flush();
+  assert.equal(app.node("d-clear-cache").textContent, "再次点击确认");
+  assert.match(app.node("status").textContent, /再次点击/);
+  app.node("d-clear-cache").onclick(); await app.flush();
+  const request = app.latestTool("skills.clearCache");
+  assert.equal(request.params.arguments.name, "alpha");
+  await app.reply(request, { structuredContent: {
+    name: "alpha", found: true, cleared: true, local_path: "/cache/alpha",
+    files_removed: 6, bytes_removed: 4096, cache_mode: "remote",
+  }});
+  assert.equal(app.node("d-cached").textContent, "尚未缓存");
+  assert.match(app.node("d-cache-detail").textContent, /6 个文件.*4 KB/);
+  assert.equal(app.node("d-clear-cache").disabled, true);
+  await app.dispose();
+});
+
+test("local source skills do not expose cache deletion", async () => {
+  const app = harness();
+  await app.ready({ ...home, cache_mode: "local" });
+  app.node("cards").children[0].onclick(); await app.flush();
+  assert.equal(app.node("d-clear-cache").hidden, true);
+  assert.equal(app.node("d-clear-cache").disabled, true);
   await app.dispose();
 });
 

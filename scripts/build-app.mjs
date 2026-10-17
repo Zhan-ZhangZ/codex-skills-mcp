@@ -7,13 +7,15 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
-const [template, styles, pkg] = await Promise.all([
+const [template, styles, pkg, logo] = await Promise.all([
   readFile(resolve(root, "app-src/index.html"), "utf8"),
   readFile(require.resolve("@openai/mcp-extensions/app/styles.css"), "utf8"),
   readFile(resolve(root, "package.json"), "utf8").then(JSON.parse),
+  readFile(resolve(root, "app-src/brand-logo.png")),
 ]);
 for (const marker of ["<!-- APP_SCRIPT -->", "<!-- APP_STYLES -->"]) {
   if (template.split(marker).length !== 2) throw new Error("App template must contain exactly one " + marker);
+if (template.split("__APP_LOGO_DATA__").length !== 2) throw new Error("App template must contain exactly one logo placeholder");
 }
 const result = await build({
   absWorkingDir: root,
@@ -30,6 +32,7 @@ const result = await build({
 const code = result.outputFiles[0].text;
 const css = (await transform(styles, { loader: "css", minify: true, legalComments: "none" })).code;
 const html = template
+  .replace("__APP_LOGO_DATA__", () => `data:image/png;base64,${logo.toString("base64")}`)
   .replace("<!-- APP_STYLES -->", () => "<style>" + css.replace(/<\/style/gi, "<\\/style") + "</style>")
   .replace("<!-- APP_SCRIPT -->", () => "<script>" + code.replace(/<\/script/gi, "<\\/script") + "</script>");
 await mkdir(resolve(root, "assets"), { recursive: true });

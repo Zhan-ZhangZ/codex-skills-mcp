@@ -12,6 +12,19 @@ interface SearchResult {
   matched_terms?: string[];
 }
 
+interface UsageRecord {
+  reads: number;
+  failures: number;
+  lastReadAt?: number;
+}
+
+export interface PopularSkill {
+  entry: ManifestEntry;
+  reads: number;
+  failures: number;
+  last_read_at: number | null;
+}
+
 type FieldName =
   | "name"
   | "leading"
@@ -250,7 +263,7 @@ export class SkillSearchEngine {
   private readonly b = 0.75;
 
   private usageFile?: string;
-  private usageCount: Record<string, number | { reads: number; failures: number }> = {};
+  private usageCount: Record<string, number | UsageRecord> = {};
   private config?: Config;
 
   constructor(manifest: ManifestEntry[], config?: Config) {
@@ -280,10 +293,14 @@ export class SkillSearchEngine {
     }
   }
 
-  private getUsage(name: string): { reads: number; failures: number } {
+  private getUsage(name: string): UsageRecord {
     const value = this.usageCount[name];
     if (value && typeof value === "object") {
-      return { reads: value.reads || 0, failures: value.failures || 0 };
+      return {
+        reads: value.reads || 0,
+        failures: value.failures || 0,
+        ...(typeof value.lastReadAt === "number" ? { lastReadAt: value.lastReadAt } : {}),
+      };
     }
     if (typeof value === "number") {
       return { reads: value, failures: 0 };
@@ -304,7 +321,11 @@ export class SkillSearchEngine {
   public recordUsage(skillName: string) {
     if (!this.usageFile) return;
     const cur = this.getUsage(skillName);
-    this.usageCount[skillName] = { reads: cur.reads + 1, failures: cur.failures };
+    this.usageCount[skillName] = {
+      reads: cur.reads + 1,
+      failures: cur.failures,
+      lastReadAt: Date.now(),
+    };
     this.saveUsage();
   }
 
@@ -312,8 +333,22 @@ export class SkillSearchEngine {
   public recordFailure(skillName: string) {
     if (!this.usageFile) return;
     const cur = this.getUsage(skillName);
-    this.usageCount[skillName] = { reads: cur.reads, failures: cur.failures + 1 };
+    this.usageCount[skillName] = {
+      reads: cur.reads,
+      failures: cur.failures + 1,
+      ...(cur.lastReadAt !== undefined ? { lastReadAt: cur.lastReadAt } : {}),
+    };
     this.saveUsage();
+  }
+
+  /** Read-only usage counters for presentation surfaces. */
+  public usageFor(skillName: string): { reads: number; failures: number; last_read_at: number | null } {
+    const usage = this.getUsage(skillName);
+    return {
+      reads: usage.reads,
+      failures: usage.failures,
+      last_read_at: usage.lastReadAt ?? null,
+    };
   }
 
   private buildIndex(manifest: ManifestEntry[]): void {
@@ -648,6 +683,48 @@ export class SkillSearchEngine {
       return a.name.localeCompare(b.name);
     });
     return entries.slice(0, limit);
+  }
+
+  /**
+   * Most-used skills with observable frequency data for the App home.
+   * Unused entries remain useful discovery fallbacks, but keep a true zero
+   * read count so the UI never presents inferred usage as measured usage.
+   */
+  public popularSkills(limit: number): PopularSkill[] {
+    const entries = this.index.map(({ entry }) => {
+      const usage = this.getUsage(entry.name);
+      return {
+        entry,
+        reads: usage.reads,
+        failures: usage.failures,
+        last_read_at: usage.lastReadAt ?? null,
+      };
+    });
+    entries.sort((a, b) => {
+      if (a.reads !== b.reads) return b.reads - a.reads;
+      if (a.last_read_at !== b.last_read_at) {
+        return (b.last_read_at ?? 0) - (a.last_read_at ?? 0);
+      }
+      const aUpdated = a.entry.updated_at ? Date.parse(a.entry.updated_at) : 0;
+      const bUpdated = b.entry.updated_at ? Date.parse(b.entry.updated_at) : 0;
+      if (aUpdated !== bUpdated) return bUpdated - aUpdated;
+      return a.entry.name.localeCompare(b.entry.name);
+    });
+    return entries.slice(0, Math.max(0, limit));
+  }
+
+  /** Aggregate usage counters for the App activity strip. */
+  public usageSummary(): { total_reads: number; used_skills: number; total_failures: number } {
+    let total_reads = 0;
+    let used_skills = 0;
+    let total_failures = 0;
+    for (const item of this.index) {
+      const usage = this.getUsage(item.entry.name);
+      total_reads += usage.reads;
+      total_failures += usage.failures;
+      if (usage.reads > 0) used_skills += 1;
+    }
+    return { total_reads, used_skills, total_failures };
   }
 
   /**

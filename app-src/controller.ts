@@ -5,13 +5,23 @@ import { createAppTransport } from "@openai/mcp-extensions/app/transport";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 
-type SkillCard = { name: string; description: string; cached: boolean };
+type SkillCard = {
+  name: string;
+  description: string;
+  cached: boolean;
+  category?: string;
+  reads?: number;
+  failures?: number;
+  last_used_at?: number | null;
+};
 type Category = { name: string; skill_count: number };
 type Listing = { view: "home" } | { view: "category"; category: string } | { view: "search"; query: string };
 type View = Listing | { view: "detail"; skill: SkillCard; from: Listing };
 type BrowseResult = {
   categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[];
   results?: SkillCard[]; total?: number; offset?: number; has_more?: boolean;
+  cache_mode?: "remote" | "local";
+  usage?: { total_reads: number; used_skills: number; total_failures: number };
 };
 type HostContext = { theme?: string; styles?: { variables?: Record<string, string> } };
 type ToolResult<T> = { structuredContent?: T; isError?: boolean; content?: { type: string; text?: string }[] };
@@ -57,6 +67,15 @@ type CacheResult = { requested: number; complete_count: number; truncated: boole
 type DownloadProgress = {
   name: string; done: number; total: number; message: string; updated_at: number; active: boolean;
 };
+type ClearCacheResult = {
+  name: string;
+  found: boolean;
+  cleared: boolean;
+  local_path: string;
+  files_removed: number;
+  bytes_removed: number;
+  cache_mode: "remote" | "local";
+};
 type FileReadResult = {
   content: string;
   size_bytes: number;
@@ -83,6 +102,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 const transport = createAppTransport();
 const search = $<HTMLInputElement>("search");
 const attach = $<HTMLButtonElement>("d-attach");
+const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
 const searchMore = $<HTMLButtonElement>("search-more");
@@ -126,6 +146,12 @@ let detailProgressToken: string | undefined;
 let progressPollTimer: ReturnType<typeof setInterval> | undefined;
 let progressPollLoading = false;
 let instructionMode: "rendered" | "raw" = "rendered";
+let cacheMode: "remote" | "local" | undefined;
+let clearCacheBusy = false;
+let clearCacheArmed = false;
+let clearCacheTimer: ReturnType<typeof setTimeout> | undefined;
+let detailMaterializing = false;
+let lastCacheState: CacheSkill | undefined;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -184,6 +210,8 @@ function stopProgressPolling() {
   progressPollLoading = false;
 }
 function showDownloadProgress(done?: number, total?: number) {
+  detailMaterializing = true;
+  updateClearCacheButton();
   detailProgress.hidden = false;
   if (done === undefined || total === undefined || total <= 0) {
     detailProgress.className = "download-progress indeterminate";
@@ -236,6 +264,20 @@ const formatBytes = (bytes = 0) => {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${bytes} B`;
+};
+const formatCount = (value = 0) => Math.max(0, value).toLocaleString("zh-CN");
+const relativeTime = (value?: number | null) => {
+  if (!value || !Number.isFinite(value)) return "最近未使用";
+  const elapsed = Math.max(0, Date.now() - value);
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "刚刚使用";
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} 天前`;
+  const months = Math.floor(days / 30);
+  return months < 12 ? `${months} 个月前` : `${Math.floor(months / 12)} 年前`;
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
 const escapeHtml = (value: string) => value
@@ -290,10 +332,20 @@ function card(skill: SkillCard): HTMLButtonElement {
   button.className = "card";
   const title = document.createElement("b"); title.textContent = skill.name;
   const description = document.createElement("p"); description.textContent = skill.description;
+  const meta = document.createElement("div"); meta.className = "card-meta";
   const badge = document.createElement("span");
   badge.className = "badge" + (skill.cached ? " on" : "");
   badge.textContent = skill.cached ? "已缓存" : "按需下载";
-  button.append(title, description, badge);
+  const usage = document.createElement("span");
+  usage.className = "usage-chip" + ((skill.reads ?? 0) >= 3 ? " hot" : "");
+  usage.textContent = (skill.reads ?? 0) > 0
+    ? `调用 ${formatCount(skill.reads)} 次 · ${relativeTime(skill.last_used_at)}`
+    : "尚未调用";
+  usage.title = (skill.reads ?? 0) > 0
+    ? `累计调用 ${skill.reads} 次${skill.failures ? `，失败 ${skill.failures} 次` : ""}`
+    : "这张卡来自近期更新或推荐排序";
+  meta.append(badge, usage);
+  button.append(title, description, meta);
   button.onclick = () => {
     if (view.view !== "detail") void navigate({ view: "detail", skill, from: view });
   };
@@ -303,15 +355,40 @@ function renderCards(host: HTMLElement, skills: SkillCard[]) {
   host.replaceChildren(...skills.map(card));
 }
 function renderCategories(categories: Category[]) {
-  $("cats").replaceChildren(...categories.map((category) => {
+  $("cats").replaceChildren(...categories.map((category, index) => {
     const button = document.createElement("button"); button.className = "cat";
+    const marker = document.createElement("span"); marker.className = "cat-index";
+    marker.textContent = String(index + 1).padStart(2, "0");
+    const copy = document.createElement("span"); copy.className = "cat-copy";
     const name = document.createElement("b"); name.textContent = category.name;
     const count = document.createElement("span"); count.className = "muted";
-    count.textContent = `${category.skill_count} 个`;
-    button.append(name, count);
+    count.textContent = `${formatCount(category.skill_count)} 个`;
+    const arrow = document.createElement("span"); arrow.className = "cat-arrow"; arrow.textContent = "→";
+    copy.append(name, count);
+    button.append(marker, copy, arrow);
     button.onclick = () => void navigate({ view: "category", category: category.name });
     return button;
   }));
+}
+
+function renderHomeMeta(data: BrowseResult) {
+  if (data.cache_mode) cacheMode = data.cache_mode;
+  const total = data.totalSkills ?? 0;
+  const categories = data.categories?.length ?? 0;
+  const usage = data.usage ?? { total_reads: 0, used_skills: 0, total_failures: 0 };
+  $("hero-kicker").textContent = `${formatCount(total)} 个技能 · 实时索引`;
+  $("stat-total").textContent = formatCount(total);
+  $("stat-categories").textContent = formatCount(categories);
+  $("stat-usage").textContent = formatCount(usage.total_reads);
+  $("stat-explored").textContent = formatCount(usage.used_skills);
+  $("section-title").textContent = usage.total_reads > 0 ? "常用技能" : "近期值得探索";
+  $("section-caption").textContent = usage.total_reads > 0
+    ? "按本地读取频率排序，并标出真实调用次数与最近使用时间。"
+    : "还没有足够的本地调用记录；先展示近期更新与推荐入口。";
+  $("usage-summary").textContent = usage.total_reads > 0
+    ? `已使用 ${formatCount(usage.used_skills)} 个 · 共 ${formatCount(usage.total_reads)} 次`
+    : "等待首次调用";
+  updateClearCacheButton();
 }
 
 function updateSearchMore() {
@@ -325,6 +402,7 @@ function updateSearchMore() {
 }
 
 function cacheBadge(state?: CacheSkill) {
+  lastCacheState = state;
   const badge = $("d-cached");
   const detail = $("d-cache-detail");
   const revisionNote = $("d-revision-note");
@@ -335,6 +413,7 @@ function cacheBadge(state?: CacheSkill) {
     detailLocalPath = "";
     badge.textContent = state ? "技能不存在" : "检查缓存…";
     badge.className = "badge warn";
+    updateClearCacheButton();
     return;
   }
   detailLocalPath = state.local_path ?? "";
@@ -358,6 +437,45 @@ function cacheBadge(state?: CacheSkill) {
     badge.textContent = "尚未缓存";
     detail.textContent = "读取说明时会下载完整技能";
   }
+  updateClearCacheButton();
+}
+
+function resetClearCacheButton() {
+  if (clearCacheTimer !== undefined) clearTimeout(clearCacheTimer);
+  clearCacheTimer = undefined;
+  clearCacheArmed = false;
+  clearCacheButton.className = "";
+  clearCacheButton.textContent = "清除缓存";
+  clearCacheButton.setAttribute("aria-label", "");
+}
+
+function updateClearCacheButton() {
+  if (clearCacheBusy) {
+    clearCacheButton.hidden = cacheMode === "local";
+    clearCacheButton.disabled = true;
+    clearCacheButton.textContent = "正在清除…";
+    return;
+  }
+  const armed = clearCacheArmed;
+  resetClearCacheButton();
+  clearCacheBusy = false;
+  if (cacheMode === "local") {
+    clearCacheButton.hidden = true;
+    clearCacheButton.disabled = true;
+    return;
+  }
+  clearCacheButton.hidden = false;
+  const canClear = !!lastCacheState?.found && !!lastCacheState.cached && !detailMaterializing;
+  clearCacheButton.disabled = !canClear;
+  clearCacheButton.title = canClear
+    ? "删除这个技能已下载的文件，释放本地空间"
+    : detailMaterializing ? "技能正在下载，完成后可清除" : "当前没有可清除的技能缓存";
+  if (armed && canClear) {
+    clearCacheArmed = true;
+    clearCacheButton.className = "armed";
+    clearCacheButton.textContent = "再次点击确认";
+    clearCacheButton.setAttribute("aria-label", "再次点击确认清除当前技能缓存");
+  }
 }
 
 async function refreshCacheStatus(name: string, token: number) {
@@ -375,6 +493,14 @@ async function refreshCacheStatus(name: string, token: number) {
 }
 
 function markMaterialized() {
+  detailMaterializing = false;
+  lastCacheState = {
+    ...lastCacheState,
+    name: view.view === "detail" ? view.skill.name : lastCacheState?.name ?? "",
+    found: true,
+    cached: true,
+    complete: true,
+  };
   cacheStatusRevision++;
   const badge = $("d-cached");
   badge.textContent = "已完整缓存";
@@ -383,6 +509,7 @@ function markMaterialized() {
   $("d-revision-note").hidden = true;
   detailProgress.hidden = true;
   stopProgressPolling();
+  updateClearCacheButton();
 }
 
 function setTabs() {
@@ -665,15 +792,22 @@ function showView(next: View) {
   $("list").hidden = next.view !== "category" && next.view !== "search";
   $("detail").hidden = next.view !== "detail";
   $("back").hidden = next.view === "home";
+  $("search-zone").hidden = next.view === "detail";
+  $("content").setAttribute("data-view", next.view);
   $("heading").textContent = next.view === "category" ? next.category :
     next.view === "search" ? `搜索“${next.query}”` :
     next.view === "detail" ? next.skill.name : "Codex Skills 技能库";
+  $("eyebrow").textContent = next.view === "category" ? "Library · category" :
+    next.view === "search" ? "Library · search result" :
+    next.view === "detail" ? "Skill dossier" : "Skill atlas · on demand";
   $("count").textContent = "";
   $("empty").hidden = true;
   if (next.view !== "detail") search.value = next.view === "search" ? next.query : "";
   if (next.view === "detail") {
     if (previous !== next) attachmentStatus("");
     cacheStatusRevision++;
+    resetClearCacheButton();
+    detailMaterializing = !next.skill.cached;
     cacheBadge();
     instructionRaw.textContent = "正在下载并读取完整技能…";
     renderedInstructions.textContent = "正在下载并读取完整技能…";
@@ -727,9 +861,10 @@ async function navigate(next: View) {
       if (!current()) return;
       if (next.view === "home") {
         $("count").textContent = `${data.totalSkills ?? 0} 技能`;
+        renderHomeMeta(data);
         renderCards($("cards"), data.top ?? []);
         renderCategories(data.categories ?? []);
-        status(data.totalSkills ? "选择分类或搜索技能" : "技能库为空，请检查服务端技能源配置");
+        status(data.totalSkills ? "搜索任务，或从常用技能与领域开始" : "技能库为空，请检查服务端技能源配置");
       } else {
         const skills = (next.view === "search" ? data.results : data.skills) ?? [];
         if (next.view === "search") {
@@ -752,6 +887,8 @@ async function navigate(next: View) {
       instructionRaw.textContent = failure;
       renderedInstructions.textContent = failure;
       detailProgress.hidden = true;
+      detailMaterializing = false;
+      updateClearCacheButton();
       stopProgressPolling();
       void refreshCacheStatus(next.skill.name, token);
     }
@@ -778,6 +915,60 @@ attach.onclick = async () => {
     if (view === selected && !disposed) attachmentStatus(`加入失败：${errorMessage(error)}`);
   } finally {
     attaching = false; attach.disabled = !connected;
+  }
+};
+
+clearCacheButton.onclick = async () => {
+  if (view.view !== "detail" || clearCacheBusy || cacheMode === "local") return;
+  const selected = view;
+  if (detailMaterializing || !lastCacheState?.cached) return;
+  if (!clearCacheArmed) {
+    clearCacheArmed = true;
+    updateClearCacheButton();
+    clearCacheTimer = setTimeout(() => {
+      clearCacheTimer = undefined;
+      clearCacheArmed = false;
+      updateClearCacheButton();
+    }, 4_000);
+    status(`再次点击“确认”清除「${selected.skill.name}」的本地缓存`);
+    return;
+  }
+
+  clearCacheBusy = true;
+  clearCacheArmed = false;
+  detailProgress.hidden = true;
+  stopProgressPolling();
+  updateClearCacheButton();
+  try {
+    const result = await call<ClearCacheResult>("skills.clearCache", { name: selected.skill.name });
+    if (disposed || view !== selected) return;
+    selected.skill.cached = false;
+    lastCacheState = {
+      ...lastCacheState,
+      found: true,
+      cached: false,
+      complete: false,
+      files_total: 0,
+      files_missing_count: 0,
+      size_bytes: 0,
+    };
+    detailLocalPath = "";
+    $("d-cached").textContent = "尚未缓存";
+    $("d-cached").className = "badge";
+    $("d-cache-detail").textContent = result.cleared
+      ? `已清除 ${formatCount(result.files_removed)} 个文件 · 释放 ${formatBytes(result.bytes_removed)}`
+      : "当前没有可清除的缓存";
+    $("d-revision-note").textContent = "缓存已清除；当前页面保留刚才读取的说明，下次读取会重新下载。";
+    $("d-revision-note").hidden = false;
+    cache.clear();
+    status(result.cleared ? `已清除「${selected.skill.name}」的缓存` : "缓存已经为空");
+  } catch (error) {
+    if (!disposed && view === selected) {
+      status(`清除缓存失败：${errorMessage(error)}`, () => clearCacheButton.click());
+    }
+  } finally {
+    clearCacheBusy = false;
+    if (!disposed && view === selected) updateClearCacheButton();
   }
 };
 

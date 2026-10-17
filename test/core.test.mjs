@@ -164,6 +164,27 @@ test("searchWithTotal paginates with a stable total and no overlapping results",
   assert.equal(new Set([...first.results, ...second.results].map((item) => item.name)).size, 6);
 });
 
+test("popular skills expose measured usage and preserve timestamps", (t) => {
+  const config = setup(t);
+  writeFileSync(join(config.skillsDir, "usage.json"), JSON.stringify({
+    research: { reads: 2, failures: 1, lastReadAt: 1000 },
+    render: { reads: 5, failures: 0, lastReadAt: 5000 },
+  }));
+  const engine = new SkillSearchEngine(manifest, config);
+  assert.deepEqual(engine.popularSkills(2).map((item) => ({
+    name: item.entry.name, reads: item.reads, failures: item.failures, last: item.last_read_at,
+  })), [
+    { name: "render", reads: 5, failures: 0, last: 5000 },
+    { name: "research", reads: 2, failures: 1, last: 1000 },
+  ]);
+  assert.deepEqual(engine.usageSummary(), { total_reads: 7, used_skills: 2, total_failures: 1 });
+  engine.recordUsage("research");
+  const updated = engine.usageFor("research");
+  assert.equal(updated.reads, 3);
+  assert.ok(updated.last_read_at > 5000);
+  assert.equal(JSON.parse(readFileSync(join(config.skillsDir, "usage.json"), "utf8")).research.reads, 3);
+});
+
 test("all numeric CLI options reject partial numbers and enforce both boundaries", (t) => {
   const config = setup(t);
   isolateConfigEnvironment(t);

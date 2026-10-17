@@ -6,7 +6,7 @@
  */
 
 /** Server-level instructions returned in the MCP initialize result. */
-export const SERVER_INSTRUCTIONS = `Codex-Skills: 190+ expert skills fetched on demand — no pre-install needed. Daily use progressively caches skills locally.
+export const SERVER_INSTRUCTIONS = `Codex-Skills: a live library of expert skills fetched on demand — no pre-install needed. Daily use progressively caches skills locally.
 
 MANDATORY 5-step protocol for any task a skill could help with:
 1. DISCOVER — plan_workflow(task) and/or search_skills(query). "[cached]" means the skill is already on local disk; prefer cached skills when scores are close.

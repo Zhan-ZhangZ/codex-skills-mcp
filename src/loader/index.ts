@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
-import { readFile, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { createHash } from "node:crypto";
 import { join, relative, resolve, extname, basename, dirname, isAbsolute, sep } from "node:path";
@@ -8,6 +8,7 @@ import type { ProgressCallback, SkillMaterialization } from "../remote/github.js
 import { readSkillCacheState, isSkillCachedLight, consumeSkillMaterialization, peekSkillMaterialization, type SkillCacheState } from "../remote/github.js";
 import { resolveWithin } from "../lib/paths.js";
 import { parse as parseYaml } from "yaml";
+import { readSkillDownloadProgress } from "../remote/skill-progress.js";
 
 export interface SkillStructure {
   files: FileNode[];
@@ -41,6 +42,14 @@ export interface ReadSkillResult {
   cache?: SkillCacheState;
   /** Shared with readNavigation; excludes credentials and pagination filters. */
   navigationIdentity: string;
+}
+
+export interface ClearSkillCacheResult {
+  found: boolean;
+  cleared: boolean;
+  local_path: string;
+  files_removed: number;
+  bytes_removed: number;
 }
 
 export interface SkillNavigationOptions {
@@ -279,6 +288,10 @@ export class SkillLoader {
       softDeadlineMs: this.config.softDeadlineMs,
       hardDeadlineMs: this.config.hardDeadlineMs,
     };
+  }
+
+  get cacheMode(): "remote" | "local" {
+    return this.config.isRemote ? "remote" : "local";
   }
 
   /** Lazy-load remote module only when needed */
@@ -854,6 +867,57 @@ export class SkillLoader {
       };
     }
     return readSkillCacheState(this.config, entry);
+  }
+
+  /**
+   * Remove one remote skill's materialized cache. Local libraries are source
+   * checkouts, not disposable caches, so this method refuses to delete them.
+   */
+  async clearCache(entry: ManifestEntry): Promise<ClearSkillCacheResult> {
+    if (!this.config.isRemote) throw new Error("本地技能目录不是可清除的下载缓存");
+    const progress = readSkillDownloadProgress(entry.name);
+    if (progress?.active) throw new Error("技能正在下载，完成后再清除缓存");
+
+    const localPath = this.resolveSkillPath(entry);
+    const state = this.cacheState(entry);
+    if (!state.cached) {
+      return {
+        found: true,
+        cleared: false,
+        local_path: localPath,
+        files_removed: 0,
+        bytes_removed: 0,
+      };
+    }
+
+    let info;
+    try {
+      info = await lstat(localPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return {
+          found: true,
+          cleared: false,
+          local_path: localPath,
+          files_removed: 0,
+          bytes_removed: 0,
+        };
+      }
+      throw error;
+    }
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      throw new Error("拒绝清除非目录或符号链接形式的技能缓存");
+    }
+
+    await rm(localPath, { recursive: true, force: true });
+    this.summaries.clear();
+    return {
+      found: true,
+      cleared: true,
+      local_path: localPath,
+      files_removed: state.filesTotal,
+      bytes_removed: state.sizeBytes,
+    };
   }
 
   /**

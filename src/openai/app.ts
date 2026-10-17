@@ -97,7 +97,16 @@ export function registerCodexSkillsApp(
     void searchEngine.maybeRefreshManifest();
     const categories = searchEngine.getCategories();
     const totalSkills = categories.reduce((s, c) => s + c.skill_count, 0);
-    return { page: "library", categories, totalSkills, butler: "00_codex_skills" };
+    return {
+      page: "library",
+      categories,
+      totalSkills,
+      butler: "00_codex_skills",
+      cache_mode: loader.cacheMode,
+      usage: typeof searchEngine.usageSummary === "function"
+        ? searchEngine.usageSummary()
+        : { total_reads: 0, used_skills: 0, total_failures: 0 },
+    };
   };
 
   const readonly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
@@ -157,15 +166,32 @@ export function registerCodexSkillsApp(
       void searchEngine.maybeRefreshManifest();
       if (!category) {
         const categories = searchEngine.getCategories();
+        const popular = typeof searchEngine.popularSkills === "function"
+          ? searchEngine.popularSkills(8)
+          : searchEngine.defaultSuggestions(8).map((entry) => ({
+              entry,
+              reads: 0,
+              failures: 0,
+              last_read_at: null,
+            }));
         return {
           content: [],
           structuredContent: {
             view: "home",
             categories,
             totalSkills: categories.reduce((s, c) => s + c.skill_count, 0),
-            top: searchEngine
-              .defaultSuggestions(8)
-              .map((e) => ({ name: e.name, description: e.description, cached: loader.isCached(e) })),
+            cache_mode: loader.cacheMode,
+            usage: typeof searchEngine.usageSummary === "function"
+              ? searchEngine.usageSummary()
+              : { total_reads: 0, used_skills: 0, total_failures: 0 },
+            top: popular.map(({ entry, reads, failures, last_read_at }) => ({
+              name: entry.name,
+              description: entry.description,
+              cached: loader.isCached(entry),
+              reads,
+              failures,
+              last_used_at: last_read_at,
+            })),
           },
         };
       }
@@ -179,6 +205,10 @@ export function registerCodexSkillsApp(
             name: e.name,
             description: e.description,
             cached: loader.isCached(e),
+            category: e.category,
+            ...(typeof searchEngine.usageFor === "function"
+              ? searchEngine.usageFor(e.name)
+              : { reads: 0, failures: 0, last_read_at: null }),
           })),
         },
       };
@@ -222,6 +252,9 @@ export function registerCodexSkillsApp(
               category: r.category,
               score: r.score,
               cached: entry ? loader.isCached(entry) : false,
+              ...(entry && typeof searchEngine.usageFor === "function"
+                ? searchEngine.usageFor(entry.name)
+                : { reads: 0, failures: 0, last_read_at: null }),
             };
           }),
         },
@@ -246,9 +279,51 @@ export function registerCodexSkillsApp(
     })
   );
 
+  registerAppTool(
+    server,
+    "skills.clearCache",
+    {
+      title: "Clear one skill cache",
+      description: "App-facing: remove the downloaded files for one skill. Manifest and usage history are preserved.",
+      inputSchema: z.object({
+        name: z.string().trim().min(1).max(500),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      _meta: { ui: { visibility: ["app"] as const } },
+    },
+    async ({ name }) => {
+      const entry = searchEngine.findByName(name);
+      if (!entry) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `Skill "${name}" not found.` }],
+        };
+      }
+      try {
+        const result = await loader.clearCache(entry);
+        return {
+          content: [],
+          structuredContent: {
+            ...result,
+            name: entry.name,
+            cache_mode: loader.cacheMode,
+          },
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          }],
+        };
+      }
+    }
+  );
+
   console.error(
     "[codex-skills-mcp] MCP App registered: skills.library (global), " +
-      "skills.tray (thread), skills.browse/query/progress (app-facing)"
+      "skills.tray (thread), skills.browse/query/progress/clearCache (app-facing)"
   );
   return true;
 }

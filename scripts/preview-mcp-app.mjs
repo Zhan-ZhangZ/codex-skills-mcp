@@ -19,10 +19,28 @@ const appHtml = await readFile(resolve(root, "assets/app.html"), "utf8");
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const skills = [
-  { name: "awesome-journal-skills", description: "期刊选择、研究设计、投稿与审稿流程。", cached: true },
-  { name: "officecli", description: "创建和分析 Office 文档、表格与演示文稿。", cached: false },
-  { name: "webapp-testing", description: "使用 Playwright 验证本地 Web 应用。", cached: true },
+  { name: "awesome-journal-skills", description: "期刊选择、研究设计、投稿与审稿流程。", cached: true,
+    reads: 18, failures: 0, last_used_at: Date.now() - 12 * 60_000 },
+  { name: "officecli", description: "创建和分析 Office 文档、表格与演示文稿。", cached: false,
+    reads: 11, failures: 1, last_used_at: Date.now() - 2 * 3_600_000 },
+  { name: "webapp-testing", description: "使用 Playwright 验证本地 Web 应用。", cached: true,
+    reads: 7, failures: 0, last_used_at: Date.now() - 26 * 3_600_000 },
+  { name: "codex-ppt-skill", description: "把文章与研究报告组织成统一视觉风格的演示文稿。", cached: false,
+    reads: 5, failures: 0, last_used_at: Date.now() - 3 * 86_400_000 },
+  { name: "humanizer", description: "清理模板化表达，同时保留事实、语气与作者声音。", cached: true,
+    reads: 3, failures: 0, last_used_at: Date.now() - 8 * 86_400_000 },
+  { name: "blender-mcp", description: "通过 MCP 控制 Blender，完成场景、材质与镜头搭建。", cached: false,
+    reads: 2, failures: 0, last_used_at: Date.now() - 16 * 86_400_000 },
 ];
+const categories = [
+  { name: "社科与研究", skill_count: 38 },
+  { name: "办公与文档", skill_count: 26 },
+  { name: "开发与自动化", skill_count: 64 },
+  { name: "设计与多媒体", skill_count: 42 },
+  { name: "商业与专业", skill_count: 49 },
+  { name: "智能体与协同", skill_count: 28 },
+];
+const totalSkills = categories.reduce((total, category) => total + category.skill_count, 0);
 
 function navigationArguments(args) {
   if (args.view === "sub_skills") {
@@ -65,6 +83,8 @@ const mockHost = `<!doctype html><html><body style="margin:0;background:#111">
 const frame = document.getElementById("app");
 const state = ${JSON.stringify(values.state)};
 const skills = ${JSON.stringify(skills)};
+const categories = ${JSON.stringify(categories)};
+const totalSkills = ${JSON.stringify(totalSkills)};
 const navigationArguments = ${navigationArguments.toString()};
 window.__rpcLog = [];
 const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
@@ -78,11 +98,13 @@ addEventListener("message", (event) => {
   if (message.method === "tools/call") {
     const name = message.params.name;
     const args = message.params.arguments || {};
-    if (name === "skills.browse") return reply(message.id, { structuredContent: { totalSkills: 291, top: skills, categories: [
-      { name: "社科与研究", skill_count: 38 }, { name: "办公与文档", skill_count: 26 },
-      { name: "开发与自动化", skill_count: 64 }, { name: "设计与多媒体", skill_count: 42 },
-    ] } });
+    if (name === "skills.browse") return reply(message.id, { structuredContent: { totalSkills, top: skills,
+      cache_mode: "remote", usage: { total_reads: 46, used_skills: 6, total_failures: 1 }, categories } });
     if (name === "skills.query") return reply(message.id, { structuredContent: { results: skills } });
+    if (name === "skills.clearCache") return reply(message.id, { structuredContent: {
+      name: args.name, found: true, cleared: true, local_path: "/cache/skill",
+      files_removed: 2281, bytes_removed: 48234496, cache_mode: "remote",
+    } });
     if (name === "skill_status") return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
       skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
         files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
@@ -142,7 +164,10 @@ frame.addEventListener("load", () => {
   const wait = setInterval(() => {
     try {
       const first = frame.contentDocument?.querySelector("#cards .card");
-      if (first) { first.click(); clearInterval(wait); }
+      if (first) {
+        if (state !== "home") first.click();
+        clearInterval(wait);
+      }
     } catch {}
   }, 40);
 });
@@ -219,7 +244,9 @@ try {
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-more")?.hidden === false`
-    : `document.querySelector("#app")?.contentDocument?.querySelector("#nav-list")?.children.length > 0`;
+    : values.state === "home"
+      ? `document.querySelector("#app")?.contentDocument?.querySelector("#cards .card") != null`
+      : `document.querySelector("#app")?.contentDocument?.querySelector("#nav-list")?.children.length > 0`;
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     const evaluation = await command("Runtime.evaluate", { expression: readyExpression, returnByValue: true });
@@ -233,6 +260,9 @@ try {
     });
     throw new Error(`App did not reach the ${values.state} preview state: ${debug.result?.value} ${runtimeErrors.join(" ")}`);
   }
+  // Let the entry animation settle before capturing; otherwise the whole home
+  // view is photographed at partial opacity and every colour reads too dark.
+  await new Promise((wait) => setTimeout(wait, 650));
   const unsafe = await command("Runtime.evaluate", {
     expression: `(() => { const doc = document.querySelector("#app")?.contentDocument; return Boolean(doc?.body?.dataset.xss || doc?.querySelector("#d-md-rendered script") || [...(doc?.querySelectorAll("#d-md-rendered a") || [])].some(a => a.getAttribute("href")?.startsWith("javascript:"))); })()`,
     returnByValue: true,
