@@ -54,7 +54,34 @@
     .badge.on { border-color: light-dark(#277a38, #78d68b); color: light-dark(#277a38, #78d68b); }
     .badge.warn { border-color: light-dark(#a45b00, #f3b35c); color: light-dark(#a45b00, #f3b35c); }
     .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
-    #d-progress { width: 100%; height: 5px; margin: -4px 0 12px; accent-color: var(--primary); }
+    .download-progress {
+      margin: 0 0 13px; padding: 11px 12px; border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+      background: color-mix(in srgb, var(--primary) 7%, var(--secondary));
+    }
+    .download-progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .download-progress-head strong { font-size: 12.5px; font-weight: 650; }
+    #d-progress-percent { color: var(--primary); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .download-track {
+      height: 9px; overflow: hidden; border-radius: 99px;
+      background: color-mix(in srgb, var(--foreground) 11%, transparent);
+    }
+    #d-progress-fill {
+      width: 0%; height: 100%; border-radius: inherit;
+      background: var(--primary); transition: width .35s ease;
+    }
+    .download-progress.indeterminate #d-progress-fill {
+      width: 34%; animation: download-slide 1.25s ease-in-out infinite;
+    }
+    .download-progress-meta { margin-top: 6px; font-size: 11.5px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+    @keyframes download-slide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(330%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #d-progress-fill { transition: none; }
+      .download-progress.indeterminate #d-progress-fill { animation-duration: 2.5s; }
+    }
     #detail pre {
       white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.65;
       padding: 14px; border-radius: 10px; border: 1px solid var(--border);
@@ -180,7 +207,15 @@
         <span class="detail-summary" id="d-cache-detail"></span>
         <button id="d-attach">加入对话</button>
       </div>
-      <progress id="d-progress" max="1" value="0" aria-label="技能下载进度" hidden></progress>
+      <div id="d-progress" class="download-progress indeterminate" role="progressbar"
+        aria-label="技能缓存进度" aria-valuemin="0" aria-valuemax="100" hidden>
+        <div class="download-progress-head">
+          <strong>正在缓存完整技能</strong>
+          <span id="d-progress-percent">准备中</span>
+        </div>
+        <div class="download-track"><div id="d-progress-fill"></div></div>
+        <div id="d-progress-meta" class="download-progress-meta">正在读取文件清单…</div>
+      </div>
       <p id="d-attach-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
       <div class="detail-tabs" role="tablist" aria-label="技能详情">
         <button id="tab-instructions" role="tab" aria-selected="true" aria-controls="instructions-pane">使用说明</button>

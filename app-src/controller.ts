@@ -86,7 +86,10 @@ const attach = $<HTMLButtonElement>("d-attach");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
 const searchMore = $<HTMLButtonElement>("search-more");
-const detailProgress = $<HTMLProgressElement>("d-progress");
+const detailProgress = $<HTMLDivElement>("d-progress");
+const progressFill = $<HTMLDivElement>("d-progress-fill");
+const progressPercent = $<HTMLElement>("d-progress-percent");
+const progressMeta = $<HTMLElement>("d-progress-meta");
 const renderedInstructions = $<HTMLDivElement>("d-md-rendered");
 const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
@@ -180,6 +183,27 @@ function stopProgressPolling() {
   progressPollTimer = undefined;
   progressPollLoading = false;
 }
+function showDownloadProgress(done?: number, total?: number) {
+  detailProgress.hidden = false;
+  if (done === undefined || total === undefined || total <= 0) {
+    detailProgress.className = "download-progress indeterminate";
+    progressFill.style.width = "";
+    progressPercent.textContent = "准备中";
+    progressMeta.textContent = "正在读取文件清单…";
+    detailProgress.setAttribute("aria-valuenow", "0");
+    detailProgress.setAttribute("aria-valuetext", "正在准备缓存");
+    return;
+  }
+  const safeTotal = Math.max(1, total);
+  const safeDone = Math.max(0, Math.min(safeTotal, done));
+  const percent = Math.min(100, Math.round((safeDone / safeTotal) * 100));
+  detailProgress.className = "download-progress";
+  progressFill.style.width = `${percent}%`;
+  progressPercent.textContent = `${percent}%`;
+  progressMeta.textContent = `${safeDone.toLocaleString("zh-CN")} / ${safeTotal.toLocaleString("zh-CN")} 个文件`;
+  detailProgress.setAttribute("aria-valuenow", String(percent));
+  detailProgress.setAttribute("aria-valuetext", `正在缓存 ${safeDone} / ${safeTotal} 个文件`);
+}
 function startProgressPolling(name: string, token: number) {
   stopProgressPolling();
   const poll = async () => {
@@ -194,11 +218,8 @@ function startProgressPolling(name: string, token: number) {
       if (disposed || revision !== token || view.view !== "detail") return;
       const progress = result.progress;
       if (!progress) return;
-      detailProgress.max = Math.max(1, progress.total);
-      detailProgress.value = Math.max(0, Math.min(progress.total, progress.done));
-      detailProgress.hidden = false;
-      $("d-cache-detail").textContent = progress.message ||
-        `正在下载 ${progress.done}/${progress.total} 个文件`;
+      showDownloadProgress(progress.done, progress.total);
+      $("d-cache-detail").textContent = "正在从源仓库下载并校验文件";
     } catch {
       // The resource request remains authoritative; a diagnostics-only poll
       // failure should not interrupt the download.
@@ -658,7 +679,8 @@ function showView(next: View) {
     renderedInstructions.textContent = "正在下载并读取完整技能…";
     setInstructionMode("rendered");
     $("d-cache-detail").textContent = "";
-    detailProgress.hidden = true;
+    if (next.skill.cached) detailProgress.hidden = true;
+    else showDownloadProgress();
     stopProgressPolling();
     attach.disabled = attaching;
     clearExplorer();
@@ -883,10 +905,8 @@ transport.on("notifications/progress", (params: {
   if (disposed || view.view !== "detail" || String(params.progressToken) !== detailProgressToken) return;
   const total = Math.max(1, Number(params.total) || 1);
   const done = Math.max(0, Math.min(total, Number(params.progress) || 0));
-  detailProgress.max = total;
-  detailProgress.value = done;
-  detailProgress.hidden = false;
-  $("d-cache-detail").textContent = params.message || `正在下载 ${done}/${total} 个文件`;
+  showDownloadProgress(done, total);
+  $("d-cache-detail").textContent = "正在从源仓库下载并校验文件";
 });
 transport.handle("ping", () => ({}));
 function dispose() {

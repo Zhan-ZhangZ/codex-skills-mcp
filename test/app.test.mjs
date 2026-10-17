@@ -560,13 +560,15 @@ test("skill materialization displays live file progress only for the current det
     progressToken: token, progress: 3, total: 10, message: "Fetching 3/10 files for alpha",
   });
   assert.equal(app.node("d-progress").hidden, false);
-  assert.equal(app.node("d-progress").value, 3);
-  assert.equal(app.node("d-progress").max, 10);
-  assert.match(app.node("d-cache-detail").textContent, /3\/10 files/);
+  assert.equal(app.node("d-progress-percent").textContent, "30%");
+  assert.equal(app.node("d-progress-meta").textContent, "3 / 10 个文件");
+  assert.equal(app.node("d-progress-fill").style.width, "30%");
+  assert.equal(app.node("d-progress").className, "download-progress");
+  assert.match(app.node("d-cache-detail").textContent, /源仓库下载并校验/);
   await app.notify("notifications/progress", {
     progressToken: "another-skill", progress: 9, total: 10, message: "wrong skill",
   });
-  assert.equal(app.node("d-progress").value, 3);
+  assert.equal(app.node("d-progress-percent").textContent, "30%");
   await app.reply(request, { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-progress").hidden, true);
   await app.dispose();
@@ -582,8 +584,8 @@ test("progress polling falls back to the app tool when host notifications are un
     updated_at: Date.now(), active: true,
   } } });
   assert.equal(app.node("d-progress").hidden, false);
-  assert.equal(app.node("d-progress").value, 4);
-  assert.equal(app.node("d-progress").max, 12);
+  assert.equal(app.node("d-progress-percent").textContent, "33%");
+  assert.equal(app.node("d-progress-meta").textContent, "4 / 12 个文件");
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-progress").hidden, true);
   await app.dispose();

@@ -10,7 +10,7 @@
 - 大文本文件支持 UTF-8 字节分段：`load_skill_file` 返回 `next_offset`，App 文件预览可继续加载，单段 1 KiB–2 MiB。
 - 修复 Office/压缩包等二进制文件被当文本展示的问题；补齐 MIME 表、未知扩展名内容探测和完整缓存路径复制。
 - 缓存徽标展示完整缓存、部分缓存、未缓存、缓存版本待验证及文件数/体积；详情读取完成后即时确认完整缓存。
-- 技能资源读取请求携带 progress token，服务端转发真实文件下载进度，App 显示进度条和 done/total。
+- 技能资源读取请求携带 progress token，服务端转发真实文件下载进度；App 使用百分比、填充条和中文 done/total 面板突出显示，准备阶段也有不确定进度动画。
 - 为不转发资源 progress 的 MCP Apps 宿主增加隐藏 `skills.progress` 轮询兜底，使用进程内计数，不扫描缓存文件。
 - 工具结构化输出增加分页 entries 和 cache status 明细，App 不再解析人读文本；新增一个 app-only 进度工具后总数为 17。
 - 补齐快速切换、旧响应失效、文件预览竞争、状态竞争、YAML 子技能搜索和 20 项 App 交互回归。
