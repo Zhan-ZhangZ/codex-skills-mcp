@@ -123,6 +123,8 @@ const detailProgress = $<HTMLDivElement>("d-progress");
 const progressFill = $<HTMLDivElement>("d-progress-fill");
 const progressPercent = $<HTMLElement>("d-progress-percent");
 const progressMeta = $<HTMLElement>("d-progress-meta");
+const suggestModal = $<HTMLDivElement>("suggest-modal");
+const suggestEmail = "sidian1025@163.com";
 const renderedInstructions = $<HTMLDivElement>("d-md-rendered");
 const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
@@ -166,6 +168,8 @@ let clearCacheTimer: ReturnType<typeof setTimeout> | undefined;
 let detailMaterializing = false;
 let lastCacheState: CacheSkill | undefined;
 let butlerName = "00_codex_skills";
+let suggestReturnFocus: HTMLElement | null = null;
+suggestModal.hidden = true;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -527,6 +531,22 @@ function updateSearchMore() {
 
 function syncPreviewHostButton() {
   previewOpenHost.hidden = !detailLocalPath || $("file-preview").hidden;
+}
+
+function openSuggestModal() {
+  suggestReturnFocus = (document.activeElement as HTMLElement | null) ?? null;
+  $("suggest-copy-status").textContent = "";
+  suggestModal.hidden = false;
+  document.body?.classList.add("modal-open");
+  setTimeout(() => $("suggest-close").focus?.(), 0);
+}
+
+function closeSuggestModal() {
+  if (suggestModal.hidden) return;
+  suggestModal.hidden = true;
+  document.body?.classList.remove("modal-open");
+  suggestReturnFocus?.focus?.();
+  suggestReturnFocus = null;
 }
 
 function cacheBadge(state?: CacheSkill) {
@@ -1217,6 +1237,28 @@ $("nav-next").onclick = () => {
   } else void loadExplorer(false);
 };
 $("preview-close").onclick = closePreview;
+$("suggest-skill").onclick = openSuggestModal;
+$("suggest-close").onclick = closeSuggestModal;
+suggestModal.addEventListener("click", (event) => {
+  if (event.target === suggestModal) closeSuggestModal();
+});
+suggestModal.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeSuggestModal();
+  }
+});
+$("suggest-copy").onclick = () => {
+  const clipboard = globalThis.navigator?.clipboard;
+  if (!clipboard) {
+    $("suggest-copy-status").textContent = "当前环境无法自动复制，请手动选择邮箱。";
+    return;
+  }
+  void clipboard.writeText(suggestEmail).then(
+    () => { $("suggest-copy-status").textContent = "邮箱已复制"; },
+    () => { $("suggest-copy-status").textContent = "复制失败，请手动选择邮箱。"; },
+  );
+};
 previewOpenHost.onclick = async () => {
   if (!previewCopyPath) return;
   previewOpenHost.disabled = true;

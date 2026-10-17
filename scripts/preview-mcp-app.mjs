@@ -198,6 +198,10 @@ const timer = setInterval(() => {
       if (officeRow && doc.querySelector("#file-preview")?.hidden !== false) officeRow.click();
       if (doc.querySelector("#preview-open-host")?.hidden === false) clearInterval(timer);
     }
+    if (state === "suggest_modal") {
+      if (doc.querySelector("#suggest-modal")?.hidden !== false) doc.querySelector("#suggest-skill")?.click();
+      if (doc.querySelector("#suggest-modal")?.hidden === false) clearInterval(timer);
+    }
     if (state === "files" || state === "file_preview" || state === "large_preview") {
       if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
       if (doc.querySelector("#nav-list")?.children.length) {
@@ -222,7 +226,7 @@ frame.addEventListener("load", () => {
     try {
       const first = frame.contentDocument?.querySelector("#cards .card");
       if (first) {
-        if (state !== "home") first.click();
+        if (state !== "home" && state !== "suggest_modal") first.click();
         clearInterval(wait);
       }
     } catch {}
@@ -305,6 +309,8 @@ try {
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-image")?.getAttribute("src")?.startsWith("data:image/png;base64,")`
     : values.state === "office_preview"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-open-host")?.hidden === false && document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Excel")`
+    : values.state === "suggest_modal"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#suggest-modal")?.hidden === false`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"

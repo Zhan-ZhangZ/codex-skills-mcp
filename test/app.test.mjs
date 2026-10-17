@@ -35,6 +35,7 @@ class Element {
 function harness() {
   const elements = new Map([...template.matchAll(/id="([^"]+)"/g)].map((match) => [match[1], new Element()]));
   const sent = [];
+  const copied = [];
   const listeners = new Map();
   const timers = new Map();
   let sequence = 0;
@@ -47,8 +48,13 @@ function harness() {
     scrollTo() {},
   };
   const document = { getElementById: (id) => elements.get(id), createElement: () => new Element(), documentElement: new Element() };
+  const navigator = {
+    clipboard: {
+      async writeText(text) { copied.push(text); },
+    },
+  };
   vm.runInNewContext(source, {
-    window, document, console,
+    window, document, navigator, console,
     setTimeout: (fn, delay) => { const id = ++sequence; timers.set(id, { fn, delay }); return id; },
     clearTimeout: (id) => timers.delete(id),
     setInterval: (fn, delay) => { const id = ++sequence; timers.set(id, { fn, delay, repeat: true }); return id; },
@@ -67,7 +73,7 @@ function harness() {
     message.method === "tools/call" && message.params?.name === name);
   const node = (id) => elements.get(id);
   return {
-    node, sent, reply, latest, latestTool, toolRequests, flush, document,
+    node, sent, copied, reply, latest, latestTool, toolRequests, flush, document,
     async ready(homeData = home) {
       assert.equal(sent.length, 1, "no tool call before initialization");
       assert.equal(sent[0].method, "ui/initialize");
@@ -104,6 +110,22 @@ test("app initializes before fetching and applies the host theme", async () => {
   assert.equal(app.node("stat-total").textContent, "2");
   assert.match(app.node("hero-kicker").textContent, /2 个顶层技能/);
   assert.equal(app.node("content").attributes["aria-busy"], "false");
+  await app.dispose();
+});
+
+test("footer skill guidance opens a modal and copies the developer email", async () => {
+  const app = harness(); await app.ready();
+  assert.equal(app.node("suggest-modal").hidden, true);
+  app.node("suggest-skill").onclick();
+  assert.equal(app.node("suggest-modal").hidden, false);
+  assert.match(template, /请将您需要增加补充的技能（有名字最好）功能描述完整发送到开发者邮箱。/);
+  assert.match(template, />sidian1025@163\.com</);
+  app.node("suggest-copy").onclick();
+  await app.flush();
+  assert.deepEqual(app.copied, ["sidian1025@163.com"]);
+  assert.equal(app.node("suggest-copy-status").textContent, "邮箱已复制");
+  app.node("suggest-close").onclick();
+  assert.equal(app.node("suggest-modal").hidden, true);
   await app.dispose();
 });
 

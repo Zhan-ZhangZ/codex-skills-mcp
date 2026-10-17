@@ -376,6 +376,52 @@
     .footer-brandline { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; color: #dceaff; }
     .footer-brandline strong { font-size: 12px; letter-spacing: .04em; }
     .footer-brandline span { color: #8ba4c6; font-size: 8.5px; letter-spacing: .14em; }
+    .suggest-link {
+      margin-top: 9px; padding: 5px 9px; border-color: rgba(125, 211, 252, .22);
+      border-radius: 8px; background: rgba(73, 135, 194, .08); color: #a9d8f5;
+      font-size: 10.5px;
+    }
+    .suggest-link:hover:not(:disabled) { border-color: rgba(125, 211, 252, .46); background: rgba(73, 135, 194, .15); }
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+      padding: 20px; background: rgba(1, 6, 15, .72); backdrop-filter: blur(9px);
+      animation: modal-fade .18s ease both;
+    }
+    .suggest-card {
+      position: relative; width: min(100%, 520px); padding: 26px;
+      border: 1px solid rgba(151, 200, 255, .28); border-radius: 20px;
+      background:
+        radial-gradient(circle at 85% 0%, rgba(125, 211, 252, .12), transparent 34%),
+        linear-gradient(145deg, rgba(20, 38, 65, .98), rgba(6, 16, 31, .98));
+      box-shadow: 0 30px 100px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255,255,255,.06);
+      animation: modal-rise .22s ease both;
+    }
+    .suggest-card h2 { margin: 0 38px 12px 0; font-size: 20px; line-height: 1.25; letter-spacing: -.02em; }
+    .suggest-card p { color: #b9cbe3; font-size: 13px; line-height: 1.75; }
+    .modal-close {
+      position: absolute; top: 14px; right: 14px; width: 31px; height: 31px;
+      display: grid; place-items: center; padding: 0; border-radius: 9px;
+      color: var(--app-muted); font-size: 18px; line-height: 1;
+    }
+    .suggest-email-row {
+      display: flex; align-items: center; gap: 9px; margin-top: 18px; padding: 10px;
+      border: 1px solid rgba(151, 200, 255, .18); border-radius: 12px;
+      background: rgba(4, 13, 26, .58);
+    }
+    #suggest-email {
+      flex: 1; min-width: 0; overflow-wrap: anywhere; color: #dcecff;
+      font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #suggest-copy {
+      flex: 0 0 auto; border-color: rgba(125, 211, 252, .32);
+      background: rgba(60, 140, 184, .14); color: #c9efff; font-size: 11px;
+    }
+    #suggest-copy-status {
+      min-height: 18px; margin-top: 9px; color: #96e1c2; font-size: 10.5px;
+    }
+    body.modal-open { overflow: hidden; }
+    @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes modal-rise { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
     .footer-note p + p { margin-top: 3px; }
     .footer-links { display: flex; justify-content: flex-end; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
     .footer-links a { color: #a9c3e7; text-decoration: none; border-bottom: 1px solid rgba(145, 188, 246, .2); }
@@ -413,6 +459,9 @@
       .pager span { flex: 1; }
       .site-footer { grid-template-columns: 1fr; gap: 10px; }
       .footer-links { justify-content: flex-start; }
+      .suggest-card { padding: 23px 18px; }
+      .suggest-email-row { align-items: stretch; flex-direction: column; }
+      #suggest-copy { align-self: flex-start; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
@@ -558,6 +607,7 @@
       <div>
         <div class="footer-brandline"><strong>合塑研工</strong><span>HESUYANGONG</span></div>
         <div>Codex Skills 由合塑研工设计整理出品。</div>
+        <button id="suggest-skill" class="suggest-link" aria-haspopup="dialog" aria-controls="suggest-modal">＋ 补充技能告知</button>
       </div>
       <div class="footer-note">
         <p>Skill 与技能内容来源于公开开源技能市场、原作者仓库及本地自研整理。技能版权归各原作者所有，使用前请核对对应项目的许可证与使用条件。</p>
@@ -567,6 +617,18 @@
           <a href="https://github.com/Zhan-ZhangZ/codexprojec" target="_blank" rel="noreferrer">技能源仓库</a>
         </div>
       </div>
+    </div>
+    <div id="suggest-modal" class="modal-backdrop" hidden>
+      <section class="suggest-card" role="dialog" aria-modal="true" aria-labelledby="suggest-title" aria-describedby="suggest-description">
+        <button id="suggest-close" class="modal-close" aria-label="关闭补充技能说明">×</button>
+        <h2 id="suggest-title">补充技能告知</h2>
+        <p id="suggest-description">请将您需要增加补充的技能（有名字最好）功能描述完整发送到开发者邮箱。</p>
+        <div class="suggest-email-row">
+          <code id="suggest-email">sidian1025@163.com</code>
+          <button id="suggest-copy">复制邮箱</button>
+        </div>
+        <p id="suggest-copy-status" role="status" aria-live="polite"></p>
+      </section>
     </div>
     </div>
     <!-- APP_SCRIPT -->

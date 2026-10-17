@@ -10,6 +10,7 @@
 - 新增 app-only `skills.clearCache` 与 `skills.previewImage`，工具总数为 19；远程缓存删除后下一次读取重新物化，本地源目录不暴露删除入口。
 - 使用说明中的 Markdown 相对链接改为 App 内解析：包内文件直接预览，全库根 `SKILL.md` 路由到管家技能并显示“全局入口”，外部链接新窗口打开，避免 iframe 跳到错误页。
 - 文件页支持 PNG、JPEG、GIF、WebP、BMP、ICO、AVIF 内联图片预览，单张上限 8 MiB；DOCX、XLSX、PPTX、PDF、旧版 Office、压缩包、音视频等通过 `openai/files/open` 一键交给 Codex 宿主打开，不在 MCP 内引入通用解析器。宿主不可用或打开失败时保留 MIME、大小和完整路径复制。
+- 页脚新增“补充技能告知”弹窗，说明需提交技能名称与完整功能描述，并支持一键复制开发者邮箱 `sidian1025@163.com`。
 - 页面改为纵向弹性布局：短内容页面把状态栏、出品方与来源页脚锚定在视口底部，长内容页面保持在正文末尾，避免页脚随内容高度停在页面中段。
 - 新增首页与品牌视觉验收、260+ 全量回归、Node 22/24 CI、npm/插件双产物与真实远端清单下载验证，详见 [BETA-8-REVIEW.md](BETA-8-REVIEW.md)。
 
