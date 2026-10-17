@@ -50,6 +50,7 @@ function navigationArguments(args) {
     { name: "SKILL.md", path: "SKILL.md", type: "file", size_bytes: 6400, text: "", excerpted: false },
     { name: "README.md", path: "README.md", type: "file", size_bytes: 3200, text: "", excerpted: false },
     { name: "requirements.txt", path: "requirements.txt", type: "file", size_bytes: 96, text: "", excerpted: false },
+    { name: "dataset.jsonl", path: "dataset.jsonl", type: "file", size_bytes: 58720256, text: "", excerpted: false },
   ];
   return {
     skill_name: "awesome-journal-skills", view: "files", path: args.path ?? "", query: args.query ?? "",
@@ -86,6 +87,17 @@ addEventListener("message", (event) => {
       skills: [{ name: "awesome-journal-skills", found: true, cached: true, complete: true, catalog_current: true,
         files_total: 2281, files_missing_count: 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
+    if (name === "load_skill_file") {
+      const large = String(args.file_path || "").endsWith("dataset.jsonl");
+      const content = large
+        ? "{\\"id\\":1,\\"topic\\":\\"research design\\"}\\n{\\"id\\":2,\\"topic\\":\\"journal selection\\"}\\n…"
+        : "# Getting started\\n\\n这是文件预览内容。";
+      return reply(message.id, { structuredContent: {
+        content, size_bytes: large ? 58720256 : 31, offset: args.offset || 0,
+        bytes_returned: new TextEncoder().encode(content).length, ...(large ? { next_offset: 131072 } : {}),
+        has_more: large, binary: false,
+      } });
+    }
   }
   if (message.method === "resources/read") {
     const file = !message.params.uri.endsWith("awesome-journal-skills");
@@ -100,14 +112,17 @@ const timer = setInterval(() => {
     if (state === "detail" && doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) {
       clearInterval(timer);
     }
-    if (state === "files" || state === "file_preview") {
+    if (state === "files" || state === "file_preview" || state === "large_preview") {
       if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
       if (doc.querySelector("#nav-list")?.children.length) {
         if (state === "files") clearInterval(timer);
-        else if (!doc.querySelector("#preview-content")?.textContent?.includes("Getting started")) {
+        else if (state === "large_preview") {
+          if (!doc.querySelector("#preview-content")?.textContent?.includes("research design")) doc.querySelector("#nav-list")?.children[6]?.click();
+          if (!doc.querySelector("#preview-more")?.hidden) clearInterval(timer);
+        } else if (!doc.querySelector("#preview-content")?.textContent?.includes("Getting started")) {
           doc.querySelector("#nav-list")?.children[3]?.click();
         }
-        if (doc.querySelector("#preview-content")?.textContent?.includes("Getting started")) clearInterval(timer);
+        if (state === "file_preview" && doc.querySelector("#preview-content")?.textContent?.includes("Getting started")) clearInterval(timer);
       }
     }
     if (state === "sub_skills") {
@@ -193,6 +208,8 @@ try {
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#d-md")?.textContent?.includes("Awesome Journal")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
+    : values.state === "large_preview"
+      ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-more")?.hidden === false`
     : `document.querySelector("#app")?.contentDocument?.querySelector("#nav-list")?.children.length > 0`;
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {

@@ -106,6 +106,43 @@ test("full read_skill still returns instructions, nested skills and dependency s
   assert.ok(result.structure.files.some((file) => file.name === "requirements.txt" && file.size_bytes === 7));
 });
 
+test("large text files stream by UTF-8 byte ranges without splitting characters", async (t) => {
+  const config = setup(t);
+  const content = "# 大文件\n\n" + "研究设计😀data\n".repeat(30_000);
+  writeSkill(config, { "SKILL.md": "# root", "large.md": content, "emoji.md": "A😀BC" });
+  const loader = new SkillLoader(config, [entry]);
+  let offset = 0;
+  const chunks = [];
+  for (let page = 0; page < 1000; page++) {
+    const result = await loader.loadSkillFile(entry, "large.md", { offset, maxBytes: 1024 });
+    chunks.push(result.content);
+    assert.equal(result.binary, false);
+    assert.equal(result.bytes_returned, Buffer.byteLength(result.content));
+    assert.ok(result.offset <= offset);
+    assert.doesNotMatch(result.content, /^\uFFFD/);
+    if (!result.has_more) {
+      assert.equal(result.next_offset, undefined);
+      break;
+    }
+    assert.ok(result.next_offset > offset);
+    offset = result.next_offset;
+  }
+  assert.equal(chunks.join(""), content);
+
+  const small = await loader.loadSkillFile(entry, "SKILL.md");
+  assert.equal(small.content, "# root");
+  assert.equal(small.has_more, false);
+  const defaultChunk = await loader.loadSkillFile(entry, "large.md");
+  assert.equal(defaultChunk.has_more, true);
+  assert.ok(defaultChunk.bytes_returned >= 500 * 1024 - 3);
+  assert.ok(defaultChunk.bytes_returned <= 500 * 1024);
+  const snapped = await loader.loadSkillFile(entry, "emoji.md", { offset: 2, maxBytes: 1024 });
+  assert.equal(snapped.offset, 1);
+  assert.equal(snapped.content, "😀BC");
+  await assert.rejects(loader.loadSkillFile(entry, "SKILL.md", { offset: 100 }), /offset must be/);
+  await assert.rejects(loader.loadSkillFile(entry, "SKILL.md", { maxBytes: 10 }), /max_bytes must be/);
+});
+
 test("instructions reject a missing root file and escaping paths", async (t) => {
   const config = setup(t);
   const loader = new SkillLoader(config, [entry]);

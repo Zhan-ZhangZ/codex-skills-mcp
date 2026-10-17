@@ -272,11 +272,11 @@ output: { instructions, dependencies, navigation: { files, sub_skills } }
 按需读取技能内的任意文件。
 
 ```
-input:  { skill_name: "KrillinAI", file_path: "README.md" }
-output: { content, size_bytes }
+input:  { skill_name: "KrillinAI", file_path: "README.md", offset?: 0, max_bytes?: 524288 }
+output: { content, size_bytes, offset, bytes_returned, next_offset?, has_more, binary }
 ```
 
-> 单文件上限 500KB；二进制文件返回占位说明而非内容；路径穿越会自动拦截。
+> 小文件一次返回完整内容；大文本按 UTF-8 字节边界分段，每次默认 500 KiB，最大 2 MiB。继续读取时传入返回的 `next_offset`。二进制文件返回占位说明；路径穿越会自动拦截。
 
 ### 🗂️ list_skill_files
 
@@ -382,7 +382,7 @@ Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严
 | 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
 | 想更新技能内容 | 使用 `--manifest-ttl 60`，到期后重新读取技能会按远端文件树重验证；失败时保留原缓存 |
 | 仓库新增了技能但搜不到 | 普通搜索先返回现有索引，后台检查更新；立即获取可用 `search_skills(query, force_refresh=true)` 或设置面板的刷新动作 |
-| `load_skill_file` 读大文件失败 | 单文件上限 500KB，属保护设计 |
+| `load_skill_file` 读到文件的一部分 | 大文本按字节分段；使用返回的 `next_offset` 继续读取 |
 | GitHub API 限流 | 每个技能仅 2 次 API 调用，已缓存技能不再请求；未登录配额 60 次/小时 |
 | 工具列表里看不到 MCP | 客户端未重启，重启会话即可 |
 

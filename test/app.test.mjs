@@ -282,6 +282,16 @@ const navResult = (view, entries, extra = {}) => ({
   entries,
 });
 
+const fileResult = (content, extra = {}) => ({
+  content,
+  size_bytes: extra.size_bytes ?? Buffer.byteLength(content),
+  offset: extra.offset ?? 0,
+  bytes_returned: Buffer.byteLength(content),
+  ...(extra.next_offset === undefined ? {} : { next_offset: extra.next_offset }),
+  has_more: extra.next_offset !== undefined,
+  binary: false,
+});
+
 test("detail exposes cache status, browsable files and file preview", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
@@ -322,11 +332,13 @@ test("detail exposes cache status, browsable files and file preview", async () =
     navEntry("docs/guide.md"),
   ], { path: "docs" }) });
   app.node("nav-list").children[0].onclick(); await app.flush();
-  const fileRead = app.latest("resources/read");
-  assert.match(fileRead.params.uri, /skill:\/\/alpha\/docs\/guide\.md/);
+  const fileRead = app.latestTool("load_skill_file");
+  assert.equal(fileRead.params.arguments.file_path, "docs/guide.md");
+  assert.equal(fileRead.params.arguments.offset, 0);
   assert.equal(app.node("preview-path").textContent, "docs/guide.md");
-  await app.reply(fileRead, { contents: [{ text: "# Guide" }] });
+  await app.reply(fileRead, { structuredContent: fileResult("# Guide") });
   assert.equal(app.node("preview-content").textContent, "# Guide");
+  assert.equal(app.node("preview-more").hidden, true);
   await app.dispose();
 });
 
@@ -426,12 +438,34 @@ test("a slower file preview cannot replace the file selected afterwards", async 
     navEntry("second.md"),
   ]) });
   app.node("nav-list").children[0].onclick(); await app.flush();
-  const first = app.latest("resources/read");
+  const first = app.latestTool("load_skill_file");
   app.node("nav-list").children[1].onclick(); await app.flush();
-  const second = app.latest("resources/read");
-  await app.reply(second, { contents: [{ text: "# Second" }] });
-  await app.reply(first, { contents: [{ text: "# First" }] });
+  const second = app.latestTool("load_skill_file");
+  await app.reply(second, { structuredContent: fileResult("# Second") });
+  await app.reply(first, { structuredContent: fileResult("# First") });
   assert.equal(app.node("preview-path").textContent, "second.md");
   assert.equal(app.node("preview-content").textContent, "# Second");
+  await app.dispose();
+});
+
+test("large file previews continue by byte offset without losing earlier content", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  app.node("tab-files").onclick(); await app.flush();
+  await app.reply(app.latestTool("list_skill_files"), { structuredContent: navResult("files", [
+    navEntry("huge.md"),
+  ]) });
+  app.node("nav-list").children[0].onclick(); await app.flush();
+  const first = app.latestTool("load_skill_file");
+  assert.equal(first.params.arguments.max_bytes, 128 * 1024);
+  await app.reply(first, { structuredContent: fileResult("第一段😀", { next_offset: 12, size_bytes: 24 }) });
+  assert.equal(app.node("preview-more").hidden, false);
+  app.node("preview-more").onclick(); await app.flush();
+  const second = app.latestTool("load_skill_file");
+  assert.equal(second.params.arguments.offset, 12);
+  await app.reply(second, { structuredContent: fileResult("第二段", { offset: 12, size_bytes: 24 }) });
+  assert.equal(app.node("preview-content").textContent, "第一段😀第二段");
+  assert.equal(app.node("preview-more").hidden, true);
   await app.dispose();
 });

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { createHash } from "node:crypto";
@@ -65,6 +65,23 @@ export interface ReadInstructionsResult {
   cache: SkillCacheState;
 }
 
+export interface SkillFileReadOptions {
+  /** Zero-based UTF-8 byte offset. A split code point is snapped backward. */
+  offset?: number;
+  /** Positive chunk size bounded by the loader before reading. */
+  maxBytes?: number;
+}
+
+export interface SkillFileReadResult {
+  content: string;
+  size_bytes: number;
+  offset: number;
+  bytes_returned: number;
+  next_offset?: number;
+  has_more: boolean;
+  binary: boolean;
+}
+
 interface CatalogFile {
   path: string;
   size: number;
@@ -81,8 +98,11 @@ const SKIP_NAMES = new Set([
   "dist", "build", ".next", ".cache",
 ]);
 
-// Max file size to return via load_skill_file (500KB)
-const MAX_FILE_SIZE = 500 * 1024;
+// Default bytes returned by one load_skill_file call. Larger text files use
+// explicit byte offsets so callers never need to reload the whole file.
+const DEFAULT_FILE_CHUNK_BYTES = 500 * 1024;
+const MIN_FILE_CHUNK_BYTES = 1024;
+const MAX_FILE_CHUNK_BYTES = 2 * 1024 * 1024;
 const SUMMARY_CACHE_ENTRIES = 8192;
 const SUMMARY_CACHE_BYTES = 4 * 1024 * 1024;
 
@@ -105,6 +125,54 @@ class FileReadPool {
 function contained(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+}
+
+function readUtf8FileChunk(path: string, size: number, requestedOffset: number, maxBytes: number): SkillFileReadResult {
+  if (!Number.isSafeInteger(requestedOffset) || requestedOffset < 0 || requestedOffset > size) {
+    throw new Error(`File offset must be an integer from 0 to ${size}`);
+  }
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < MIN_FILE_CHUNK_BYTES || maxBytes > MAX_FILE_CHUNK_BYTES) {
+    throw new Error(`max_bytes must be an integer from ${MIN_FILE_CHUNK_BYTES} to ${MAX_FILE_CHUNK_BYTES}`);
+  }
+  // Read a few surrounding bytes so a caller that lands inside a UTF-8
+  // sequence can be snapped backward without reading the whole file.
+  const prefix = Math.min(3, requestedOffset);
+  const readStart = requestedOffset - prefix;
+  const desiredEnd = Math.min(size, requestedOffset + maxBytes);
+  const readLength = Math.min(size - readStart, desiredEnd - readStart + 3);
+  const buffer = Buffer.allocUnsafe(readLength);
+  const fd = openSync(path, "r");
+  try {
+    let read = 0;
+    while (read < readLength) {
+      const count = readSync(fd, buffer, read, readLength - read, readStart + read);
+      if (count === 0) break;
+      read += count;
+    }
+    if (read !== readLength) throw new Error(`Short read for ${path}`);
+  } finally {
+    closeSync(fd);
+  }
+
+  let start = prefix;
+  while (start > 0 && (buffer[start] & 0xc0) === 0x80) start--;
+  let end = desiredEnd - readStart;
+  // If the exclusive end lands inside a multi-byte sequence, exclude that
+  // complete character. The next offset points to its first byte, so repeated
+  // calls neither split UTF-8 nor drop content.
+  while (end < buffer.length && (buffer[end] & 0xc0) === 0x80) end--;
+  const content = buffer.subarray(start, end).toString("utf8");
+  const offset = readStart + start;
+  const next = readStart + end;
+  return {
+    content,
+    size_bytes: size,
+    offset,
+    bytes_returned: end - start,
+    ...(next < size ? { next_offset: next } : {}),
+    has_more: next < size,
+    binary: false,
+  };
 }
 
 function metadataSummary(content: string): Record<string, unknown> | null {
@@ -636,8 +704,9 @@ export class SkillLoader {
    */
   async loadSkillFile(
     entry: ManifestEntry,
-    filePath: string
-  ): Promise<{ content: string; size_bytes: number }> {
+    filePath: string,
+    options: SkillFileReadOptions = {},
+  ): Promise<SkillFileReadResult> {
     if (this.config.isRemote) {
       await this.ensureRemoteFetched(entry);
     }
@@ -654,12 +723,6 @@ export class SkillLoader {
       throw new Error(`Path is not a regular file: ${filePath}`);
     }
 
-    if (stat.size > MAX_FILE_SIZE) {
-      throw new Error(
-        `File too large (${Math.round(stat.size / 1024)}KB). Max: ${MAX_FILE_SIZE / 1024}KB`
-      );
-    }
-
     // Check if binary
     const ext = extname(fullPath).toLowerCase();
     const binaryExts = new Set([
@@ -674,11 +737,19 @@ export class SkillLoader {
       return {
         content: `[Binary file: ${filePath} (${stat.size} bytes)]`,
         size_bytes: stat.size,
+        offset: 0,
+        bytes_returned: 0,
+        has_more: false,
+        binary: true,
       };
     }
 
-    const content = readFileSync(fullPath, "utf-8");
-    return { content, size_bytes: stat.size };
+    return readUtf8FileChunk(
+      fullPath,
+      stat.size,
+      options.offset ?? 0,
+      options.maxBytes ?? DEFAULT_FILE_CHUNK_BYTES,
+    );
   }
 
   /**

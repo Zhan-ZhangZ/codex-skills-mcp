@@ -20,6 +20,7 @@ test('built stdio server completes the entire local skill workflow', async t => 
   mkdirSync(join(directory, 'engineering', 'sample'), { recursive: true });
   writeFileSync(join(directory, 'engineering', 'sample', 'SKILL.md'), '# Sample instructions\nRun the supplied validation.');
   writeFileSync(join(directory, 'engineering', 'sample', 'README.md'), 'Supporting text');
+  writeFileSync(join(directory, 'engineering', 'sample', 'large.md'), '研究数据😀\n'.repeat(50_000));
   writeFileSync(join(directory, 'skills_manifest.json'), JSON.stringify([{ name: 'sample', description: 'TypeScript code testing 测试', category: 'engineering', folder: 'sample', relative_path: './engineering/sample' }]));
   const transport = new StdioClientTransport({ command: process.execPath,
     args: [entrypoint, '--skills-dir', directory], stderr: 'pipe',
@@ -43,6 +44,11 @@ test('built stdio server completes the entire local skill workflow', async t => 
   assert.match(text(read), /Sample instructions/);
   assert.match(text(read), /local_path/);
   assert.match(text(await call('load_skill_file', { skill_name: 'sample', file_path: 'README.md' })), /Supporting text/);
+  const large = await call('load_skill_file', { skill_name: 'sample', file_path: 'large.md', max_bytes: 1024 });
+  assert.equal(large.structuredContent.has_more, true);
+  assert.equal(large.structuredContent.offset, 0);
+  assert.ok(large.structuredContent.next_offset > 0);
+  assert.match(text(large), /More content: load_skill_file/);
   assert.match(text(await call('list_skill_files', { skill_name: 'sample' })), /SKILL.md/);
   assert.match(text(await call('skill_status', { names: 'sample' })), /1\/1 complete/);
   assert.match(text(await call('diagnostics', { include_log: false })), /local/);

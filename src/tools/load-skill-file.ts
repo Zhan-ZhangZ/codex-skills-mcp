@@ -12,14 +12,17 @@ export function registerLoadSkillFile(
 ): void {
   server.tool(
     "load_skill_file",
-    "STEP 4 support. Read a specific file from an ALREADY materialized skill's directory (call read_skill first). Use it for scripts, configs, README or other resources referenced by the skill instructions. Reading files through this tool NEVER replaces executing the skill per its SKILL.md from its local_path.",
+    "STEP 4 support. Read a specific file from an ALREADY materialized skill's directory (call read_skill first). Use it for scripts, configs, README or other resources referenced by the skill instructions. Small text files return complete content; large text files return a UTF-8 byte range with next_offset for continuation. Reading files through this tool NEVER replaces executing the skill per its SKILL.md from its local_path.",
     {
       skill_name: z.string().describe("Skill name, e.g. 'MediaCrawler'"),
       file_path: z.string().describe("Relative path within the skill directory, e.g. 'README.md' or 'scripts/run.py'"),
+      offset: z.number().int().min(0).optional().default(0).describe("Zero-based UTF-8 byte offset for large text files (default: 0)"),
+      max_bytes: z.number().int().min(1024).max(2 * 1024 * 1024).optional().default(500 * 1024)
+        .describe("Maximum bytes to return in this call (1 KiB–2 MiB, default: 500 KiB)"),
     },
     { readOnlyHint: true },
-    async ({ skill_name, file_path }) =>
-      withToolLogging("load_skill_file", { skill: skill_name, file: file_path }, async () => {
+    async ({ skill_name, file_path, offset, max_bytes }) =>
+      withToolLogging("load_skill_file", { skill: skill_name, file: file_path, offset, max_bytes }, async () => {
         const entry = searchEngine.findByName(skill_name);
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "load_skill_file", skill: skill_name, error: "skill not found" });
@@ -41,17 +44,26 @@ export function registerLoadSkillFile(
           const { softDeadlineMs, hardDeadlineMs } = loader.downloadDeadlines;
           const deadlineMs = Math.min(softDeadlineMs || Infinity, hardDeadlineMs || Infinity);
 
-          const { content, size_bytes } = await raceDownloadDeadline(
-            loader.loadSkillFile(entry, file_path),
+          const result = await raceDownloadDeadline(
+            loader.loadSkillFile(entry, file_path, { offset, maxBytes: max_bytes }),
             deadlineMs === Infinity ? 0 : deadlineMs,
             "soft"
           );
+          const end = result.offset + result.bytes_returned;
+          const range = result.binary ? "binary metadata"
+            : `bytes ${result.offset}–${Math.max(result.offset, end - 1)} of ${result.size_bytes}`;
+          const continuation = result.has_more && result.next_offset !== undefined
+            ? `\n\n▶ More content: load_skill_file(${JSON.stringify({
+                skill_name, file_path, offset: result.next_offset, max_bytes,
+              })})`
+            : "";
 
           return {
+            structuredContent: { ...result } as Record<string, unknown>,
             content: [
               {
                 type: "text" as const,
-                text: `## ${skill_name} / ${file_path} (${size_bytes} bytes)\n\n${content}`,
+                text: `## ${skill_name} / ${file_path} (${result.size_bytes} bytes; ${range})\n\n${result.content}${continuation}`,
               },
             ],
           };

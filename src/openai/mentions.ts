@@ -227,9 +227,10 @@ export function registerOpenAIMentions(
         }
         // loadSkillFile handles remote fetch, path-traversal security and
         // missing-file errors with clear messages.
-        const { content, size_bytes } = await readWithDeadline(
+        const result = await readWithDeadline(
           () => loader.loadSkillFile(entry, path), config, extra.signal
         );
+        const { content, size_bytes } = result;
         const mime = path.endsWith(".md")
           ? "text/markdown"
           : path.endsWith(".json")
@@ -240,7 +241,14 @@ export function registerOpenAIMentions(
             {
               uri: uri.href,
               mimeType: mime,
-              text: `## ${name} / ${path} (${size_bytes} bytes)\n\n${content}`,
+              text:
+                `## ${name} / ${path} (${size_bytes} bytes; ` +
+                `${result.binary ? "binary metadata" : `bytes ${result.offset}–${Math.max(result.offset, result.offset + result.bytes_returned - 1)}`})\n\n` +
+                content +
+                (result.has_more && result.next_offset !== undefined
+                  ? `\n\n> This resource returned the first ${result.bytes_returned} bytes. ` +
+                    `Use load_skill_file with offset=${result.next_offset} to continue.`
+                  : ""),
             },
           ],
         };

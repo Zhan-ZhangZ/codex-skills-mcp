@@ -49,6 +49,15 @@ type CacheSkill = {
   completed_at?: string | null;
 };
 type CacheResult = { requested: number; complete_count: number; truncated: boolean; skills: CacheSkill[] };
+type FileReadResult = {
+  content: string;
+  size_bytes: number;
+  offset: number;
+  bytes_returned: number;
+  next_offset?: number;
+  has_more: boolean;
+  binary: boolean;
+};
 type ExplorerState = {
   path: string;
   query: string;
@@ -66,9 +75,12 @@ const transport = createAppTransport();
 const search = $<HTMLInputElement>("search");
 const attach = $<HTMLButtonElement>("d-attach");
 const navSearch = $<HTMLInputElement>("nav-search");
+const previewMore = $<HTMLButtonElement>("preview-more");
 const PROTOCOL_VERSION = "2026-01-26";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
+const FILE_PREVIEW_BYTES = 128 * 1024;
+const FILE_PREVIEW_CHARS = 1_000_000;
 let view: View = { view: "home" };
 let revision = 0;
 let disposed = false;
@@ -86,6 +98,8 @@ let explorerRequestRevision = 0;
 let cacheStatusRevision = 0;
 let previewRevision = 0;
 let previewPath = "";
+let previewText = "";
+let previewNextOffset: number | undefined;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -146,8 +160,6 @@ const formatBytes = (bytes = 0) => {
   return `${bytes} B`;
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
-const skillFileUri = (name: string, path: string) =>
-  `${skillUri(name)}/${path.split("/").map(encodeURIComponent).join("/")}`;
 
 async function call<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const result = await transport.request<ToolResult<T>>("tools/call", { name, arguments: args }, 60_000);
@@ -467,29 +479,56 @@ function scheduleExplorerSearch(immediate = false) {
 
 async function openFile(path: string) {
   if (view.view !== "detail" || !path) return;
-  const selected = view;
-  const token = ++previewRevision;
   previewPath = path;
+  previewText = "";
+  previewNextOffset = undefined;
   $("preview-path").textContent = path;
   $("preview-content").textContent = "正在读取文件…";
+  previewMore.hidden = true;
   $("file-preview").hidden = false;
   $("file-preview").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  await loadFileChunk(path, 0, false);
+}
+
+async function loadFileChunk(path: string, offset: number, append: boolean) {
+  if (view.view !== "detail" || !path) return;
+  const selected = view;
+  const token = ++previewRevision;
+  previewMore.disabled = true;
+  if (append) previewMore.hidden = true;
   try {
-    const text = await readResourceText(skillFileUri(selected.skill.name, path), DETAIL_PREVIEW_LIMIT);
+    const result = await call<FileReadResult>("load_skill_file", {
+      skill_name: selected.skill.name,
+      file_path: path,
+      offset,
+      max_bytes: FILE_PREVIEW_BYTES,
+    });
     if (disposed || view !== selected || previewRevision !== token) return;
-    $("preview-content").textContent = text;
+    const combined = (append ? previewText : "") + result.content;
+    const limited = combined.length > FILE_PREVIEW_CHARS;
+    previewText = limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
+    previewNextOffset = limited ? undefined : result.next_offset;
+    $("preview-content").textContent = previewText;
+    previewMore.hidden = !previewNextOffset;
   } catch (error) {
     if (disposed || view !== selected || previewRevision !== token) return;
-    $("preview-content").textContent = `读取失败：${errorMessage(error)}`;
+    if (append) $("preview-content").textContent = previewText + `\n\n读取下一段失败：${errorMessage(error)}`;
+    else $("preview-content").textContent = `读取失败：${errorMessage(error)}`;
+    previewMore.hidden = previewNextOffset === undefined;
+  } finally {
+    if (!disposed && view === selected && previewRevision === token) previewMore.disabled = false;
   }
 }
 
 function closePreview() {
   previewRevision++;
   previewPath = "";
+  previewText = "";
+  previewNextOffset = undefined;
   $("file-preview").hidden = true;
   $("preview-content").textContent = "";
   $("preview-path").textContent = "";
+  previewMore.hidden = true;
 }
 
 function showView(next: View) {
@@ -626,6 +665,9 @@ $("nav-next").onclick = () => {
   } else void loadExplorer(false);
 };
 $("preview-close").onclick = closePreview;
+previewMore.onclick = () => {
+  if (previewPath && previewNextOffset !== undefined) void loadFileChunk(previewPath, previewNextOffset, true);
+};
 $("preview-copy").onclick = () => {
   if (!previewPath) return;
   const clipboard = globalThis.navigator?.clipboard;
