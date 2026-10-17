@@ -25,6 +25,7 @@ async function clientFor(t, cache) {
   return {
     read: async () => (await client.callTool({ name: "read_skill", arguments: { name: "sample" } })).content[0].text,
     status: async () => (await client.callTool({ name: "skill_status", arguments: { names: "sample" } })).content[0].text,
+    statusData: async () => (await client.callTool({ name: "skill_status", arguments: { names: "sample" } })).structuredContent,
   };
 }
 const cached = { cached: true, complete: false, localPath: "/fixture/sample", filesTotal: 13, filesMissing: [], sizeBytes: 1000 };
@@ -54,6 +55,11 @@ test("tools keep missing-file guidance and complete status for other cache state
   assert.match(incomplete, /skill_status to verify completeness before execution/);
   assert.doesNotMatch(incomplete, /The complete skill now lives|STEP 4: Execute/);
   assert.match(await client.status(), /INCOMPLETE — missing 1\/13 files: README.md/);
+  const incompleteStatus = await client.statusData();
+  assert.equal(incompleteStatus.skills[0].cached, true);
+  assert.equal(incompleteStatus.skills[0].complete, false);
+  assert.equal(incompleteStatus.skills[0].files_missing_count, 1);
+  assert.deepEqual(incompleteStatus.skills[0].files_missing_preview, ["README.md"]);
   state.complete = true;
   state.filesMissing = [];
   const complete = await client.read();

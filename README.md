@@ -12,7 +12,7 @@
 
 | 特性 | 说明 |
 |------|------|
-| **8 个 MCP Tools** | search_skills, read_skill, load_skill_file, list_skill_files, list_categories, plan_workflow, skill_status, diagnostics |
+| **8 个 Agent 核心工具** | search_skills, read_skill, load_skill_file, list_skill_files, list_categories, plan_workflow, skill_status, diagnostics |
 | **Agent 行为合约** | server instructions + 工具描述 + 返回体尾部三层强化同一套 5 步工作流（见 [docs/AGENT-PROTOCOL.md](docs/AGENT-PROTOCOL.md)） |
 | **缓存状态可见** | search/plan 结果带 `[cached]` 徽标；read_skill 返回 `local_path`；skill_status 深度校验完整性 |
 | **活动日志与诊断** | 全部工具调用/下载/错误落 JSONL 日志；diagnostics 一键审计 |
@@ -23,10 +23,13 @@
 | **自动网络加速** | 官方加速端点优先，延迟加入 GitHub / CDN / 公共镜像竞速；完整正文通过校验后才接受 |
 | **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
 
-## beta.6 开发迭代（尚未发布）
+## beta.7 开发迭代（尚未发布）
 
-当前源码版本为 **1.5.0-beta.6**，插件版本为 **0.3.6**；npm 的 `beta` 仍为下方已发布的 beta.5。
+当前源码版本为 **1.5.0-beta.7**，插件版本为 **0.4.0**；npm 的 `beta` 仍为已发布的 beta.6。
 
+- App 技能详情升级为“使用说明 / 文件 / 子技能”三个页签；文件可进入目录、预览内容、复制路径，子技能支持全量检索和分页。
+- 详情页直接显示完整缓存、部分缓存、未缓存和缓存版本待验证状态；快速切换页签时旧请求不能覆盖新内容。
+- 新增固定模拟宿主的 Chrome 渲染预览脚本与窄屏/宽屏截图，见 [beta.7 审查记录](docs/BETA-7-REVIEW.md)。
 - 资源预览保持完整技能物化，读取说明时跳过未使用的目录和依赖扫描。
 - 完整读取复用同次物化的检查结果，远端目录由已验证文件清单构建；子技能说明采用有界异步读取和摘要缓存，本地编辑模式保持实时扫描。
 - 清单使用 GitHub raw 与 Contents API 两条权威通道；已有合法同源缓存时，权威刷新失败保留缓存，避免被旧镜像覆盖。
@@ -94,7 +97,7 @@ node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
 ```bash
 curl http://localhost:3456/health
 # 示例输出；版本和技能数量由实际服务决定
-{"status":"ok","name":"codex-skills-mcp","version":"1.5.0-beta.6","skills":291}
+{"status":"ok","name":"codex-skills-mcp","version":"1.5.0-beta.7","skills":291}
 ```
 
 ## 客户端配置

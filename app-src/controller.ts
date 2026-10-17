@@ -1,5 +1,6 @@
 /* Lightweight MCP App controller. The transport supplies JSON-RPC only; this
- * controller owns the initialize handshake, navigation and request lifecycle. */
+ * controller owns the initialize handshake, navigation, detail explorer and
+ * request lifecycle. */
 import { createAppTransport } from "@openai/mcp-extensions/app/transport";
 
 type SkillCard = { name: string; description: string; cached: boolean };
@@ -8,7 +9,53 @@ type Listing = { view: "home" } | { view: "category"; category: string } | { vie
 type View = Listing | { view: "detail"; skill: SkillCard; from: Listing };
 type BrowseResult = { categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[]; results?: SkillCard[] };
 type HostContext = { theme?: string; styles?: { variables?: Record<string, string> } };
-type ToolResult = { structuredContent?: BrowseResult; isError?: boolean; content?: { type: string; text?: string }[] };
+type ToolResult<T> = { structuredContent?: T; isError?: boolean; content?: { type: string; text?: string }[] };
+type DetailTab = "instructions" | "files" | "sub_skills";
+type NavigationView = Exclude<DetailTab, "instructions">;
+
+type NavigationEntry = {
+  name: string;
+  path: string;
+  type: "file" | "directory" | "sub_skill";
+  description?: string;
+  size_bytes?: number;
+  text: string;
+  excerpted: boolean;
+};
+type NavigationResult = {
+  skill_name: string;
+  view: NavigationView;
+  path: string;
+  query: string;
+  total: number;
+  matched: number;
+  offset: number;
+  returned: number;
+  next_cursor: string | null;
+  descriptions_excerpted: boolean;
+  entries: NavigationEntry[];
+};
+type CacheSkill = {
+  name: string;
+  found: boolean;
+  cached?: boolean;
+  complete?: boolean;
+  catalog_current?: boolean | null;
+  local_path?: string;
+  files_total?: number;
+  files_missing_count?: number;
+  files_missing_preview?: string[];
+  size_bytes?: number;
+  completed_at?: string | null;
+};
+type CacheResult = { requested: number; complete_count: number; truncated: boolean; skills: CacheSkill[] };
+type ExplorerState = {
+  path: string;
+  query: string;
+  pages: NavigationResult[];
+  index: number;
+  loading: boolean;
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -18,7 +65,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 const transport = createAppTransport();
 const search = $<HTMLInputElement>("search");
 const attach = $<HTMLButtonElement>("d-attach");
+const navSearch = $<HTMLInputElement>("nav-search");
 const PROTOCOL_VERSION = "2026-01-26";
+const DETAIL_PREVIEW_LIMIT = 200_000;
+const EXPLORER_LIMIT = 50;
 let view: View = { view: "home" };
 let revision = 0;
 let disposed = false;
@@ -27,7 +77,15 @@ let connecting = false;
 let composing = false;
 let attaching = false;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let navSearchTimer: ReturnType<typeof setTimeout> | undefined;
+let navComposing = false;
 let retry: (() => void) | undefined;
+let detailTab: DetailTab = "instructions";
+let explorerView: NavigationView = "files";
+let explorerRequestRevision = 0;
+let cacheStatusRevision = 0;
+let previewRevision = 0;
+let previewPath = "";
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -47,6 +105,14 @@ async function cached<T extends BrowseResult | string>(key: string, load: () => 
   return request;
 }
 
+function emptyExplorer(): ExplorerState {
+  return { path: "", query: "", pages: [], index: 0, loading: false };
+}
+let explorerStates: Record<NavigationView, ExplorerState> = {
+  files: emptyExplorer(),
+  sub_skills: emptyExplorer(),
+};
+
 function status(message: string, action?: () => void) {
   $("status").textContent = message;
   retry = action;
@@ -63,29 +129,40 @@ function busy(value: boolean) {
 }
 function cancelNavigation() {
   clearTimeout(searchTimer);
+  clearTimeout(navSearchTimer);
   searchTimer = undefined;
+  navSearchTimer = undefined;
   // Transport requests cannot be aborted. Invalidate their UI effects immediately,
   // including during the debounce interval, and reuse any in-flight fetch later.
   revision++;
+  explorerRequestRevision++;
+  previewRevision++;
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+const formatBytes = (bytes = 0) => {
+  if (bytes <= 0) return "0 B";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+};
+const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
+const skillFileUri = (name: string, path: string) =>
+  `${skillUri(name)}/${path.split("/").map(encodeURIComponent).join("/")}`;
 
-async function call(name: string, args: Record<string, unknown>): Promise<BrowseResult> {
-  const result = await transport.request<ToolResult>("tools/call", { name, arguments: args }, 30_000);
+async function call<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const result = await transport.request<ToolResult<T>>("tools/call", { name, arguments: args }, 60_000);
   if (result?.isError) {
     throw new Error(result.content?.find((item) => item.type === "text")?.text || `工具 ${name} 调用失败`);
   }
-  if (!result?.structuredContent) throw new Error("服务未返回技能数据");
+  if (!result?.structuredContent) throw new Error("服务未返回结构化数据");
   return result.structuredContent;
 }
 
-async function readSkillMd(name: string): Promise<string> {
-  const result = await transport.request<{ contents?: { text?: string }[] }>(
-    "resources/read", { uri: `skill://${encodeURIComponent(name)}` }, 60_000
-  );
+async function readResourceText(uri: string, limit = 20_000): Promise<string> {
+  const result = await transport.request<{ contents?: { text?: string }[] }>("resources/read", { uri }, 90_000);
   const text = result?.contents?.find((item) => typeof item.text === "string")?.text;
-  if (typeof text !== "string") throw new Error("服务未返回 SKILL.md 文本");
-  return text.length > 12_000 ? text.slice(0, 12_000) + "\n…（预览已截断，加入对话后可读取完整内容）" : text;
+  if (typeof text !== "string") throw new Error("服务未返回文件文本");
+  return text.length > limit ? text.slice(0, limit) + "\n…（界面预览已截断，完整文件已保存在技能缓存中）" : text;
 }
 
 function card(skill: SkillCard): HTMLButtonElement {
@@ -116,10 +193,305 @@ function renderCategories(categories: Category[]) {
     return button;
   }));
 }
-function cachedBadge(cached: boolean) {
-  $("d-cached").textContent = cached ? "已缓存" : "按需下载";
-  $("d-cached").className = "badge" + (cached ? " on" : "");
+
+function cacheBadge(state?: CacheSkill) {
+  const badge = $("d-cached");
+  const detail = $("d-cache-detail");
+  const revisionNote = $("d-revision-note");
+  badge.className = "badge";
+  detail.textContent = "";
+  revisionNote.hidden = true;
+  if (!state || !state.found) {
+    badge.textContent = state ? "技能不存在" : "检查缓存…";
+    badge.className = "badge warn";
+    return;
+  }
+  const count = state.files_total ?? 0;
+  const size = formatBytes(state.size_bytes ?? 0);
+  if (state.complete) {
+    badge.textContent = "已完整缓存";
+    badge.className = "badge on";
+    detail.textContent = `${count} 个文件 · ${size} · 可执行`;
+  } else if (state.cached && state.catalog_current === false) {
+    badge.textContent = "缓存版本待验证";
+    badge.className = "badge warn";
+    detail.textContent = `${count} 个文件 · ${size} · 源版本检查失败`;
+    revisionNote.textContent = "当前显示的是本地缓存版本；联网重试后才能确认它和源技能一致。";
+    revisionNote.hidden = false;
+  } else if (state.cached) {
+    badge.textContent = "部分缓存";
+    badge.className = "badge warn";
+    detail.textContent = `缺少 ${state.files_missing_count ?? 0}/${count} 个文件`;
+  } else {
+    badge.textContent = "尚未缓存";
+    detail.textContent = "读取说明时会下载完整技能";
+  }
 }
+
+async function refreshCacheStatus(name: string, token: number) {
+  const statusToken = ++cacheStatusRevision;
+  try {
+    const result = await call<CacheResult>("skill_status", { names: name });
+    if (!disposed && revision === token && cacheStatusRevision === statusToken) {
+      cacheBadge(result.skills.find((item) => item.name === name));
+    }
+  } catch {
+    if (!disposed && revision === token && cacheStatusRevision === statusToken) {
+      $("d-cache-detail").textContent = "缓存状态暂时不可用";
+    }
+  }
+}
+
+function markMaterialized() {
+  cacheStatusRevision++;
+  const badge = $("d-cached");
+  badge.textContent = "已完整缓存";
+  badge.className = "badge on";
+  $("d-cache-detail").textContent = "正在读取文件统计…";
+  $("d-revision-note").hidden = true;
+}
+
+function setTabs() {
+  const tabs: Array<[DetailTab, string]> = [
+    ["instructions", "tab-instructions"],
+    ["files", "tab-files"],
+    ["sub_skills", "tab-sub-skills"],
+  ];
+  for (const [tab, id] of tabs) {
+    const selected = tab === detailTab;
+    $(id).setAttribute("aria-selected", String(selected));
+    $(id).setAttribute("tabindex", selected ? "0" : "-1");
+  }
+  $("instructions-pane").hidden = detailTab !== "instructions";
+  $("explorer-pane").hidden = detailTab === "instructions";
+  if (detailTab !== "instructions") {
+    explorerView = detailTab;
+    $("explorer-pane").setAttribute("aria-labelledby", detailTab === "files" ? "tab-files" : "tab-sub-skills");
+    updateExplorerChrome();
+  }
+}
+
+function clearExplorer() {
+  explorerStates = { files: emptyExplorer(), sub_skills: emptyExplorer() };
+  explorerRequestRevision++;
+  closePreview();
+  navSearch.value = "";
+  $("nav-list").replaceChildren();
+  $("nav-empty").hidden = true;
+  $("nav-count").textContent = "";
+  $("nav-page-info").textContent = "";
+  $("nav-prev").hidden = true;
+  $("nav-next").hidden = true;
+}
+
+function setDetailTab(tab: DetailTab, load = true) {
+  if (detailTab === tab && load) {
+    setTabs();
+    return;
+  }
+  detailTab = tab;
+  setTabs();
+  if (tab === "instructions") {
+    closePreview();
+    return;
+  }
+  const state = explorerStates[tab];
+  navSearch.value = state.query;
+  renderBreadcrumb(state);
+  if (state.pages.length) renderExplorerState(state);
+  else if (load) void loadExplorer(true);
+}
+
+function updateExplorerChrome() {
+  const subSkills = explorerView === "sub_skills";
+  $("nav-search-label").textContent = subSkills ? "搜索全部子技能" : "搜索当前目录文件";
+  navSearch.placeholder = subSkills ? "搜索子技能名称、路径或描述…" : "搜索文件名或路径…";
+}
+
+function renderBreadcrumb(state: ExplorerState) {
+  const host = $("breadcrumb");
+  const fragments: Node[] = [];
+  const root = document.createElement("button");
+  root.textContent = explorerView === "sub_skills" ? "全部子技能" : "技能根目录";
+  root.onclick = () => changeExplorerPath("");
+  fragments.push(root);
+  let cursor = "";
+  for (const part of state.path.split("/").filter(Boolean)) {
+    const separator = document.createElement("span"); separator.textContent = "/";
+    fragments.push(separator);
+    cursor = cursor ? `${cursor}/${part}` : part;
+    const target = cursor;
+    const button = document.createElement("button");
+    button.textContent = part;
+    button.onclick = () => changeExplorerPath(target);
+    fragments.push(button);
+  }
+  host.replaceChildren(...fragments);
+}
+
+function navigationCopy(entry: NavigationEntry): { name: string; description: string; size: string; icon: string } {
+  if (entry.type === "directory") return { name: entry.name, description: entry.path, size: "", icon: "📁" };
+  if (entry.type === "sub_skill") {
+    return { name: entry.name, description: entry.description ? `${entry.path} · ${entry.description}` : entry.path, size: "", icon: "🧩" };
+  }
+  return { name: entry.name, description: entry.path, size: formatBytes(entry.size_bytes ?? 0), icon: "📄" };
+}
+
+function navigationRow(entry: NavigationEntry): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.className = "nav-row";
+  const copy = navigationCopy(entry);
+  const icon = document.createElement("span"); icon.className = "nav-icon"; icon.textContent = copy.icon;
+  const body = document.createElement("span"); body.className = "nav-copy";
+  const name = document.createElement("span"); name.className = "nav-name"; name.textContent = copy.name;
+  const description = document.createElement("span"); description.className = "nav-description"; description.textContent = copy.description;
+  body.append(name, description);
+  const size = document.createElement("span"); size.className = "nav-size"; size.textContent = copy.size;
+  button.append(icon, body, size);
+  if (entry.type === "directory") button.onclick = () => changeExplorerPath(entry.path);
+  else if (entry.type === "sub_skill") button.onclick = () => void openFile(`${entry.path}/SKILL.md`);
+  else button.onclick = () => void openFile(entry.path);
+  return button;
+}
+
+function renderExplorerState(state: ExplorerState) {
+  const page = state.pages[state.index];
+  const list = $("nav-list");
+  const empty = $("nav-empty");
+  if (!page) {
+    list.replaceChildren();
+    empty.textContent = "还没有可显示的内容。";
+    empty.hidden = false;
+    $("nav-count").textContent = "";
+    $("nav-page-info").textContent = "";
+    $("nav-prev").hidden = true;
+    $("nav-next").hidden = true;
+    return;
+  }
+  list.replaceChildren(...page.entries.map(navigationRow));
+  const label = explorerView === "sub_skills" ? "个子技能" : "个文件项";
+  $("nav-count").textContent = `${page.matched} ${label}`;
+  empty.hidden = page.entries.length !== 0;
+  empty.textContent = page.query
+    ? `没有找到匹配“${page.query}”的内容。`
+    : explorerView === "sub_skills" ? "这个技能没有嵌套子技能。" : "这个目录没有可显示的文件。";
+  const first = page.returned ? page.offset + 1 : 0;
+  const last = page.offset + page.returned;
+  $("nav-page-info").textContent = page.matched
+    ? `${first}–${last} / 共 ${page.matched} 项`
+    : "0 项";
+  $("nav-prev").hidden = state.index === 0;
+  $("nav-next").hidden = !page.next_cursor;
+}
+
+function showExplorerLoading() {
+  $("nav-list").replaceChildren();
+  const empty = $("nav-empty");
+  empty.textContent = "正在读取技能目录…";
+  empty.hidden = false;
+  $("nav-page-info").textContent = "加载中…";
+  $("nav-prev").hidden = true;
+  $("nav-next").hidden = true;
+}
+
+async function loadExplorer(reset: boolean) {
+  if (view.view !== "detail" || detailTab === "instructions") return;
+  const selected = view;
+  const state = explorerStates[detailTab];
+  if (!reset && state.loading) return;
+  if (reset) {
+    state.pages = [];
+    state.index = 0;
+  }
+  const cursor = reset ? undefined : state.pages.at(-1)?.next_cursor ?? undefined;
+  if (!reset && !cursor) return;
+  const token = ++explorerRequestRevision;
+  const selectedTab = detailTab;
+  // A response may only render for the same detail, tab and request generation.
+  const sameView = () => !disposed && view === selected && detailTab === selectedTab &&
+    explorerView === selectedTab && explorerRequestRevision === token;
+  state.loading = true;
+  showExplorerLoading();
+  try {
+    const result = await call<NavigationResult>("list_skill_files", {
+      skill_name: selected.skill.name,
+      view: selectedTab,
+      path: state.path,
+      query: state.query,
+      limit: EXPLORER_LIMIT,
+      ...(cursor ? { cursor } : {}),
+    });
+    if (!sameView()) return;
+    if (reset) state.pages = [result];
+    else state.pages.push(result);
+    state.index = state.pages.length - 1;
+    renderExplorerState(state);
+  } catch (error) {
+    if (!sameView()) return;
+    if (!reset && state.pages.length > 1) state.pages.pop();
+    state.index = Math.max(0, state.pages.length - 1);
+    renderExplorerState(state);
+    $("nav-empty").textContent = `目录读取失败：${errorMessage(error)}`;
+    $("nav-empty").hidden = false;
+  } finally {
+    if (sameView()) state.loading = false;
+  }
+}
+
+function changeExplorerPath(path: string) {
+  const state = explorerStates[explorerView];
+  state.path = path;
+  state.query = "";
+  state.pages = [];
+  state.index = 0;
+  navSearch.value = "";
+  closePreview();
+  renderBreadcrumb(state);
+  void loadExplorer(true);
+}
+
+function scheduleExplorerSearch(immediate = false) {
+  if (navComposing || view.view !== "detail" || detailTab === "instructions") return;
+  clearTimeout(navSearchTimer);
+  const state = explorerStates[explorerView];
+  state.query = navSearch.value.trim();
+  state.pages = [];
+  state.index = 0;
+  const run = () => void loadExplorer(true);
+  if (immediate) run();
+  else {
+    showExplorerLoading();
+    navSearchTimer = setTimeout(run, 250);
+  }
+}
+
+async function openFile(path: string) {
+  if (view.view !== "detail" || !path) return;
+  const selected = view;
+  const token = ++previewRevision;
+  previewPath = path;
+  $("preview-path").textContent = path;
+  $("preview-content").textContent = "正在读取文件…";
+  $("file-preview").hidden = false;
+  $("file-preview").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  try {
+    const text = await readResourceText(skillFileUri(selected.skill.name, path), DETAIL_PREVIEW_LIMIT);
+    if (disposed || view !== selected || previewRevision !== token) return;
+    $("preview-content").textContent = text;
+  } catch (error) {
+    if (disposed || view !== selected || previewRevision !== token) return;
+    $("preview-content").textContent = `读取失败：${errorMessage(error)}`;
+  }
+}
+
+function closePreview() {
+  previewRevision++;
+  previewPath = "";
+  $("file-preview").hidden = true;
+  $("preview-content").textContent = "";
+  $("preview-path").textContent = "";
+}
+
 function showView(next: View) {
   const previous = view;
   view = next;
@@ -135,9 +507,13 @@ function showView(next: View) {
   if (next.view !== "detail") search.value = next.view === "search" ? next.query : "";
   if (next.view === "detail") {
     if (previous !== next) attachmentStatus("");
-    cachedBadge(next.skill.cached);
-    $("d-md").textContent = "正在读取 SKILL.md…";
+    cacheStatusRevision++;
+    cacheBadge();
+    $("d-md").textContent = "正在下载并读取完整技能…";
+    $("d-cache-detail").textContent = "";
     attach.disabled = attaching;
+    clearExplorer();
+    setDetailTab("instructions", false);
   } else if (next.view === "home") {
     $("cards").replaceChildren();
     $("cats").replaceChildren();
@@ -157,18 +533,21 @@ async function navigate(next: View) {
   status(next.view === "search" ? "搜索中…" : "加载中…");
   try {
     if (next.view === "detail") {
-      const text = await cached(`detail:${next.skill.name}`, () => readSkillMd(next.skill.name), 300_000);
+      void refreshCacheStatus(next.skill.name, token);
+      // Always re-read through the resource so source updates can replace a
+      // previous cache. A complete local cache makes this an inexpensive read.
+      const text = await readResourceText(skillUri(next.skill.name), DETAIL_PREVIEW_LIMIT);
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
-      for (const [key] of cache) if (!key.startsWith("detail:")) cache.delete(key);
       if (!current()) return;
       $("d-md").textContent = text;
-      cachedBadge(true);
-      status("技能已就绪，可加入对话");
+      markMaterialized();
+      status("说明已加载；可切换文件或子技能继续查看");
+      void refreshCacheStatus(next.skill.name, token);
     } else {
       const data = await cached(JSON.stringify(next), () => next.view === "search"
-        ? call("skills.query", { query: next.query, limit: 24 })
-        : call("skills.browse", next.view === "category" ? { category: next.category } : {}));
+        ? call<BrowseResult>("skills.query", { query: next.query, limit: 24 })
+        : call<BrowseResult>("skills.browse", next.view === "category" ? { category: next.category } : {}));
       if (!current()) return;
       if (next.view === "home") {
         $("count").textContent = `${data.totalSkills ?? 0} 技能`;
@@ -186,7 +565,10 @@ async function navigate(next: View) {
     }
   } catch (error) {
     if (!current()) return;
-    if (next.view === "detail") $("d-md").textContent = "读取未完成。重试可继续获取技能内容。";
+    if (next.view === "detail") {
+      $("d-md").textContent = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      void refreshCacheStatus(next.skill.name, token);
+    }
     status(`加载失败：${errorMessage(error)}`, () => void navigate(next));
   } finally {
     if (current()) busy(false);
@@ -201,8 +583,8 @@ attach.onclick = async () => {
   attachmentStatus(`正在将「${skill.name}」加入对话…`);
   try {
     const result = await transport.request<{ isError?: boolean }>("ui/update-model-context", {
-      content: [{ type: "text", text: `已选择技能：${skill.name}。通过 resources/read 读取 skill://${encodeURIComponent(skill.name)} 获取完整使用说明。` }],
-      structuredContent: { skill: { name: skill.name, uri: `skill://${encodeURIComponent(skill.name)}` } },
+      content: [{ type: "text", text: `已选择技能：${skill.name}。通过 resources/read 读取 ${skillUri(skill.name)} 获取完整使用说明。` }],
+      structuredContent: { skill: { name: skill.name, uri: skillUri(skill.name) } },
     }, 15_000);
     if (result?.isError) throw new Error("宿主未接受技能上下文");
     if (view === selected && !disposed) attachmentStatus(`已将「${skill.name}」加入对话上下文`);
@@ -212,8 +594,55 @@ attach.onclick = async () => {
     attaching = false; attach.disabled = !connected;
   }
 };
+
 $("back").onclick = () => void navigate(view.view === "detail" ? view.from : { view: "home" });
 $("retry").onclick = () => retry?.();
+$("tab-instructions").onclick = () => setDetailTab("instructions");
+$("tab-files").onclick = () => setDetailTab("files");
+$("tab-sub-skills").onclick = () => setDetailTab("sub_skills");
+$("tab-instructions").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight") { event.preventDefault(); setDetailTab("files"); $("tab-files").focus(); }
+});
+$("tab-files").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowRight") { event.preventDefault(); setDetailTab("sub_skills"); $("tab-sub-skills").focus(); }
+  if (event.key === "ArrowLeft") { event.preventDefault(); setDetailTab("instructions"); $("tab-instructions").focus(); }
+});
+$("tab-sub-skills").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") { event.preventDefault(); setDetailTab("files"); $("tab-files").focus(); }
+});
+$("nav-prev").onclick = () => {
+  const state = explorerStates[explorerView];
+  if (state.index <= 0) return;
+  state.index--;
+  closePreview();
+  renderExplorerState(state);
+};
+$("nav-next").onclick = () => {
+  const state = explorerStates[explorerView];
+  if (state.index + 1 < state.pages.length) {
+    state.index++;
+    closePreview();
+    renderExplorerState(state);
+  } else void loadExplorer(false);
+};
+$("preview-close").onclick = closePreview;
+$("preview-copy").onclick = () => {
+  if (!previewPath) return;
+  const clipboard = globalThis.navigator?.clipboard;
+  if (!clipboard) { $("status").textContent = `文件路径：${previewPath}`; return; }
+  void clipboard.writeText(previewPath).then(
+    () => { $("status").textContent = "文件路径已复制"; },
+    (error) => { $("status").textContent = `复制失败：${errorMessage(error)}`; },
+  );
+};
+navSearch.addEventListener("input", () => scheduleExplorerSearch());
+navSearch.addEventListener("compositionstart", () => { navComposing = true; clearTimeout(navSearchTimer); });
+navSearch.addEventListener("compositionend", () => { navComposing = false; scheduleExplorerSearch(); });
+navSearch.addEventListener("keydown", (event) => {
+  if (event.isComposing || navComposing) return;
+  if (event.key === "Enter") { event.preventDefault(); scheduleExplorerSearch(true); }
+  if (event.key === "Escape") { navSearch.value = ""; scheduleExplorerSearch(true); }
+});
 
 function scheduleSearch(immediate = false) {
   if (!connected || composing) return;
@@ -247,6 +676,7 @@ transport.handle("ping", () => ({}));
 function dispose() {
   disposed = true; cancelNavigation();
   cache.clear(); pending.clear();
+  explorerStates = { files: emptyExplorer(), sub_skills: emptyExplorer() };
   transport.dispose();
 }
 transport.handle("ui/resource-teardown", () => { setTimeout(dispose, 0); return {}; });

@@ -52,17 +52,71 @@
       border: 1px solid var(--border);
     }
     .badge.on { border-color: light-dark(#277a38, #78d68b); color: light-dark(#277a38, #78d68b); }
+    .badge.warn { border-color: light-dark(#a45b00, #f3b35c); color: light-dark(#a45b00, #f3b35c); }
     .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
     #detail pre {
       white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.65;
       padding: 14px; border-radius: 10px; border: 1px solid var(--border);
       background: var(--secondary); max-height: 55vh; overflow: auto;
     }
+    .detail-tabs {
+      display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border);
+      overflow-x: auto; scrollbar-width: thin;
+    }
+    .detail-tabs button {
+      border: 0; border-bottom: 2px solid transparent; border-radius: 7px 7px 0 0;
+      background: transparent; padding: 9px 13px; white-space: nowrap;
+    }
+    .detail-tabs button[aria-selected="true"] {
+      border-bottom-color: var(--primary); background: var(--secondary); font-weight: 600;
+    }
+    .detail-pane { min-height: 160px; }
+    .detail-summary { color: var(--muted-foreground); font-size: 12px; line-height: 1.55; flex: 1; min-width: 0; }
+    .explorer-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    #nav-search { flex: 1; min-width: 0; }
+    #nav-count { white-space: nowrap; }
+    #breadcrumb { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 9px; min-height: 30px; }
+    #breadcrumb button { padding: 4px 8px; font-size: 12px; background: transparent; }
+    #breadcrumb span { color: var(--muted-foreground); }
+    .nav-list { display: grid; gap: 6px; }
+    .nav-row {
+      width: 100%; padding: 9px 11px; text-align: left; border: 1px solid var(--border);
+      background: var(--secondary); border-radius: 9px;
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: center;
+    }
+    .nav-row:hover:not(:disabled) { background: color-mix(in srgb, var(--secondary) 88%, var(--primary)); }
+    .nav-icon { font-size: 15px; }
+    .nav-copy { min-width: 0; }
+    .nav-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+    .nav-description {
+      display: block; margin-top: 2px; color: var(--muted-foreground); font-size: 11.5px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .nav-size { color: var(--muted-foreground); font-size: 11px; white-space: nowrap; }
+    #nav-empty { padding: 18px 8px; color: var(--muted-foreground); line-height: 1.65; }
+    .pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+    .pager span { color: var(--muted-foreground); font-size: 12px; text-align: center; }
+    #file-preview {
+      margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border);
+    }
+    .preview-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 9px; }
+    .preview-toolbar strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12.5px; }
+    .preview-toolbar button { padding: 5px 9px; font-size: 12px; }
+    #preview-content { max-height: 42vh; }
     footer { margin-top: 16px; font-size: 12px; color: var(--muted-foreground); display: flex; align-items: center; gap: 10px; }
     #d-attach-status { margin-bottom: 12px; overflow-wrap: anywhere; }
     #empty { padding: 24px 0; line-height: 1.7; color: var(--muted-foreground); }
     #retry { flex-shrink: 0; }
-    @media (max-width: 360px) { header { flex-wrap: wrap; } #count { width: 100%; } }
+    @media (max-width: 480px) {
+      header { flex-wrap: wrap; } #count { width: 100%; }
+      .toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+      #d-cached { grid-column: 1; grid-row: 1; justify-self: start; }
+      #d-attach { grid-column: 2; grid-row: 1; }
+      #d-cache-detail { grid-column: 1 / -1; grid-row: 2; }
+      .explorer-toolbar { align-items: stretch; flex-direction: column; }
+      #nav-count { align-self: flex-end; }
+      .pager span { flex: 1; }
+    }
     #status { overflow-wrap: anywhere; }
   </style>
 </head>
@@ -92,12 +146,43 @@
 
     <section id="detail" hidden>
       <div class="toolbar">
-        <span class="badge" id="d-cached">未缓存</span>
-        <span style="flex:1"></span>
+        <span class="badge" id="d-cached">检查缓存…</span>
+        <span class="detail-summary" id="d-cache-detail"></span>
         <button id="d-attach">加入对话</button>
       </div>
       <p id="d-attach-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
-      <pre id="d-md" tabindex="0" aria-label="技能说明预览">加载中…</pre>
+      <div class="detail-tabs" role="tablist" aria-label="技能详情">
+        <button id="tab-instructions" role="tab" aria-selected="true" aria-controls="instructions-pane">使用说明</button>
+        <button id="tab-files" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">文件</button>
+        <button id="tab-sub-skills" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">子技能</button>
+      </div>
+      <section id="instructions-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-instructions">
+        <p id="d-revision-note" class="detail-summary" role="note" hidden></p>
+        <pre id="d-md" tabindex="0" aria-label="技能说明预览">正在下载并读取完整技能…</pre>
+      </section>
+      <section id="explorer-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
+        <div class="explorer-toolbar">
+          <label for="nav-search" class="sr-only" id="nav-search-label">在当前技能中搜索</label>
+          <input id="nav-search" type="search" maxlength="500" autocomplete="off" spellcheck="false" placeholder="搜索文件或子技能…" />
+          <span class="muted" id="nav-count" role="status" aria-live="polite"></span>
+        </div>
+        <nav id="breadcrumb" aria-label="当前位置"></nav>
+        <section id="file-preview" aria-label="文件内容预览" hidden>
+          <div class="preview-toolbar">
+            <strong id="preview-path"></strong>
+            <button id="preview-copy">复制路径</button>
+            <button id="preview-close">关闭</button>
+          </div>
+          <pre id="preview-content" tabindex="0">正在读取…</pre>
+        </section>
+        <div id="nav-list" class="nav-list"></div>
+        <p id="nav-empty" hidden></p>
+        <div class="pager">
+          <button id="nav-prev" hidden>上一页</button>
+          <span id="nav-page-info"></span>
+          <button id="nav-next" hidden>下一页</button>
+        </div>
+      </section>
     </section>
 
     </main>

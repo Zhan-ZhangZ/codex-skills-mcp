@@ -60,7 +60,18 @@ export function registerListSkillFiles(
           const support = `Read complete content: load_skill_file(${JSON.stringify({ skill_name: entry.name, file_path: filePath })}). Use skill_status before execution.`;
 
           return {
-            structuredContent: { skill_name: entry.name, view, path: normalizedPath, query, ...navigationMetadata(page) },
+            structuredContent: {
+              skill_name: entry.name,
+              view,
+              path: normalizedPath,
+              query,
+              ...navigationMetadata(page),
+              entries: page.rows.map(item => ({
+                ...item.row,
+                text: item.text,
+                excerpted: item.excerpted,
+              })),
+            },
             content: [
               {
                 type: "text" as const,

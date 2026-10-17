@@ -68,6 +68,8 @@ test("read_skill emits bounded previews whose cursors continue in list_skill_fil
   }
   assert.match(files.content[0].text, /child-073\/data-72\.txt/);
   assert.ok(files.structuredContent.offset > 0);
+  assert.ok(files.structuredContent.entries.length > 0);
+  assert.ok(files.structuredContent.entries.some((entry) => entry.path === "child-073/data-72.txt"));
 
   let skills = await tools.call("list_skill_files", { skill_name: entry.name, view: "sub_skills", cursor: subCursor, limit: 20 });
   let subCursorValue = skills.structuredContent.next_cursor;
@@ -79,6 +81,7 @@ test("read_skill emits bounded previews whose cursors continue in list_skill_fil
   assert.match(skills.content[0].text, /folded child 73 summary/);
   assert.doesNotMatch(skills.content[0].text, /ROOT-BODY-UNIQUE/);
   assert.ok(skills.structuredContent.returned <= 20);
+  assert.match(skills.structuredContent.entries.at(-1).description, /folded child/);
 });
 
 test("navigation cursors invalidate after a local file edit and text clients can query the last child", async (t) => {

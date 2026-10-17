@@ -1,12 +1,12 @@
 {
   "name": "codex-skills",
-  "version": "0.3.4",
-  "description": "Browse, search, and load 199+ on-demand expert skills.",
+  "version": "0.4.0",
+  "description": "Browse, search, and load 290+ on-demand expert skills.",
   "author": { "name": "Zhan-ZhangZ" },
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Skills 技能库",
-    "shortDescription": "199+ 按需专家技能库",
+    "shortDescription": "290+ 按需专家技能库",
     "developerName": "Zhan-ZhangZ",
     "category": "Productivity",
     "capabilities": ["Interactive", "Read"],

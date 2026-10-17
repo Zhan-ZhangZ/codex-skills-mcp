@@ -117,8 +117,8 @@ export function registerCodexSkillsApp(
       title: "技能库 Codex Skills",
       description:
         "Open the on-demand skill library fullscreen from the sidebar. " +
-        "Browse categories, search, preview SKILL.md, " +
-        "and pick skills for the conversation.",
+        "Browse categories, search, read instructions, explore files and nested " +
+        "sub-skills, inspect cache state, and pick skills for the conversation.",
       annotations: readonly,
       _meta: { ...ui([{ type: "global" }]), icons: [ICON] },
     },
@@ -132,7 +132,7 @@ export function registerCodexSkillsApp(
       title: "技能托盘 Skill Tray",
       description:
         "Open a compact skill panel beside this conversation — search the " +
-        "library and drop skills into the chat without leaving the thread.",
+        "library, inspect files and sub-skills, and drop skills into the chat.",
       annotations: readonly,
       _meta: { ...ui([{ type: "thread" }]), icons: [ICON] },
     },

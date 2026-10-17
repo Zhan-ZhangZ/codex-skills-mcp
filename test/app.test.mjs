@@ -57,9 +57,13 @@ function harness() {
     await flush();
   };
   const latest = (method) => sent.findLast((message) => message.method === method && message.id);
+  const latestTool = (name) => sent.findLast((message) =>
+    message.method === "tools/call" && message.params?.name === name && message.id);
+  const toolRequests = (name) => sent.filter((message) =>
+    message.method === "tools/call" && message.params?.name === name);
   const node = (id) => elements.get(id);
   return {
-    node, sent, reply, latest, flush, document,
+    node, sent, reply, latest, latestTool, toolRequests, flush, document,
     async ready() {
       assert.equal(sent.length, 1, "no tool call before initialization");
       assert.equal(sent[0].method, "ui/initialize");
@@ -109,11 +113,12 @@ test("detail back returns to its search and successful preview updates cache bad
   await app.reply(app.latest("tools/call"), { structuredContent: { results: [skill("alpha")] } });
   app.node("cards-list").children[0].onclick(); await app.flush();
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
-  assert.equal(app.node("d-cached").textContent, "已缓存");
+  assert.equal(app.node("d-cached").textContent, "已完整缓存");
   app.node("back").onclick(); await app.flush();
   assert.equal(app.node("heading").textContent, "搜索“needle”");
   assert.equal(app.node("search").value, "needle");
-  assert.equal(app.latest("tools/call").params.arguments.query, "needle");
+  assert.equal(app.toolRequests("skills.query").at(-1).params.arguments.query, "needle");
+  assert.equal(app.node("cards-list").children[0].children[0].textContent, "alpha");
   await app.dispose();
 });
 
@@ -250,5 +255,183 @@ test("a late attachment result never appears on another skill detail", async () 
   assert.equal(app.node("d-attach-status").hidden, true);
   assert.equal(app.node("d-attach-status").textContent, "");
   assert.equal(app.node("d-attach").disabled, false);
+  await app.dispose();
+});
+
+const navEntry = (path, type = "file", extra = {}) => ({
+  name: path.split("/").at(-1),
+  path,
+  type,
+  text: path,
+  excerpted: false,
+  ...(type === "file" ? { size_bytes: 512 } : {}),
+  ...extra,
+});
+
+const navResult = (view, entries, extra = {}) => ({
+  skill_name: "alpha",
+  view,
+  path: extra.path ?? "",
+  query: extra.query ?? "",
+  total: extra.total ?? entries.length,
+  matched: extra.matched ?? entries.length,
+  offset: extra.offset ?? 0,
+  returned: entries.length,
+  next_cursor: extra.next_cursor ?? null,
+  descriptions_excerpted: false,
+  entries,
+});
+
+test("detail exposes cache status, browsable files and file preview", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const statusRequest = app.latestTool("skill_status");
+  const previewRequest = app.latest("resources/read");
+  await app.reply(statusRequest, { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 7, files_missing_count: 0, size_bytes: 3072 }],
+  }});
+  await app.reply(previewRequest, { contents: [{ text: "# Alpha instructions" }] });
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 8, files_missing_count: 0, size_bytes: 4096 }],
+  }});
+  assert.equal(app.node("d-cached").textContent, "已完整缓存");
+  assert.match(app.node("d-cache-detail").textContent, /8 个文件/);
+  assert.equal(app.node("tab-instructions").attributes["aria-selected"], "true");
+
+  app.node("tab-files").onclick(); await app.flush();
+  assert.equal(app.node("tab-files").attributes["aria-selected"], "true");
+  assert.equal(app.node("explorer-pane").hidden, false);
+  const rootFiles = app.latestTool("list_skill_files");
+  assert.equal(rootFiles.params.arguments.view, "files");
+  assert.equal(rootFiles.params.arguments.path, "");
+  await app.reply(rootFiles, { structuredContent: navResult("files", [
+    navEntry("docs", "directory"),
+    navEntry("README.md"),
+  ]) });
+  assert.equal(app.node("nav-list").children.length, 2);
+
+  app.node("nav-list").children[0].onclick(); await app.flush();
+  const directory = app.latestTool("list_skill_files");
+  assert.equal(directory.params.arguments.path, "docs");
+  assert.equal(app.node("breadcrumb").children.length, 3);
+  await app.reply(directory, { structuredContent: navResult("files", [
+    navEntry("docs/guide.md"),
+  ], { path: "docs" }) });
+  app.node("nav-list").children[0].onclick(); await app.flush();
+  const fileRead = app.latest("resources/read");
+  assert.match(fileRead.params.uri, /skill:\/\/alpha\/docs\/guide\.md/);
+  assert.equal(app.node("preview-path").textContent, "docs/guide.md");
+  await app.reply(fileRead, { contents: [{ text: "# Guide" }] });
+  assert.equal(app.node("preview-content").textContent, "# Guide");
+  await app.dispose();
+});
+
+test("sub-skill search and pagination keep a local page history", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+
+  app.node("tab-sub-skills").onclick(); await app.flush();
+  const first = app.latestTool("list_skill_files");
+  assert.equal(first.params.arguments.view, "sub_skills");
+  await app.reply(first, { structuredContent: navResult("sub_skills", [
+    navEntry("research/design", "sub_skill", { description: "Research design" }),
+  ], { next_cursor: "cursor-2", total: 2 }) });
+  assert.equal(app.node("nav-next").hidden, false);
+
+  app.node("nav-next").onclick(); await app.flush();
+  const second = app.latestTool("list_skill_files");
+  assert.equal(second.params.arguments.cursor, "cursor-2");
+  await app.reply(second, { structuredContent: navResult("sub_skills", [
+    navEntry("writing/final", "sub_skill", { description: "Final manuscript" }),
+  ], { offset: 1, total: 2 }) });
+  assert.match(app.node("nav-list").children[0].children[1].children[0].textContent, /final/);
+  app.node("nav-prev").onclick(); await app.flush();
+  assert.match(app.node("nav-list").children[0].children[1].children[0].textContent, /design/);
+  assert.equal(app.toolRequests("list_skill_files").length, 2);
+
+  app.node("nav-search").value = "needle";
+  app.node("nav-search").dispatch("keydown", { key: "Enter" });
+  await app.flush();
+  const searched = app.latestTool("list_skill_files");
+  assert.equal(searched.params.arguments.query, "needle");
+  assert.equal(searched.params.arguments.path, "");
+  await app.reply(searched, { structuredContent: navResult("sub_skills", [
+    navEntry("deep/needle", "sub_skill", { description: "The last result" }),
+  ], { query: "needle", total: 99, matched: 1 }) });
+  assert.match(app.node("nav-count").textContent, /1 个子技能/);
+  assert.equal(app.node("nav-next").hidden, true);
+  await app.dispose();
+});
+
+test("stale directory responses and pre-materialization status cannot overwrite newer UI", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const initialStatus = app.latestTool("skill_status");
+  const instructions = app.latest("resources/read");
+  await app.reply(instructions, { contents: [{ text: "# Alpha" }] });
+  const materializedStatus = app.latestTool("skill_status");
+  await app.reply(materializedStatus, { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 12, files_missing_count: 0, size_bytes: 8192 }],
+  }});
+  assert.match(app.node("d-cache-detail").textContent, /12 个文件/);
+  await app.reply(initialStatus, { structuredContent: {
+    requested: 1, complete_count: 0, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: false, complete: false,
+      files_total: 0, files_missing_count: 0, size_bytes: 0 }],
+  }});
+  assert.equal(app.node("d-cached").textContent, "已完整缓存");
+
+  app.node("tab-files").onclick(); await app.flush();
+  const oldFiles = app.latestTool("list_skill_files");
+  app.node("tab-sub-skills").onclick(); await app.flush();
+  const newSkills = app.latestTool("list_skill_files");
+  await app.reply(newSkills, { structuredContent: navResult("sub_skills", [
+    navEntry("fresh/sub", "sub_skill", { description: "fresh" }),
+  ]) });
+  await app.reply(oldFiles, { structuredContent: navResult("files", [
+    navEntry("stale.txt"),
+  ]) });
+  assert.match(app.node("nav-list").children[0].children[1].children[0].textContent, /sub/);
+  await app.dispose();
+});
+
+test("an unvalidated cached revision is visibly marked as needing source verification", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 0, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: false,
+      catalog_current: false, files_total: 20, files_missing_count: 0, size_bytes: 1000 }],
+  }});
+  assert.equal(app.node("d-cached").textContent, "缓存版本待验证");
+  assert.equal(app.node("d-revision-note").hidden, false);
+  assert.match(app.node("d-revision-note").textContent, /本地缓存版本/);
+  await app.dispose();
+});
+
+test("a slower file preview cannot replace the file selected afterwards", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  app.node("tab-files").onclick(); await app.flush();
+  await app.reply(app.latestTool("list_skill_files"), { structuredContent: navResult("files", [
+    navEntry("first.md"),
+    navEntry("second.md"),
+  ]) });
+  app.node("nav-list").children[0].onclick(); await app.flush();
+  const first = app.latest("resources/read");
+  app.node("nav-list").children[1].onclick(); await app.flush();
+  const second = app.latest("resources/read");
+  await app.reply(second, { contents: [{ text: "# Second" }] });
+  await app.reply(first, { contents: [{ text: "# First" }] });
+  assert.equal(app.node("preview-path").textContent, "second.md");
+  assert.equal(app.node("preview-content").textContent, "# Second");
   await app.dispose();
 });

@@ -1,6 +1,6 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.5.0-beta.6",
+  "version": "1.5.0-beta.7",
   "description": "MCP Server for Codex-Skills - Intelligent skill library search, read and orchestration",
   "type": "module",
   "bin": {
@@ -25,7 +25,8 @@
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:app": "node scripts/build-app.mjs",
     "benchmark:loader": "node scripts/benchmark-loader.mjs",
-    "benchmark:remote": "node scripts/benchmark-remote.mjs"
+    "benchmark:remote": "node scripts/benchmark-remote.mjs",
+    "preview:app": "npm run build:app && node scripts/preview-mcp-app.mjs"
   },
   "keywords": [
     "mcp",

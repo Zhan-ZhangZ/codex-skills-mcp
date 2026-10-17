@@ -48,15 +48,30 @@ export function registerSkillStatus(
 
         const lines: string[] = [];
         let completeCount = 0;
+        const skills: Array<Record<string, unknown>> = [];
 
         for (const name of unique) {
           const entry = searchEngine.findByName(name);
           if (!entry) {
             lines.push(`### ❌ ${name}\n- Not found in the library. Use search_skills to find the exact name.`);
+            skills.push({ name, found: false });
             continue;
           }
           const cache = loader.cacheState(entry);
           if (cache.complete) completeCount += 1;
+          skills.push({
+            name: entry.name,
+            found: true,
+            cached: cache.cached,
+            complete: cache.complete,
+            catalog_current: cache.catalogCurrent ?? null,
+            local_path: cache.localPath,
+            files_total: cache.filesTotal,
+            files_missing_count: cache.filesMissing.length,
+            files_missing_preview: cache.filesMissing.slice(0, 20),
+            size_bytes: cache.sizeBytes,
+            completed_at: cache.completedAt ?? null,
+          });
 
           const status = cache.complete
             ? `✅ complete — ${cache.filesTotal} files (${formatBytes(cache.sizeBytes)})`
@@ -80,6 +95,12 @@ export function registerSkillStatus(
 
         const header = `Skill cache status: ${completeCount}/${unique.length} complete${truncated ? ` (list truncated to ${MAX_NAMES})` : ""}`;
         return {
+          structuredContent: {
+            requested: unique.length,
+            complete_count: completeCount,
+            truncated,
+            skills,
+          },
           content: [
             {
               type: "text" as const,
