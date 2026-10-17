@@ -99,6 +99,17 @@ const SKIP_NAMES = new Set([
   "dist", "build", ".next", ".cache",
 ]);
 
+// These directories may contain valid fixture/example SKILL.md files, but they
+// are not callable product skills. Keep them available in the file tree while
+// excluding them from automatic sub-skill discovery.
+const SKIP_SUBSKILL_DIRS = new Set([
+  "benchmark", "benchmarks",
+  "eval", "evals",
+  "example", "examples",
+  "fixture", "fixtures",
+  "test", "tests",
+]);
+
 // Default bytes returned by one load_skill_file call. Larger text files use
 // explicit byte offsets so callers never need to reload the whole file.
 const DEFAULT_FILE_CHUNK_BYTES = 500 * 1024;
@@ -432,7 +443,9 @@ export class SkillLoader {
       // Hidden subskills are discoverable at every depth. A selected subtree
       // includes its own SKILL.md, while the library skill root is excluded.
       if (includeSkills && parts.at(-1) === "SKILL.md" && (parents.length > 0 || !!prefix) &&
-          parents.every((name) => !SKIP_NAMES.has(name))) candidates.push(file);
+          parents.every((name) => !SKIP_NAMES.has(name) && !SKIP_SUBSKILL_DIRS.has(name))) {
+        candidates.push(file);
+      }
 
       let current = tree;
       for (let depth = 0; includeFiles && depth < parts.length && depth <= maxDepth; depth++) {
@@ -550,7 +563,12 @@ export class SkillLoader {
         return { ...value, path: relative(root, directory).split(sep).join("/") };
       } catch { return null; }
     };
-    const walk = async (directory: string, depth: number, visible: boolean): Promise<SkillStructure> => {
+    const walk = async (
+      directory: string,
+      depth: number,
+      visible: boolean,
+      discoverSubSkills: boolean,
+    ): Promise<SkillStructure> => {
       try {
         const canonical = await this.fileReads.run(() => realpath(directory));
         if (!contained(root, canonical)) return { files: [], sub_skills: [] };
@@ -561,9 +579,11 @@ export class SkillLoader {
           const show = includeFiles && visible && (!entry.name.startsWith(".") || entry.name === ".env.example");
           if (entry.isDirectory()) {
             const child = join(canonical, entry.name);
-            const own = includeSkills ? await readSummary(child) : null;
-            const below = includeSkills || (show && depth < maxDepth)
-              ? await walk(child, depth + 1, show && depth < maxDepth)
+            const childDiscoversSubSkills =
+              discoverSubSkills && !SKIP_SUBSKILL_DIRS.has(entry.name);
+            const own = includeSkills && childDiscoversSubSkills ? await readSummary(child) : null;
+            const below = (includeSkills && childDiscoversSubSkills) || (show && depth < maxDepth)
+              ? await walk(child, depth + 1, show && depth < maxDepth, childDiscoversSubSkills)
               : { files: [], sub_skills: [] };
             const node: FileNode = { name: entry.name, type: "directory",
               ...(depth < maxDepth ? { children: below.files } : {}) };
@@ -580,8 +600,11 @@ export class SkillLoader {
         return { files: results.flatMap((result) => result.files), sub_skills: results.flatMap((result) => result.sub_skills) };
       } catch { return { files: [], sub_skills: [] }; }
     };
-    const own = includeSkills && start !== root ? await readSummary(start) : null;
-    const result = await walk(start, 0, true);
+    const startParts = relative(root, start).split(sep).filter(Boolean);
+    const startDiscoversSubSkills = includeSkills &&
+      !startParts.some((name) => SKIP_SUBSKILL_DIRS.has(name));
+    const own = startDiscoversSubSkills && start !== root ? await readSummary(start) : null;
+    const result = await walk(start, 0, true, startDiscoversSubSkills);
     if (own) result.sub_skills.unshift(own);
     return result;
   }
@@ -666,7 +689,7 @@ export class SkillLoader {
 
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        if (SKIP_NAMES.has(entry.name)) continue;
+        if (SKIP_NAMES.has(entry.name) || SKIP_SUBSKILL_DIRS.has(entry.name)) continue;
 
         const subDir = join(currentPath, entry.name);
         const subSkillMd = resolveWithin(rootPath, join(relative(rootPath, subDir), "SKILL.md"));

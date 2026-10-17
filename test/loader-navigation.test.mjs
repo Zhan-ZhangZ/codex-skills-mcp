@@ -86,6 +86,22 @@ for (const remote of [true, false]) {
     assert.equal(scoped.identity, result.identity, 'filters are bound separately by the pager');
   });
 
+  test(label + ' sub-skill discovery excludes tests, fixtures and examples', async t => {
+    const { loader } = fixture(t, {
+      'SKILL.md': '# root',
+      'skills/real/SKILL.md': child('real'),
+      'tests/fixtures/fake/SKILL.md': child('test fixture'),
+      'src/eval/providers/demo/fixtures/fake/SKILL.md': child('eval fixture'),
+      'benchmarks/demo/SKILL.md': child('benchmark'),
+      'examples/demo/SKILL.md': child('example'),
+    }, remote);
+    const skills = await loader.readNavigation(entry, { view: 'sub_skills' });
+    assert.deepEqual(skills.sub_skills.map(item => item.name), ['real']);
+    const files = await loader.readNavigation(entry, { view: 'files' });
+    assert.ok(files.files.some(node => node.name === 'tests'));
+    assert.ok(files.files.some(node => node.name === 'examples'));
+  });
+
   test(label + ' readSkill and navigation share identity and unbounded subskill discovery', async t => {
     const deep = 'one/two/three/four/five/six/seven';
     const { loader } = fixture(t, { 'SKILL.md': '# Entire instructions', [deep + '/SKILL.md']: child('deep') }, remote);
