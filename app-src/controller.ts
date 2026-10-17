@@ -113,6 +113,7 @@ const attach = $<HTMLButtonElement>("d-attach");
 const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
+const previewOpenHost = $<HTMLButtonElement>("preview-open-host");
 const previewContent = $<HTMLPreElement>("preview-content");
 const previewImageWrap = $<HTMLDivElement>("preview-image-wrap");
 const previewImage = $<HTMLImageElement>("preview-image");
@@ -291,6 +292,25 @@ const relativeTime = (value?: number | null) => {
   if (days < 30) return `${days} 天前`;
   const months = Math.floor(days / 30);
   return months < 12 ? `${months} 个月前` : `${Math.floor(months / 12)} 年前`;
+};
+const fileTypeLabel = (mime?: string) => {
+  const labels: Record<string, string> = {
+    "application/pdf": "PDF 文档",
+    "application/msword": "Word 文档（旧版）",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word 文档",
+    "application/vnd.ms-excel": "Excel 工作簿（旧版）",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel 工作簿",
+    "application/vnd.ms-excel.sheet.macroEnabled.12": "Excel 启用宏工作簿",
+    "application/vnd.ms-powerpoint": "PowerPoint 演示文稿（旧版）",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint 演示文稿",
+    "application/vnd.openxmlformats-officedocument.presentationml.slideshow": "PowerPoint 放映文件",
+    "application/zip": "ZIP 压缩包",
+    "application/x-7z-compressed": "7z 压缩包",
+    "application/vnd.rar": "RAR 压缩包",
+    "application/x-tar": "TAR 归档",
+    "application/gzip": "Gzip 压缩文件",
+  };
+  return (mime && labels[mime]) || mime || "未知类型";
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
 const escapeHtml = (value: string) => value
@@ -505,6 +525,10 @@ function updateSearchMore() {
     : `加载更多搜索结果（${shown}/${total}）`;
 }
 
+function syncPreviewHostButton() {
+  previewOpenHost.hidden = !detailLocalPath || $("file-preview").hidden;
+}
+
 function cacheBadge(state?: CacheSkill) {
   lastCacheState = state;
   const badge = $("d-cached");
@@ -517,6 +541,7 @@ function cacheBadge(state?: CacheSkill) {
     detailLocalPath = "";
     badge.textContent = state ? "技能不存在" : "检查缓存…";
     badge.className = "badge warn";
+    syncPreviewHostButton();
     updateClearCacheButton();
     return;
   }
@@ -525,6 +550,7 @@ function cacheBadge(state?: CacheSkill) {
     badge.textContent = "全局入口";
     badge.className = "badge router";
     detail.textContent = "直接读取源仓库根 SKILL.md · 随源更新";
+    syncPreviewHostButton();
     updateClearCacheButton();
     return;
   }
@@ -549,6 +575,7 @@ function cacheBadge(state?: CacheSkill) {
     badge.textContent = "尚未缓存";
     detail.textContent = "读取说明时会下载完整技能";
   }
+  syncPreviewHostButton();
   updateClearCacheButton();
 }
 
@@ -857,6 +884,7 @@ async function openFile(path: string) {
   previewMediaMeta.textContent = "";
   previewMore.hidden = true;
   $("file-preview").hidden = false;
+  syncPreviewHostButton();
   $("file-preview").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
   await loadFileChunk(path, 0, false);
 }
@@ -895,7 +923,7 @@ async function loadFileChunk(path: string, offset: number, append: boolean) {
     const combined = (append ? previewText : "") + result.content;
     const limited = combined.length > FILE_PREVIEW_CHARS;
     previewText = result.binary
-      ? `这是二进制文件（${result.mime_type ?? "application/octet-stream"}，${formatBytes(result.size_bytes)}）。\n\n界面不展示内部字节。请使用“复制完整路径”，从技能缓存或 local_path 打开。`
+      ? `这是 ${fileTypeLabel(result.mime_type)}（${formatBytes(result.size_bytes)}）。\n\nApp 不解析这类内部字节。请点击“在 Codex 中打开”，交给宿主查看器或对应技能处理；也可复制完整路径手动打开。`
       : limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
     previewNextOffset = result.binary || limited ? undefined : result.next_offset;
     previewContent.hidden = false;
@@ -927,6 +955,7 @@ function closePreview() {
   previewImage.alt = "";
   previewImageWrap.hidden = true;
   previewMediaMeta.textContent = "";
+  syncPreviewHostButton();
   $("preview-path").textContent = "";
   previewMore.hidden = true;
 }
@@ -1188,6 +1217,20 @@ $("nav-next").onclick = () => {
   } else void loadExplorer(false);
 };
 $("preview-close").onclick = closePreview;
+previewOpenHost.onclick = async () => {
+  if (!previewCopyPath) return;
+  previewOpenHost.disabled = true;
+  try {
+    await transport.request("openai/files/open", { path: previewCopyPath }, 15_000);
+    status(`已交给 Codex 打开：${previewPath}`);
+  } catch (error) {
+    status(
+      `宿主未能打开该文件：${errorMessage(error)}。可点击“复制路径”使用原生应用打开。`
+    );
+  } finally {
+    previewOpenHost.disabled = false;
+  }
+};
 previewMore.onclick = () => {
   if (previewPath && previewNextOffset !== undefined) void loadFileChunk(previewPath, previewNextOffset, true);
 };

@@ -679,10 +679,16 @@ test("Office files show metadata and a copyable absolute path instead of ZIP byt
     ...fileResult(""), binary: true, bytes_returned: 0, has_more: false,
     mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size_bytes: 4096,
   }});
-  assert.match(app.node("preview-content").textContent, /二进制文件/);
+  assert.match(app.node("preview-content").textContent, /Excel 工作簿/);
   assert.doesNotMatch(app.node("preview-content").textContent, /PK/);
   assert.equal(app.node("preview-copy").textContent, "复制完整路径");
+  assert.equal(app.node("preview-open-host").hidden, false);
   assert.equal(app.node("preview-more").hidden, true);
+  app.node("preview-open-host").onclick(); await app.flush();
+  const openRequest = app.latest("openai/files/open");
+  assert.equal(openRequest.params.path, "/cache/alpha/reports/monthly.xlsx");
+  await app.reply(openRequest, {});
+  assert.match(app.node("status").textContent, /已交给 Codex 打开/);
   await app.dispose();
 });
 

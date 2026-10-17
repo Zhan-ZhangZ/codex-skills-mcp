@@ -23,10 +23,27 @@ beta.8 在 beta.7 的三页签技能详情之上，完成用户每天首先看�
 ## 图片文件预览
 
 - 文件页识别 PNG、JPEG、GIF、WebP、BMP、ICO 与 AVIF，通过 app-only base64 通道在 App 内直接显示，不再只给出“请去本地路径打开”。
-- 图片单张上限 8 MiB；超过上限、SVG 等非栅格格式以及 Office、压缩包等其他二进制仍显示 MIME、大小和完整路径，避免把不可信容器内容塞进页面。
+- 图片单张上限 8 MiB；超过上限和 SVG 等非栅格格式使用宿主交接或路径兜底。
 - 图片区使用棋盘底、最大高度与等比缩放，桌面和 430px 窄屏都不会撑破文件页。
 
 ![PNG 文件内联预览](benchmarks/app-preview-image.jpg)
+
+## 文件打开策略
+
+MCP App 只内置轻量的浏览器原生预览，不承担通用 Office/PDF 解析器的体积和维护成本：
+
+| 类型 | 处理 |
+|---|---|
+| 文本、源码、Markdown、JSON、CSV 等 | App 内直接显示，大文件按字节分段 |
+| PNG、JPEG、GIF、WebP、BMP、ICO、AVIF | App 内图片预览 |
+| DOCX、XLSX/XLSM、PPTX/PPSX、PDF | 显示文件类型、大小、缓存状态和完整路径；“在 Codex 中打开”调用宿主 `openai/files/open` |
+| DOC、XLS、PPT、ODT/ODS/ODP、EPUB | 同样交接宿主，由宿主查看器或对应技能处理 |
+| ZIP、7Z、RAR、TAR、GZ、XZ | 交接宿主；App 不展开不受信任的压缩包 |
+| 音视频、字体、数据库、PSD、WASM、可执行文件等 | 交接宿主；无法打开时保留完整路径与复制按钮 |
+
+宿主未提供文件打开能力或打开失败时，App 会显示失败原因并保留“复制完整路径”，不会把内容上传到第三方服务。这样 xlsx、docx 等格式由 Codex 原生能力处理，MCP 包不增加 Office/PDF 解析依赖。
+
+![Excel 文件交给 Codex 打开](benchmarks/app-preview-office-handoff.jpg)
 
 ## Markdown 文件链接
 

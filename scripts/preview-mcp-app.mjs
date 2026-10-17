@@ -72,6 +72,7 @@ function navigationArguments(args) {
     { name: "README.md", path: "README.md", type: "file", size_bytes: 3200, text: "", excerpted: false },
     { name: "requirements.txt", path: "requirements.txt", type: "file", size_bytes: 96, text: "", excerpted: false },
     { name: "brand-logo.png", path: "brand-logo.png", type: "file", size_bytes: 18000, text: "", excerpted: false },
+    { name: "monthly.xlsx", path: "monthly.xlsx", type: "file", size_bytes: 4096, text: "", excerpted: false },
     { name: "dataset.jsonl", path: "dataset.jsonl", type: "file", size_bytes: 58720256, text: "", excerpted: false },
   ];
   return {
@@ -122,6 +123,7 @@ addEventListener("message", (event) => {
       } });
       return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
         skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
+          local_path: "/cache/awesome-journal-skills",
           files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
     }
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
@@ -130,6 +132,13 @@ addEventListener("message", (event) => {
         return reply(message.id, { structuredContent: {
           content: "", size_bytes: 18000, offset: 0, bytes_returned: 0,
           has_more: false, binary: true, mime_type: "image/png",
+        } });
+      }
+      if (/[.]xlsx$/i.test(String(args.file_path || ""))) {
+        return reply(message.id, { structuredContent: {
+          content: "", size_bytes: 4096, offset: 0, bytes_returned: 0,
+          has_more: false, binary: true,
+          mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         } });
       }
       const large = String(args.file_path || "").endsWith("dataset.jsonl");
@@ -181,6 +190,13 @@ const timer = setInterval(() => {
       if (doc.querySelector("#preview-image")?.getAttribute("src")?.startsWith("data:image/png;base64,")) {
         clearInterval(timer);
       }
+    }
+    if (state === "office_preview") {
+      if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
+      const rows = [...(doc.querySelectorAll("#nav-list .nav-row") || [])];
+      const officeRow = rows.find((row) => row.textContent.includes("monthly.xlsx"));
+      if (officeRow && doc.querySelector("#file-preview")?.hidden !== false) officeRow.click();
+      if (doc.querySelector("#preview-open-host")?.hidden === false) clearInterval(timer);
     }
     if (state === "files" || state === "file_preview" || state === "large_preview") {
       if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
@@ -287,6 +303,8 @@ try {
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "00_codex_skills" && document.querySelector("#app")?.contentDocument?.querySelector("#d-cached")?.textContent === "全局入口" && window.__rpcLog?.some(request => request.method === "resources/read" && request.uri === "skill://00_codex_skills")`
     : values.state === "image_preview"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-image")?.getAttribute("src")?.startsWith("data:image/png;base64,")`
+    : values.state === "office_preview"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-open-host")?.hidden === false && document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Excel")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"

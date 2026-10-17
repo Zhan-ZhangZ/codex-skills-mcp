@@ -345,6 +345,10 @@
     .preview-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 9px; }
     .preview-toolbar strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
     .preview-toolbar button { padding: 5px 9px; font-size: 11px; }
+    #preview-open-host {
+      border-color: rgba(135, 188, 255, .32); color: #eef7ff;
+      background: rgba(70, 112, 190, .18);
+    }
     #preview-content { max-height: 43vh; }
     #preview-image-wrap {
       display: grid; place-items: center; gap: 9px; max-height: 45vh; padding: 12px;
@@ -525,6 +529,7 @@
           <div class="preview-toolbar">
             <strong id="preview-path"></strong>
             <button id="preview-more" hidden>加载更多</button>
+            <button id="preview-open-host" hidden>在 Codex 中打开</button>
             <button id="preview-copy">复制路径</button>
             <button id="preview-close">关闭</button>
           </div>
