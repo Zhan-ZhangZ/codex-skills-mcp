@@ -60,6 +60,33 @@
       padding: 14px; border-radius: 10px; border: 1px solid var(--border);
       background: var(--secondary); max-height: 55vh; overflow: auto;
     }
+    .doc-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 7px; }
+    .doc-toolbar button { padding: 4px 9px; font-size: 11.5px; }
+    .markdown {
+      font-size: 13px; line-height: 1.72; padding: 16px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--secondary);
+      max-height: 58vh; overflow: auto; overflow-wrap: anywhere;
+    }
+    .markdown > :first-child { margin-top: 0; }
+    .markdown > :last-child { margin-bottom: 0; }
+    .markdown h1, .markdown h2, .markdown h3, .markdown h4 { line-height: 1.35; margin: 1.15em 0 .45em; }
+    .markdown h1 { font-size: 1.45em; }
+    .markdown h2 { font-size: 1.22em; }
+    .markdown h3 { font-size: 1.08em; }
+    .markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown table { margin: .6em 0; }
+    .markdown ul, .markdown ol { padding-left: 1.5em; }
+    .markdown li + li { margin-top: .22em; }
+    .markdown code {
+      font: .92em ui-monospace, SFMono-Regular, Menlo, monospace;
+      padding: .12em .35em; border-radius: 4px; background: color-mix(in srgb, var(--foreground) 10%, transparent);
+    }
+    .markdown pre { max-height: none; overflow: auto; padding: 11px; margin: .75em 0; }
+    .markdown pre code { padding: 0; background: transparent; }
+    .markdown blockquote { padding-left: 11px; border-left: 3px solid var(--border); color: var(--muted-foreground); }
+    .markdown table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+    .markdown th, .markdown td { border: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+    .markdown a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+    .markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
     .detail-tabs {
       display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border);
       overflow-x: auto; scrollbar-width: thin;
@@ -162,7 +189,12 @@
       </div>
       <section id="instructions-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-instructions">
         <p id="d-revision-note" class="detail-summary" role="note" hidden></p>
-        <pre id="d-md" tabindex="0" aria-label="技能说明预览">正在下载并读取完整技能…</pre>
+        <div class="doc-toolbar">
+          <span class="muted">Markdown 安全渲染</span>
+          <button id="doc-toggle">查看原文</button>
+        </div>
+        <div id="d-md-rendered" class="markdown" tabindex="0" aria-label="技能说明预览">正在下载并读取完整技能…</div>
+        <pre id="d-md" tabindex="0" aria-label="技能说明原文" hidden>正在下载并读取完整技能…</pre>
       </section>
       <section id="explorer-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
         <div class="explorer-toolbar">

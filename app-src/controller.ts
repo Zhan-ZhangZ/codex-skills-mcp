@@ -2,6 +2,8 @@
  * controller owns the initialize handshake, navigation, detail explorer and
  * request lifecycle. */
 import { createAppTransport } from "@openai/mcp-extensions/app/transport";
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 
 type SkillCard = { name: string; description: string; cached: boolean };
 type Category = { name: string; skill_count: number };
@@ -84,6 +86,9 @@ const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
 const searchMore = $<HTMLButtonElement>("search-more");
 const detailProgress = $<HTMLProgressElement>("d-progress");
+const renderedInstructions = $<HTMLDivElement>("d-md-rendered");
+const instructionRaw = $<HTMLPreElement>("d-md");
+const instructionToggle = $<HTMLButtonElement>("doc-toggle");
 const PROTOCOL_VERSION = "2026-01-26";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
@@ -113,6 +118,7 @@ let searchMoreLoading = false;
 let detailProgressToken: string | undefined;
 let progressPollTimer: ReturnType<typeof setInterval> | undefined;
 let progressPollLoading = false;
+let instructionMode: "rendered" | "raw" = "rendered";
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -207,6 +213,32 @@ const formatBytes = (bytes = 0) => {
   return `${bytes} B`;
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
+const escapeHtml = (value: string) => value
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+function setInstructionMode(mode: "rendered" | "raw") {
+  instructionMode = mode;
+  renderedInstructions.hidden = mode !== "rendered";
+  instructionRaw.hidden = mode !== "raw";
+  instructionToggle.textContent = mode === "rendered" ? "查看原文" : "返回渲染";
+  instructionToggle.setAttribute("aria-pressed", String(mode === "raw"));
+}
+
+function renderInstructions(text: string) {
+  instructionRaw.textContent = text;
+  try {
+    const parsed = marked.parse(text, { async: false, gfm: true, breaks: false });
+    renderedInstructions.innerHTML = DOMPurify.sanitize(String(parsed), {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["img", "video", "audio", "iframe", "object", "embed", "form", "input", "button", "style", "link", "meta"],
+      FORBID_ATTR: ["style"],
+    });
+  } catch {
+    renderedInstructions.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+  }
+  setInstructionMode("rendered");
+}
 
 async function call<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const result = await transport.request<ToolResult<T>>("tools/call", { name, arguments: args }, 60_000);
@@ -610,7 +642,9 @@ function showView(next: View) {
     if (previous !== next) attachmentStatus("");
     cacheStatusRevision++;
     cacheBadge();
-    $("d-md").textContent = "正在下载并读取完整技能…";
+    instructionRaw.textContent = "正在下载并读取完整技能…";
+    renderedInstructions.textContent = "正在下载并读取完整技能…";
+    setInstructionMode("rendered");
     $("d-cache-detail").textContent = "";
     detailProgress.hidden = true;
     stopProgressPolling();
@@ -648,7 +682,7 @@ async function navigate(next: View) {
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
       if (!current()) return;
-      $("d-md").textContent = text;
+      renderInstructions(text);
       markMaterialized();
       status("说明已加载；可切换文件或子技能继续查看");
       void refreshCacheStatus(next.skill.name, token);
@@ -680,7 +714,9 @@ async function navigate(next: View) {
   } catch (error) {
     if (!current()) return;
     if (next.view === "detail") {
-      $("d-md").textContent = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      const failure = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      instructionRaw.textContent = failure;
+      renderedInstructions.textContent = failure;
       detailProgress.hidden = true;
       stopProgressPolling();
       void refreshCacheStatus(next.skill.name, token);
@@ -713,6 +749,7 @@ attach.onclick = async () => {
 
 $("back").onclick = () => void navigate(view.view === "detail" ? view.from : { view: "home" });
 $("retry").onclick = () => retry?.();
+instructionToggle.onclick = () => setInstructionMode(instructionMode === "rendered" ? "raw" : "rendered");
 searchMore.onclick = async () => {
   if (view.view !== "search" || !currentSearch || searchMoreLoading) return;
   const selected = view;

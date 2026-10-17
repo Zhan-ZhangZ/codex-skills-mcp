@@ -157,6 +157,25 @@ test("detail back returns to its search and successful preview updates cache bad
   await app.dispose();
 });
 
+test("instructions default to rendered view and preserve an exact raw toggle", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const text = "# Alpha\n\n- item one\n- item two";
+  await app.reply(app.latest("resources/read"), { contents: [{ text }] });
+  assert.equal(app.node("d-md").textContent, text);
+  assert.equal(app.node("d-md").hidden, true);
+  assert.equal(app.node("d-md-rendered").hidden, false);
+  assert.equal(app.node("doc-toggle").textContent, "查看原文");
+  app.node("doc-toggle").onclick();
+  assert.equal(app.node("d-md").hidden, false);
+  assert.equal(app.node("d-md-rendered").hidden, true);
+  assert.equal(app.node("doc-toggle").textContent, "返回渲染");
+  app.node("doc-toggle").onclick();
+  assert.equal(app.node("d-md").hidden, true);
+  assert.equal(app.node("d-md-rendered").hidden, false);
+  await app.dispose();
+});
+
 test("late detail content never replaces a different skill preview", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();

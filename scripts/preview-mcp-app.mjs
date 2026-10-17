@@ -67,7 +67,7 @@ const state = ${JSON.stringify(values.state)};
 const skills = ${JSON.stringify(skills)};
 const navigationArguments = ${navigationArguments.toString()};
 window.__rpcLog = [];
-const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。";
+const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
 function reply(id, result) { frame.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*"); }
 addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow) return;
@@ -233,6 +233,11 @@ try {
     });
     throw new Error(`App did not reach the ${values.state} preview state: ${debug.result?.value} ${runtimeErrors.join(" ")}`);
   }
+  const unsafe = await command("Runtime.evaluate", {
+    expression: `(() => { const doc = document.querySelector("#app")?.contentDocument; return Boolean(doc?.body?.dataset.xss || doc?.querySelector("#d-md-rendered script") || [...(doc?.querySelectorAll("#d-md-rendered a") || [])].some(a => a.getAttribute("href")?.startsWith("javascript:"))); })()`,
+    returnByValue: true,
+  });
+  if (unsafe.result?.value === true) throw new Error("Rendered Markdown retained unsafe HTML");
   const shot = await command("Page.captureScreenshot", { format: "png", fromSurface: true, captureBeyondViewport: false });
   await writeFile(output, Buffer.from(shot.data, "base64"));
   socket.close();
