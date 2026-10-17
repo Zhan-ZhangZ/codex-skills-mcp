@@ -242,8 +242,10 @@ test("instructions reject corrupted supporting downloads even when SKILL.md is r
 
 for (const mode of ["soft deadline", "hard deadline", "cancellation"]) {
   test(`resource instructions preserve ${mode} during full materialization and permit retry`, async (t) => {
-    const config = setup(t, { isRemote: true, softDeadlineMs: mode === "soft deadline" ? 20 : 0,
-      hardDeadlineMs: mode === "hard deadline" ? 20 : 5000 });
+    // Keep the deadline well above timer startup noise on shared CI runners;
+    // this test covers retry semantics, not a precise 20 ms threshold.
+    const config = setup(t, { isRemote: true, softDeadlineMs: mode === "soft deadline" ? 200 : 0,
+      hardDeadlineMs: mode === "hard deadline" ? 200 : 5000 });
     const fixture = remoteFixture(config, { "SKILL.md": "# root", "support.md": "support" });
     let release;
     let started;
