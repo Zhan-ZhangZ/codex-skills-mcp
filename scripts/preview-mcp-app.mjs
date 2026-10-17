@@ -105,9 +105,17 @@ addEventListener("message", (event) => {
       name: args.name, found: true, cleared: true, local_path: "/cache/skill",
       files_removed: 2281, bytes_removed: 48234496, cache_mode: "remote",
     } });
-    if (name === "skill_status") return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
-      skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
-        files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
+    if (name === "skill_status") {
+      if (args.names === "00_codex_skills") return reply(message.id, { structuredContent: {
+        requested: 1, complete_count: 1, truncated: false,
+        skills: [{ name: "00_codex_skills", found: true, root: true, cacheable: false,
+          cached: true, complete: true, catalog_current: true, local_path: "",
+          files_total: 1, files_missing_count: 0, size_bytes: 0, completed_at: null }],
+      } });
+      return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
+        skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
+          files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
+    }
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
     if (name === "load_skill_file") {
       const large = String(args.file_path || "").endsWith("dataset.jsonl");
@@ -253,7 +261,7 @@ try {
     : values.state === "internal_link"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "butler_link"
-    ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "00_codex_skills" && window.__rpcLog?.some(request => request.method === "resources/read" && request.uri === "skill://00_codex_skills")`
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "00_codex_skills" && document.querySelector("#app")?.contentDocument?.querySelector("#d-cached")?.textContent === "全局入口" && window.__rpcLog?.some(request => request.method === "resources/read" && request.uri === "skill://00_codex_skills")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"

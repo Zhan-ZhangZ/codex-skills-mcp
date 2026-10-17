@@ -270,6 +270,14 @@ test("the global SKILL.md link routes to the library butler", async () => {
   });
   await app.flush();
   assert.equal(app.latestTool("skill_status").params.arguments.names, "00_codex_skills");
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "00_codex_skills", found: true, root: true, cacheable: false,
+      cached: true, complete: true, catalog_current: true, local_path: "",
+      files_total: 1, files_missing_count: 0, size_bytes: 0, completed_at: null }],
+  }});
+  assert.equal(app.node("d-cached").textContent, "全局入口");
+  assert.equal(app.node("d-clear-cache").hidden, true);
   assert.match(app.latest("resources/read").params.uri, /^skill:\/\/00_codex_skills$/);
   await app.dispose();
 });

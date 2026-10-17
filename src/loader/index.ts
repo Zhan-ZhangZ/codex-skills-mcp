@@ -875,6 +875,10 @@ export class SkillLoader {
    */
   async clearCache(entry: ManifestEntry): Promise<ClearSkillCacheResult> {
     if (!this.config.isRemote) throw new Error("本地技能目录不是可清除的下载缓存");
+    const relativePath = entry.relative_path.replace(/^\.\//, "").replace(/\/+$/, "").trim();
+    if (!relativePath || relativePath === ".") {
+      throw new Error("技能库根入口不是独立缓存目录，拒绝清除");
+    }
     const progress = readSkillDownloadProgress(entry.name);
     if (progress?.active) throw new Error("技能正在下载，完成后再清除缓存");
 

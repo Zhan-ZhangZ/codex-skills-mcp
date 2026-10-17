@@ -155,6 +155,10 @@ test("cache clearing rejects local libraries, active downloads and symlink targe
   fs.symlinkSync(outside, linked.directory);
   await assert.rejects(linked.loader.clearCache(entry), /Symbolic|Symlink|符号链接/i);
   assert.equal(fs.existsSync(outside), true);
+
+  const rootEntry = { ...entry, name: "root-router", relative_path: "./" };
+  await assert.rejects(active.loader.clearCache(rootEntry), /根入口|root/i);
+  assert.equal(fs.existsSync(active.config.skillsDir), true);
 });
 
 test("summary cache is bound to source identity and catalog content SHA", async (t) => {

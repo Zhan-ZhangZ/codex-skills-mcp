@@ -54,6 +54,8 @@ type NavigationResult = {
 type CacheSkill = {
   name: string;
   found: boolean;
+  root?: boolean;
+  cacheable?: boolean;
   cached?: boolean;
   complete?: boolean;
   catalog_current?: boolean | null;
@@ -509,6 +511,14 @@ function cacheBadge(state?: CacheSkill) {
     updateClearCacheButton();
     return;
   }
+  if (state.root) {
+    detailLocalPath = "";
+    badge.textContent = "全局入口";
+    badge.className = "badge router";
+    detail.textContent = "直接读取源仓库根 SKILL.md · 随源更新";
+    updateClearCacheButton();
+    return;
+  }
   detailLocalPath = state.local_path ?? "";
   const count = state.files_total ?? 0;
   const size = formatBytes(state.size_bytes ?? 0);
@@ -552,7 +562,7 @@ function updateClearCacheButton() {
   const armed = clearCacheArmed;
   resetClearCacheButton();
   clearCacheBusy = false;
-  if (cacheMode === "local") {
+  if (cacheMode === "local" || lastCacheState?.cacheable === false) {
     clearCacheButton.hidden = true;
     clearCacheButton.disabled = true;
     return;
@@ -587,6 +597,7 @@ async function refreshCacheStatus(name: string, token: number) {
 
 function markMaterialized() {
   detailMaterializing = false;
+  const rootSkill = view.view === "detail" && view.skill.name === butlerName;
   lastCacheState = {
     ...lastCacheState,
     name: view.view === "detail" ? view.skill.name : lastCacheState?.name ?? "",
@@ -596,9 +607,11 @@ function markMaterialized() {
   };
   cacheStatusRevision++;
   const badge = $("d-cached");
-  badge.textContent = "已完整缓存";
-  badge.className = "badge on";
-  $("d-cache-detail").textContent = "正在读取文件统计…";
+  badge.textContent = rootSkill ? "全局入口" : "已完整缓存";
+  badge.className = rootSkill ? "badge router" : "badge on";
+  $("d-cache-detail").textContent = rootSkill
+    ? "直接读取源仓库根 SKILL.md · 随源更新"
+    : "正在读取文件统计…";
   $("d-revision-note").hidden = true;
   detailProgress.hidden = true;
   stopProgressPolling();
@@ -900,13 +913,14 @@ function showView(next: View) {
     if (previous !== next) attachmentStatus("");
     cacheStatusRevision++;
     resetClearCacheButton();
-    detailMaterializing = !next.skill.cached;
+    const rootSkill = next.skill.name === butlerName;
+    detailMaterializing = !rootSkill && !next.skill.cached;
     cacheBadge();
     instructionRaw.textContent = "正在下载并读取完整技能…";
     renderedInstructions.textContent = "正在下载并读取完整技能…";
     setInstructionMode("rendered");
     $("d-cache-detail").textContent = "";
-    if (next.skill.cached) detailProgress.hidden = true;
+    if (next.skill.cached || rootSkill) detailProgress.hidden = true;
     else showDownloadProgress();
     stopProgressPolling();
     attach.disabled = attaching;

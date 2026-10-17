@@ -8,7 +8,11 @@ import { registerSkillStatus } from "../dist/tools/skill-status.js";
 
 async function clientFor(t, cache) {
   const entry = { name: "sample", description: "Fixture", category: "test" };
-  const engine = { findByName: (name) => name === entry.name ? entry : undefined };
+  const butler = { name: "00_codex_skills", description: "Router", category: "routing", relative_path: "./" };
+  const engine = {
+    findByName: (name) => name === entry.name ? entry : undefined,
+    getButlerEntry: () => butler,
+  };
   const loader = {
     downloadDeadlines: { softDeadlineMs: 0, hardDeadlineMs: 0 },
     cacheState: () => cache,
@@ -26,6 +30,7 @@ async function clientFor(t, cache) {
     read: async () => (await client.callTool({ name: "read_skill", arguments: { name: "sample" } })).content[0].text,
     status: async () => (await client.callTool({ name: "skill_status", arguments: { names: "sample" } })).content[0].text,
     statusData: async () => (await client.callTool({ name: "skill_status", arguments: { names: "sample" } })).structuredContent,
+    statusFor: async (name) => client.callTool({ name: "skill_status", arguments: { names: name } }),
   };
 }
 const cached = { cached: true, complete: false, localPath: "/fixture/sample", filesTotal: 13, filesMissing: [], sizeBytes: 1000 };
@@ -67,4 +72,15 @@ test("tools keep missing-file guidance and complete status for other cache state
   assert.match(complete, /The complete skill now lives/);
   assert.match(complete, /STEP 4: Execute/);
   assert.match(await client.status(), /1\/1 complete/);
+});
+
+test("the source-root router is found without being treated as a cache directory", async (t) => {
+  const client = await clientFor(t, { ...cached, complete: true, filesMissing: [] });
+  const result = await client.statusFor("00_codex_skills");
+  assert.match(result.content[0].text, /global router/);
+  assert.doesNotMatch(result.content[0].text, /Not found/);
+  assert.equal(result.structuredContent.skills[0].found, true);
+  assert.equal(result.structuredContent.skills[0].root, true);
+  assert.equal(result.structuredContent.skills[0].cacheable, false);
+  assert.equal(result.structuredContent.skills[0].complete, true);
 });

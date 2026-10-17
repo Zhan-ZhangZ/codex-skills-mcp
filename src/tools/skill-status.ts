@@ -49,12 +49,39 @@ export function registerSkillStatus(
         const lines: string[] = [];
         let completeCount = 0;
         const skills: Array<Record<string, unknown>> = [];
+        const butler = typeof searchEngine.getButlerEntry === "function"
+          ? searchEngine.getButlerEntry()
+          : undefined;
 
         for (const name of unique) {
-          const entry = searchEngine.findByName(name);
+          const entry = searchEngine.findByName(name)
+            ?? (butler?.name.toLowerCase() === name.toLowerCase() ? butler : undefined);
           if (!entry) {
             lines.push(`### ❌ ${name}\n- Not found in the library. Use search_skills to find the exact name.`);
             skills.push({ name, found: false });
+            continue;
+          }
+          if (butler && entry.name === butler.name) {
+            completeCount += 1;
+            skills.push({
+              name: entry.name,
+              found: true,
+              cached: true,
+              complete: true,
+              root: true,
+              cacheable: false,
+              catalog_current: true,
+              local_path: "",
+              files_total: 1,
+              files_missing_count: 0,
+              files_missing_preview: [],
+              size_bytes: 0,
+              completed_at: null,
+            });
+            lines.push(
+              `### 🌐 ${entry.name}\n` +
+              "- Status: ✅ global router — source-root SKILL.md is read directly; no separate cache directory"
+            );
             continue;
           }
           const cache = loader.cacheState(entry);

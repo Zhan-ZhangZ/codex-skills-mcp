@@ -31,6 +31,8 @@
     body {
       position: relative;
       isolation: isolate;
+      display: flex;
+      flex-direction: column;
       font: 14px/1.5 var(--font-sans, "Avenir Next", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif);
       min-height: 100vh;
       background:
@@ -69,7 +71,8 @@
       filter: blur(20px);
       animation: ambient-breathe 12s ease-in-out infinite alternate;
     }
-    .app-shell { width: min(100%, 1240px); margin: 0 auto; }
+    .app-shell { display: flex; flex: 1 0 auto; flex-direction: column; width: min(100%, 1240px); margin: 0 auto; }
+    main { flex: 1 0 auto; }
     [hidden] { display: none !important; }
     @keyframes ambient-breathe {
       from { transform: translateX(-52%) scale(.94); opacity: .72; }
@@ -245,6 +248,7 @@
       border: 1px solid var(--app-line); color: #b2c3da; white-space: nowrap;
     }
     .badge.on { border-color: rgba(119, 224, 181, .28); color: #9ee6c9; background: rgba(64, 161, 126, .08); }
+    .badge.router { border-color: rgba(125, 211, 252, .34); color: #bdeaff; background: rgba(58, 144, 190, .12); }
     .badge.warn { border-color: rgba(246, 193, 119, .3); color: #f1ca8d; background: rgba(166, 106, 18, .08); }
     .toolbar { display: flex; gap: 9px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
     #d-attach {
