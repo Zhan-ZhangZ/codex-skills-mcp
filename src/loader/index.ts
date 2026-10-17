@@ -92,6 +92,12 @@ export interface SkillFileReadResult {
   mime_type?: string;
 }
 
+export interface SkillImagePreviewResult {
+  mime_type: string;
+  size_bytes: number;
+  data_base64: string;
+}
+
 interface CatalogFile {
   path: string;
   size: number;
@@ -126,6 +132,7 @@ const MIN_FILE_CHUNK_BYTES = 1024;
 const MAX_FILE_CHUNK_BYTES = 2 * 1024 * 1024;
 const BINARY_MIME_TYPES: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".avif": "image/avif",
   ".ico": "image/x-icon", ".webp": "image/webp", ".tif": "image/tiff", ".tiff": "image/tiff",
   ".heic": "image/heic", ".bmp": "image/bmp",
   ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
@@ -146,6 +153,10 @@ const BINARY_MIME_TYPES: Record<string, string> = {
   ".sqlite": "application/vnd.sqlite3", ".sqlite3": "application/vnd.sqlite3",
   ".parquet": "application/vnd.apache.parquet", ".arrow": "application/vnd.apache.arrow.file",
 };
+const BROWSER_PREVIEW_IMAGE_MIME_TYPES = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp", "image/x-icon", "image/avif",
+]);
+const MAX_IMAGE_PREVIEW_BYTES = 8 * 1024 * 1024;
 const SUMMARY_CACHE_ENTRIES = 8192;
 const SUMMARY_CACHE_BYTES = 4 * 1024 * 1024;
 
@@ -823,6 +834,34 @@ export class SkillLoader {
       options.offset ?? 0,
       options.maxBytes ?? DEFAULT_FILE_CHUNK_BYTES,
     );
+  }
+
+  /** Read a browser-safe raster image for the App's inline preview. */
+  async previewImage(entry: ManifestEntry, filePath: string): Promise<SkillImagePreviewResult> {
+    if (this.config.isRemote) {
+      await this.ensureRemoteFetched(entry);
+    }
+    const skillPath = this.resolveSkillPath(entry);
+    const fullPath = resolveWithin(skillPath, filePath);
+    if (!existsSync(fullPath)) throw new Error(`File not found: ${filePath}`);
+    const info = statSync(fullPath);
+    if (!info.isFile()) throw new Error(`Path is not a regular file: ${filePath}`);
+    const mime = BINARY_MIME_TYPES[extname(fullPath).toLowerCase()];
+    if (!mime || !BROWSER_PREVIEW_IMAGE_MIME_TYPES.has(mime)) {
+      throw new Error("This file type cannot be previewed as an image");
+    }
+    if (info.size > MAX_IMAGE_PREVIEW_BYTES) {
+      throw new Error(
+        `Image is ${info.size} bytes; inline preview is limited to ${MAX_IMAGE_PREVIEW_BYTES} bytes. ` +
+        "Use the copied local path to open the original file."
+      );
+    }
+    const bytes = await readFile(fullPath);
+    return {
+      mime_type: mime,
+      size_bytes: bytes.length,
+      data_base64: bytes.toString("base64"),
+    };
   }
 
   /**

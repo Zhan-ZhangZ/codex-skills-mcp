@@ -28,6 +28,9 @@ function fixtures() {
   const loader = {
     cacheMode: "remote",
     isCached: () => true,
+    previewImage: async () => ({
+      mime_type: "image/png", size_bytes: 68, data_base64: "iVBORw0KGgo=",
+    }),
     clearCache: async () => ({
       found: true, cleared: true, local_path: "/cache/alpha",
       files_removed: 4, bytes_removed: 2048,
@@ -40,9 +43,9 @@ function fixtures() {
   return { tools, resources, loader, engine };
 }
 
-test("app-only tools expose standard read-only annotations and bounded input", () => {
+test("app-only tools expose standard read-only annotations and bounded input", async () => {
   const { tools } = fixtures();
-  for (const name of ["skills.browse", "skills.query", "skills.progress"]) {
+  for (const name of ["skills.browse", "skills.query", "skills.progress", "skills.previewImage"]) {
     const config = tools.get(name).config;
     assert.equal(config.annotations.readOnlyHint, true);
     assert.equal(config.annotations.destructiveHint, false);
@@ -59,6 +62,11 @@ test("app-only tools expose standard read-only annotations and bounded input", (
   assert.equal(clear.annotations.readOnlyHint, false);
   assert.equal(clear.annotations.destructiveHint, true);
   assert.deepEqual(clear._meta.ui.visibility, ["app"]);
+
+  const image = await tools.get("skills.previewImage").handler({ name: "alpha", path: "assets/hero.png" });
+  assert.equal(image.isError, undefined);
+  assert.equal(image.structuredContent.mime_type, "image/png");
+  assert.equal(image.structuredContent.data_base64, "iVBORw0KGgo=");
 });
 
 test("app progress tool returns the latest real download counters", async () => {

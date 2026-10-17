@@ -89,6 +89,11 @@ type FileReadResult = {
   binary: boolean;
   mime_type?: string;
 };
+type ImagePreviewResult = {
+  mime_type: string;
+  size_bytes: number;
+  data_base64: string;
+};
 type ExplorerState = {
   path: string;
   query: string;
@@ -108,6 +113,10 @@ const attach = $<HTMLButtonElement>("d-attach");
 const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
+const previewContent = $<HTMLPreElement>("preview-content");
+const previewImageWrap = $<HTMLDivElement>("preview-image-wrap");
+const previewImage = $<HTMLImageElement>("preview-image");
+const previewMediaMeta = $<HTMLElement>("preview-media-meta");
 const searchMore = $<HTMLButtonElement>("search-more");
 const detailProgress = $<HTMLDivElement>("d-progress");
 const progressFill = $<HTMLDivElement>("d-progress-fill");
@@ -840,7 +849,12 @@ async function openFile(path: string) {
   previewCopyPath = detailLocalPath ? `${detailLocalPath.replace(/[\\/]$/, "")}/${path}` : path;
   previewCopyButton.textContent = detailLocalPath ? "复制完整路径" : "复制路径";
   $("preview-path").textContent = path;
-  $("preview-content").textContent = "正在读取文件…";
+  previewContent.hidden = false;
+  previewContent.textContent = "正在读取文件…";
+  previewImage.src = "";
+  previewImage.alt = "";
+  previewImageWrap.hidden = true;
+  previewMediaMeta.textContent = "";
   previewMore.hidden = true;
   $("file-preview").hidden = false;
   $("file-preview").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
@@ -861,18 +875,39 @@ async function loadFileChunk(path: string, offset: number, append: boolean) {
       max_bytes: FILE_PREVIEW_BYTES,
     });
     if (disposed || view !== selected || previewRevision !== token) return;
+    if (result.binary && result.mime_type?.startsWith("image/")) {
+      previewNextOffset = undefined;
+      previewMore.hidden = true;
+      previewContent.hidden = true;
+      previewImageWrap.hidden = false;
+      previewMediaMeta.textContent =
+        `${result.mime_type.toUpperCase()} · ${formatBytes(result.size_bytes)}`;
+      previewImage.alt = path;
+      previewImage.src = "";
+      const image = await call<ImagePreviewResult>("skills.previewImage", {
+        name: selected.skill.name,
+        path,
+      });
+      if (disposed || view !== selected || previewRevision !== token) return;
+      previewImage.src = `data:${image.mime_type};base64,${image.data_base64}`;
+      return;
+    }
     const combined = (append ? previewText : "") + result.content;
     const limited = combined.length > FILE_PREVIEW_CHARS;
     previewText = result.binary
       ? `这是二进制文件（${result.mime_type ?? "application/octet-stream"}，${formatBytes(result.size_bytes)}）。\n\n界面不展示内部字节。请使用“复制完整路径”，从技能缓存或 local_path 打开。`
       : limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
     previewNextOffset = result.binary || limited ? undefined : result.next_offset;
-    $("preview-content").textContent = previewText;
+    previewContent.hidden = false;
+    previewImageWrap.hidden = true;
+    previewContent.textContent = previewText;
     previewMore.hidden = !previewNextOffset;
   } catch (error) {
     if (disposed || view !== selected || previewRevision !== token) return;
-    if (append) $("preview-content").textContent = previewText + `\n\n读取下一段失败：${errorMessage(error)}`;
-    else $("preview-content").textContent = `读取失败：${errorMessage(error)}`;
+    previewImageWrap.hidden = true;
+    previewContent.hidden = false;
+    if (append) previewContent.textContent = previewText + `\n\n读取下一段失败：${errorMessage(error)}`;
+    else previewContent.textContent = `读取失败：${errorMessage(error)}`;
     previewMore.hidden = previewNextOffset === undefined;
   } finally {
     if (!disposed && view === selected && previewRevision === token) previewMore.disabled = false;
@@ -886,7 +921,12 @@ function closePreview() {
   previewNextOffset = undefined;
   previewCopyPath = "";
   $("file-preview").hidden = true;
-  $("preview-content").textContent = "";
+  previewContent.textContent = "";
+  previewContent.hidden = false;
+  previewImage.src = "";
+  previewImage.alt = "";
+  previewImageWrap.hidden = true;
+  previewMediaMeta.textContent = "";
   $("preview-path").textContent = "";
   previewMore.hidden = true;
 }

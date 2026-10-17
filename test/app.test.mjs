@@ -255,6 +255,37 @@ test("rendered relative links open skill files instead of navigating the iframe"
   await app.dispose();
 });
 
+test("raster images render inline through the app-only image preview tool", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 2, files_missing_count: 0, size_bytes: 100 }],
+  }});
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "[Hero](./hero.png)" }] });
+  app.node("d-md-rendered").dispatch("click", {
+    target: { closest: () => ({ getAttribute: () => "./hero.png" }) },
+    preventDefault() {},
+  });
+  await app.flush();
+  await app.reply(app.latestTool("load_skill_file"), { structuredContent: {
+    content: "", size_bytes: 68, offset: 0, bytes_returned: 0,
+    has_more: false, binary: true, mime_type: "image/png",
+  }});
+  const imageRequest = app.latestTool("skills.previewImage");
+  assert.equal(imageRequest.params.arguments.name, "alpha");
+  assert.equal(imageRequest.params.arguments.path, "hero.png");
+  await app.reply(imageRequest, { structuredContent: {
+    mime_type: "image/png", size_bytes: 68, data_base64: "iVBORw0KGgo=",
+  }});
+  assert.equal(app.node("preview-content").hidden, true);
+  assert.equal(app.node("preview-image-wrap").hidden, false);
+  assert.equal(app.node("preview-image").src, "data:image/png;base64,iVBORw0KGgo=");
+  assert.match(app.node("preview-media-meta").textContent, /IMAGE\/PNG/);
+  await app.dispose();
+});
+
 test("the global SKILL.md link routes to the library butler", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();

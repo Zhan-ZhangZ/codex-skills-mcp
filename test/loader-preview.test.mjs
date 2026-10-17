@@ -165,6 +165,23 @@ test("Office archives and binary-looking files return metadata instead of raw by
   assert.equal(text.content, "plain UTF-8 text");
 });
 
+test("raster images expose an explicit base64 preview while other binaries stay metadata-only", async (t) => {
+  const config = setup(t);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  writeSkill(config, {
+    "SKILL.md": "# root",
+    "assets/hero.png": png,
+    "notes.custom": "plain text",
+  });
+  const loader = new SkillLoader(config, [entry]);
+  const preview = await loader.previewImage(entry, "assets/hero.png");
+  assert.equal(preview.mime_type, "image/png");
+  assert.equal(preview.size_bytes, png.length);
+  assert.equal(Buffer.from(preview.data_base64, "base64").equals(png), true);
+  await assert.rejects(loader.previewImage(entry, "notes.custom"), /cannot be previewed as an image/);
+  await assert.rejects(loader.previewImage(entry, "../outside.png"), /Path traversal/);
+});
+
 test("instructions reject a missing root file and escaping paths", async (t) => {
   const config = setup(t);
   const loader = new SkillLoader(config, [entry]);

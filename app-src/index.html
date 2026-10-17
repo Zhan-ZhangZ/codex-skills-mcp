@@ -346,6 +346,24 @@
     .preview-toolbar strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
     .preview-toolbar button { padding: 5px 9px; font-size: 11px; }
     #preview-content { max-height: 43vh; }
+    #preview-image-wrap {
+      display: grid; place-items: center; gap: 9px; max-height: 45vh; padding: 12px;
+      overflow: auto; border-radius: 15px; border: 1px solid var(--app-line);
+      background:
+        linear-gradient(45deg, rgba(137, 169, 217, .045) 25%, transparent 25%, transparent 75%, rgba(137, 169, 217, .045) 75%),
+        linear-gradient(45deg, rgba(137, 169, 217, .045) 25%, transparent 25%, transparent 75%, rgba(137, 169, 217, .045) 75%),
+        rgba(5, 13, 25, .76);
+      background-position: 0 0, 9px 9px;
+      background-size: 18px 18px;
+    }
+    #preview-image {
+      display: block; max-width: 100%; max-height: 39vh; object-fit: contain;
+      border-radius: 10px; box-shadow: 0 18px 55px rgba(0, 0, 0, .3);
+    }
+    #preview-media-meta {
+      color: var(--app-muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .03em;
+    }
     footer { margin-top: 22px; padding: 12px 2px 0; border-top: 1px solid rgba(146, 181, 236, .09); font-size: 11px; color: var(--app-faint); display: flex; align-items: center; gap: 10px; }
     .site-footer {
       margin-top: 12px; padding: 22px 2px 0; display: grid; grid-template-columns: minmax(0, .82fr) minmax(0, 1.6fr);
@@ -511,6 +529,10 @@
             <button id="preview-close">关闭</button>
           </div>
           <pre id="preview-content" tabindex="0">正在读取…</pre>
+          <div id="preview-image-wrap" hidden>
+            <img id="preview-image" alt="" />
+            <span id="preview-media-meta"></span>
+          </div>
         </section>
         <div id="nav-list" class="nav-list"></div>
         <p id="nav-empty" hidden></p>

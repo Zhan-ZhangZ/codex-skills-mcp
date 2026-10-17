@@ -15,7 +15,10 @@ const { values } = parseArgs({ options: {
   height: { type: "string", default: "900" },
 } });
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const appHtml = await readFile(resolve(root, "assets/app.html"), "utf8");
+const [appHtml, previewImageBase64] = await Promise.all([
+  readFile(resolve(root, "assets/app.html"), "utf8"),
+  readFile(resolve(root, "app-src/brand-logo.png")).then((bytes) => bytes.toString("base64")),
+]);
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const skills = [
@@ -68,6 +71,7 @@ function navigationArguments(args) {
     { name: "SKILL.md", path: "SKILL.md", type: "file", size_bytes: 6400, text: "", excerpted: false },
     { name: "README.md", path: "README.md", type: "file", size_bytes: 3200, text: "", excerpted: false },
     { name: "requirements.txt", path: "requirements.txt", type: "file", size_bytes: 96, text: "", excerpted: false },
+    { name: "brand-logo.png", path: "brand-logo.png", type: "file", size_bytes: 18000, text: "", excerpted: false },
     { name: "dataset.jsonl", path: "dataset.jsonl", type: "file", size_bytes: 58720256, text: "", excerpted: false },
   ];
   return {
@@ -85,6 +89,7 @@ const state = ${JSON.stringify(values.state)};
 const skills = ${JSON.stringify(skills)};
 const categories = ${JSON.stringify(categories)};
 const totalSkills = ${JSON.stringify(totalSkills)};
+const previewImageBase64 = ${JSON.stringify(previewImageBase64)};
 const navigationArguments = ${navigationArguments.toString()};
 window.__rpcLog = [];
 const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
@@ -105,6 +110,9 @@ addEventListener("message", (event) => {
       name: args.name, found: true, cleared: true, local_path: "/cache/skill",
       files_removed: 2281, bytes_removed: 48234496, cache_mode: "remote",
     } });
+    if (name === "skills.previewImage") return reply(message.id, { structuredContent: {
+      mime_type: "image/png", size_bytes: 18000, data_base64: previewImageBase64,
+    } });
     if (name === "skill_status") {
       if (args.names === "00_codex_skills") return reply(message.id, { structuredContent: {
         requested: 1, complete_count: 1, truncated: false,
@@ -118,6 +126,12 @@ addEventListener("message", (event) => {
     }
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
     if (name === "load_skill_file") {
+      if (/[.](?:png|jpe?g|gif|webp|bmp|ico|avif)$/i.test(String(args.file_path || ""))) {
+        return reply(message.id, { structuredContent: {
+          content: "", size_bytes: 18000, offset: 0, bytes_returned: 0,
+          has_more: false, binary: true, mime_type: "image/png",
+        } });
+      }
       const large = String(args.file_path || "").endsWith("dataset.jsonl");
       const content = large
         ? "{\\"id\\":1,\\"topic\\":\\"research design\\"}\\n{\\"id\\":2,\\"topic\\":\\"journal selection\\"}\\n…"
@@ -158,6 +172,15 @@ const timer = setInterval(() => {
     if (state === "butler_link" && !window.__butlerLinkClicked) {
       const link = doc.querySelector("#d-md-rendered a[href='../../../SKILL.md']");
       if (link) { window.__butlerLinkClicked = true; link.click(); }
+    }
+    if (state === "image_preview") {
+      if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
+      const rows = [...(doc.querySelectorAll("#nav-list .nav-row") || [])];
+      const imageRow = rows.find((row) => row.textContent.includes("brand-logo.png"));
+      if (imageRow && doc.querySelector("#file-preview")?.hidden !== false) imageRow.click();
+      if (doc.querySelector("#preview-image")?.getAttribute("src")?.startsWith("data:image/png;base64,")) {
+        clearInterval(timer);
+      }
     }
     if (state === "files" || state === "file_preview" || state === "large_preview") {
       if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
@@ -262,6 +285,8 @@ try {
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "butler_link"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "00_codex_skills" && document.querySelector("#app")?.contentDocument?.querySelector("#d-cached")?.textContent === "全局入口" && window.__rpcLog?.some(request => request.method === "resources/read" && request.uri === "skill://00_codex_skills")`
+    : values.state === "image_preview"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-image")?.getAttribute("src")?.startsWith("data:image/png;base64,")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"

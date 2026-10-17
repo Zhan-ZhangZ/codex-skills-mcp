@@ -288,6 +288,40 @@ export function registerCodexSkillsApp(
 
   registerAppTool(
     server,
+    "skills.previewImage",
+    {
+      title: "Preview a skill image",
+      description: "App-facing: read a raster image from a materialized skill for inline preview.",
+      inputSchema: z.object({
+        name: z.string().trim().min(1).max(500),
+        path: z.string().trim().min(1).max(2000),
+      }),
+      ...appOnly,
+    },
+    async ({ name, path }) => {
+      const entry = searchEngine.findByName(name);
+      if (!entry) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `Skill "${name}" not found.` }],
+        };
+      }
+      try {
+        return {
+          content: [],
+          structuredContent: { ...await loader.previewImage(entry, path) } as Record<string, unknown>,
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }],
+        };
+      }
+    }
+  );
+
+  registerAppTool(
+    server,
     "skills.clearCache",
     {
       title: "Clear one skill cache",
@@ -330,7 +364,7 @@ export function registerCodexSkillsApp(
 
   console.error(
     "[codex-skills-mcp] MCP App registered: skills.library (global), " +
-      "skills.tray (thread), skills.browse/query/progress/clearCache (app-facing)"
+      "skills.tray (thread), skills.browse/query/progress/previewImage/clearCache (app-facing)"
   );
   return true;
 }
