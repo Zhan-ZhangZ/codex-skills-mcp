@@ -74,6 +74,19 @@ node scripts/preview-mcp-app.mjs --state files --output /tmp/app.png
 - npm 包和插件产物在本轮发布前仍需重新执行 `check:package`。
 - 固定 Chrome 渲染已检查 430px 与 1180px 布局；真实 ChatGPT 宿主内的最终视觉验收仍需在发布前完成。
 
+### 实际 Codex MCP Apps 验收
+
+通过 Computer Use 连接的 `Codex MCP Apps` 托盘完成了以下真实宿主操作：
+
+- 将本地 MCP 配置临时切换到当前 `dist/index.js` 后，确认三页签版本实际加载。
+- `chubbyskills` 显示 107 个文件、510 KB、完整缓存；文件页返回 147 项，`SKILL.md` 可预览、复制和关闭。
+- 子技能页返回 14 项；搜索“播客”正确筛到 2 项。
+- 全局搜索“支持”显示 24/61，继续加载到 48/61、61/61，完成后按钮隐藏。
+- 未缓存的 5.8 MB `guizang-ppt-skill` 完成物化并显示完整缓存。
+- 发现宿主未转发资源请求的 progress notification，因此增加 `skills.progress` 轮询兜底；无通知环境下仍可显示真实计数。
+
+Markdown 安全渲染和轮询兜底是在这轮实际宿主验收后补充的，需要重启 MCP 进程后做最后一次视觉确认；此前已用固定 Chrome 宿主验证渲染、开关和危险 HTML 清洗。
+
 ## 边界
 
 - 大文件采用按需 byte range；界面累计预览达到 1M 字符后停止继续加载，并提示从 `local_path` 打开完整文件。
