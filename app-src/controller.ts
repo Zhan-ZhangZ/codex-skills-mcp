@@ -20,6 +20,7 @@ type View = Listing | { view: "detail"; skill: SkillCard; from: Listing };
 type BrowseResult = {
   categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[];
   results?: SkillCard[]; total?: number; offset?: number; has_more?: boolean;
+  butler?: string | null;
   cache_mode?: "remote" | "local";
   usage?: { total_reads: number; used_skills: number; total_failures: number };
 };
@@ -152,6 +153,7 @@ let clearCacheArmed = false;
 let clearCacheTimer: ReturnType<typeof setTimeout> | undefined;
 let detailMaterializing = false;
 let lastCacheState: CacheSkill | undefined;
+let butlerName = "00_codex_skills";
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -305,8 +307,98 @@ function renderInstructions(text: string) {
   } catch {
     renderedInstructions.innerHTML = `<pre>${escapeHtml(displayText.trimStart() || text)}</pre>`;
   }
+  if (typeof renderedInstructions.querySelectorAll === "function") {
+    renderedInstructions.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((link) => {
+      const href = link.getAttribute("href")?.trim() ?? "";
+      if (/^(?:https?:|mailto:)/i.test(href)) {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      }
+    });
+  }
   setInstructionMode("rendered");
 }
+
+type RelativeMarkdownTarget = {
+  path: string;
+  outside: number;
+  fragment: string;
+};
+
+function resolveRelativeMarkdownTarget(href: string): RelativeMarkdownTarget | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(href.trim());
+  } catch {
+    return null;
+  }
+  if (!decoded || /^(?:[a-z][a-z\d+.-]*:|\/)/i.test(decoded)) return null;
+  const hashAt = decoded.indexOf("#");
+  const fragment = hashAt >= 0 ? decoded.slice(hashAt + 1) : "";
+  const pathPart = (hashAt >= 0 ? decoded.slice(0, hashAt) : decoded)
+    .split("?", 1)[0]
+    .replace(/\\/g, "/");
+  if (!pathPart) return fragment ? { path: "", outside: 0, fragment } : null;
+  const segments: string[] = [];
+  let outside = 0;
+  for (const segment of pathPart.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length) segments.pop();
+      else outside++;
+    } else {
+      segments.push(segment);
+    }
+  }
+  return segments.length || outside
+    ? { path: segments.join("/"), outside, fragment }
+    : null;
+}
+
+function openMarkdownLink(href: string) {
+  if (/^(?:https?:|mailto:)/i.test(href)) {
+    const opened = window.open(href, "_blank", "noopener,noreferrer");
+    if (!opened) status(`浏览器阻止了外部链接，可复制地址访问：${href}`);
+    return;
+  }
+  const target = resolveRelativeMarkdownTarget(href);
+  if (!target) {
+    status("已阻止不支持的链接");
+    return;
+  }
+  if (target.fragment && !target.path) {
+    const decoded = (() => {
+      try { return decodeURIComponent(target.fragment); } catch { return target.fragment; }
+    })();
+    const element = document.getElementById(decoded);
+    element?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    if (!element) status("当前说明中没有找到这个段落锚点");
+    return;
+  }
+  if (target.outside > 0) {
+    if (target.path === "SKILL.md" && butlerName) {
+      const destination = view.view === "detail" ? view.from : { view: "home" as const };
+      void navigate({
+        view: "detail",
+        skill: { name: butlerName, description: "技能库全局路由入口", cached: false },
+        from: destination,
+      });
+      return;
+    }
+    status("该链接指向当前技能包之外，已阻止界面跳转");
+    return;
+  }
+  setDetailTab("files");
+  void openFile(target.path);
+}
+
+renderedInstructions.addEventListener("click", (event) => {
+  const anchor = (event.target as Element | null)?.closest?.("a") as HTMLAnchorElement | null;
+  const href = anchor?.getAttribute("href")?.trim();
+  if (!href) return;
+  event.preventDefault();
+  openMarkdownLink(href);
+});
 
 async function call<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const result = await transport.request<ToolResult<T>>("tools/call", { name, arguments: args }, 60_000);
@@ -373,6 +465,7 @@ function renderCategories(categories: Category[]) {
 
 function renderHomeMeta(data: BrowseResult) {
   if (data.cache_mode) cacheMode = data.cache_mode;
+  if (data.butler) butlerName = data.butler;
   const total = data.totalSkills ?? 0;
   const categories = data.categories?.length ?? 0;
   const usage = data.usage ?? { total_reads: 0, used_skills: 0, total_failures: 0 };

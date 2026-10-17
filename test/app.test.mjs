@@ -40,6 +40,8 @@ function harness() {
   let sequence = 0;
   const window = {
     parent: { postMessage(message) { sent.push(message); } },
+    opened: [],
+    open(url) { this.opened.push(url); return {}; },
     addEventListener(name, callback) { listeners.set(name, callback); },
     removeEventListener(name) { listeners.delete(name); },
     scrollTo() {},
@@ -228,6 +230,47 @@ test("instructions default to rendered view and preserve an exact raw toggle", a
   app.node("doc-toggle").onclick();
   assert.equal(app.node("d-md").hidden, true);
   assert.equal(app.node("d-md-rendered").hidden, false);
+  await app.dispose();
+});
+
+test("rendered relative links open skill files instead of navigating the iframe", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 2, files_missing_count: 0, size_bytes: 100 }],
+  }});
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha\n\n[README](./README.md)" }] });
+  let prevented = false;
+  app.node("d-md-rendered").dispatch("click", {
+    target: { closest: () => ({ getAttribute: () => "./README.md" }) },
+    preventDefault: () => { prevented = true; },
+  });
+  await app.flush();
+  assert.equal(prevented, true);
+  assert.equal(app.node("tab-files").attributes["aria-selected"], "true");
+  assert.equal(app.latestTool("load_skill_file").params.arguments.file_path, "README.md");
+  assert.equal(app.node("file-preview").hidden, false);
+  await app.dispose();
+});
+
+test("the global SKILL.md link routes to the library butler", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true,
+      catalog_current: true, files_total: 1, files_missing_count: 0, size_bytes: 100 }],
+  }});
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "[大管家](../../../SKILL.md)" }] });
+  app.node("d-md-rendered").dispatch("click", {
+    target: { closest: () => ({ getAttribute: () => "../../../SKILL.md" }) },
+    preventDefault() {},
+  });
+  await app.flush();
+  assert.equal(app.latestTool("skill_status").params.arguments.names, "00_codex_skills");
+  assert.match(app.latest("resources/read").params.uri, /^skill:\/\/00_codex_skills$/);
   await app.dispose();
 });
 

@@ -19,6 +19,19 @@ beta.8 在 beta.7 的三页签技能详情之上，完成用户每天首先看�
 
 服务端新增 app-only `skills.clearCache`，工具总数为 18。该工具不会出现在模型工具列表中，只供 MCP App 调用；本地源目录不会暴露删除入口。
 
+## Markdown 文件链接
+
+使用说明渲染后的相对链接现在由 App 自行接管，不再交给 iframe 直接导航：
+
+- `./README.md`、`bilibili-transcribe/SKILL.md` 等包内目标会切到“文件”页并直接预览对应文件。
+- `../../../SKILL.md` 这类指向全库根目录的目标会打开当前清单提供的大管家技能。
+- `http://`、`https://` 与 `mailto:` 使用新窗口，并带 `noopener noreferrer`。
+- 越出技能根目录的其他路径会被阻止，并给出状态提示，避免跳出到 404 或宿主错误页。
+
+源库 290 份顶层 `SKILL.md` 中共发现 559 个相对本地链接，其中 558 个位于技能包内部。缺少点击拦截是跨技能通病；chubbyskills 同时包含包内 README 和指向全库大管家的链接，因此最先暴露。模拟宿主新增 `internal_link` 与 `butler_link` 两条真实 DOM 点击链路，已验证 README 会打开文件预览、全库根链接会请求 `skill://00_codex_skills`。
+
+![使用说明相对链接打开 README](benchmarks/app-preview-internal-link.jpg)
+
 ## 实时数据
 
 - 首页总数由服务端当前分类数组求和，不在前端写死。
@@ -48,7 +61,7 @@ beta.8 在 beta.7 的三页签技能详情之上，完成用户每天首先看�
 
 ## 验证
 
-- MCP 全量回归 **261/261** 通过；Node 22 本地复跑同为 **261/261**。
+- MCP 全量回归 **263/263** 通过；Node 22 本地复跑同为 **263/263**。
 - GitHub CI 的 Node 22/24 两个任务均通过；对应提交 `050162b`。
 - npm tarball 与插件 bundle 的 stdio 冒烟均通过，产物工具数为 18。
 - 真实远端清单冒烟：291 条 manifest、290 个可索引技能；`humanizer` 冷下载 9 个文件并完成 SHA/大小/执行位校验，热读不发网络请求。

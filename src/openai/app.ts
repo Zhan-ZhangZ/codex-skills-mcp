@@ -97,11 +97,14 @@ export function registerCodexSkillsApp(
     void searchEngine.maybeRefreshManifest();
     const categories = searchEngine.getCategories();
     const totalSkills = categories.reduce((s, c) => s + c.skill_count, 0);
+    const butler = typeof searchEngine.getButlerEntry === "function"
+      ? searchEngine.getButlerEntry()?.name ?? null
+      : null;
     return {
       page: "library",
       categories,
       totalSkills,
-      butler: "00_codex_skills",
+      butler,
       cache_mode: loader.cacheMode,
       usage: typeof searchEngine.usageSummary === "function"
         ? searchEngine.usageSummary()
@@ -166,6 +169,9 @@ export function registerCodexSkillsApp(
       void searchEngine.maybeRefreshManifest();
       if (!category) {
         const categories = searchEngine.getCategories();
+        const butler = typeof searchEngine.getButlerEntry === "function"
+          ? searchEngine.getButlerEntry()?.name ?? null
+          : null;
         const popular = typeof searchEngine.popularSkills === "function"
           ? searchEngine.popularSkills(8)
           : searchEngine.defaultSuggestions(8).map((entry) => ({
@@ -180,6 +186,7 @@ export function registerCodexSkillsApp(
             view: "home",
             categories,
             totalSkills: categories.reduce((s, c) => s + c.skill_count, 0),
+            butler,
             cache_mode: loader.cacheMode,
             usage: typeof searchEngine.usageSummary === "function"
               ? searchEngine.usageSummary()

@@ -87,13 +87,13 @@ const categories = ${JSON.stringify(categories)};
 const totalSkills = ${JSON.stringify(totalSkills)};
 const navigationArguments = ${navigationArguments.toString()};
 window.__rpcLog = [];
-const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
+const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
 function reply(id, result) { frame.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*"); }
 addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow) return;
   const message = event.data;
   if (!message || message.jsonrpc !== "2.0" || !message.id) return;
-  window.__rpcLog.push({ method: message.method, name: message.params?.name, args: message.params?.arguments });
+  window.__rpcLog.push({ method: message.method, name: message.params?.name, uri: message.params?.uri, args: message.params?.arguments });
   if (message.method === "ui/initialize") return reply(message.id, { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } });
   if (message.method === "tools/call") {
     const name = message.params.name;
@@ -140,6 +140,16 @@ const timer = setInterval(() => {
     if (!doc) return;
     if (state === "detail" && doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) {
       clearInterval(timer);
+    }
+    if (state === "internal_link") {
+      const link = doc.querySelector("#d-md-rendered a[href='./README.md']");
+      if (link && doc.querySelector("#file-preview")?.hidden !== false) link.click();
+      if (doc.querySelector("#preview-path")?.textContent === "README.md"
+        && doc.querySelector("#preview-content")?.textContent?.includes("Getting started")) clearInterval(timer);
+    }
+    if (state === "butler_link" && !window.__butlerLinkClicked) {
+      const link = doc.querySelector("#d-md-rendered a[href='../../../SKILL.md']");
+      if (link) { window.__butlerLinkClicked = true; link.click(); }
     }
     if (state === "files" || state === "file_preview" || state === "large_preview") {
       if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
@@ -240,6 +250,10 @@ try {
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#d-progress")?.hidden === false`
     : values.state === "detail"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#d-md")?.textContent?.includes("Awesome Journal")`
+    : values.state === "internal_link"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
+    : values.state === "butler_link"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "00_codex_skills" && window.__rpcLog?.some(request => request.method === "resources/read" && request.uri === "skill://00_codex_skills")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"

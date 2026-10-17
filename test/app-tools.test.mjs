@@ -7,8 +7,10 @@ function fixtures() {
   const tools = new Map();
   const resources = new Map();
   const skills = [{ name: "alpha", description: "Alpha", category: "tools" }];
+  const butler = { name: "00_codex_skills", description: "Library router", category: "routing" };
   const engine = {
     getCategories: () => [{ name: "tools", skill_count: 1 }],
+    getButlerEntry: () => butler,
     defaultSuggestions: () => skills,
     popularSkills: () => [{ entry: skills[0], reads: 7, failures: 1, last_read_at: 1_700_000_000_000 }],
     usageSummary: () => ({ total_reads: 7, used_skills: 1, total_failures: 1 }),
@@ -80,6 +82,7 @@ test("app browsing and searching return immediately while freshness check is pen
   assert.equal(homepage.structuredContent.top[0].cached, true);
   assert.equal(homepage.structuredContent.top[0].reads, 7);
   assert.equal(homepage.structuredContent.cache_mode, "remote");
+  assert.equal(homepage.structuredContent.butler, "00_codex_skills");
   const category = await tools.get("skills.browse").handler({ category: "tools" });
   assert.equal(category.structuredContent.skills[0].name, "alpha");
   const search = await tools.get("skills.query").handler({ query: "alpha" });
