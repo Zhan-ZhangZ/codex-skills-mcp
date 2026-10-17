@@ -80,6 +80,7 @@ const attach = $<HTMLButtonElement>("d-attach");
 const navSearch = $<HTMLInputElement>("nav-search");
 const previewMore = $<HTMLButtonElement>("preview-more");
 const searchMore = $<HTMLButtonElement>("search-more");
+const detailProgress = $<HTMLProgressElement>("d-progress");
 const PROTOCOL_VERSION = "2026-01-26";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
@@ -106,6 +107,7 @@ let previewText = "";
 let previewNextOffset: number | undefined;
 let currentSearch: BrowseResult | undefined;
 let searchMoreLoading = false;
+let detailProgressToken: string | undefined;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -176,8 +178,11 @@ async function call<T>(name: string, args: Record<string, unknown>): Promise<T> 
   return result.structuredContent;
 }
 
-async function readResourceText(uri: string, limit = 20_000): Promise<string> {
-  const result = await transport.request<{ contents?: { text?: string }[] }>("resources/read", { uri }, 90_000);
+async function readResourceText(uri: string, limit = 20_000, progressToken?: string): Promise<string> {
+  const result = await transport.request<{ contents?: { text?: string }[] }>("resources/read", {
+    uri,
+    ...(progressToken ? { _meta: { progressToken } } : {}),
+  }, 90_000);
   const text = result?.contents?.find((item) => typeof item.text === "string")?.text;
   if (typeof text !== "string") throw new Error("服务未返回文件文本");
   return text.length > limit ? text.slice(0, limit) + "\n…（界面预览已截断，完整文件已保存在技能缓存中）" : text;
@@ -277,6 +282,7 @@ function markMaterialized() {
   badge.className = "badge on";
   $("d-cache-detail").textContent = "正在读取文件统计…";
   $("d-revision-note").hidden = true;
+  detailProgress.hidden = true;
 }
 
 function setTabs() {
@@ -566,6 +572,7 @@ function showView(next: View) {
     cacheBadge();
     $("d-md").textContent = "正在下载并读取完整技能…";
     $("d-cache-detail").textContent = "";
+    detailProgress.hidden = true;
     attach.disabled = attaching;
     clearExplorer();
     setDetailTab("instructions", false);
@@ -594,7 +601,8 @@ async function navigate(next: View) {
       void refreshCacheStatus(next.skill.name, token);
       // Always re-read through the resource so source updates can replace a
       // previous cache. A complete local cache makes this an inexpensive read.
-      const text = await readResourceText(skillUri(next.skill.name), DETAIL_PREVIEW_LIMIT);
+      detailProgressToken = `skill-${next.skill.name}-${token}`;
+      const text = await readResourceText(skillUri(next.skill.name), DETAIL_PREVIEW_LIMIT, detailProgressToken);
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
       if (!current()) return;
@@ -631,6 +639,7 @@ async function navigate(next: View) {
     if (!current()) return;
     if (next.view === "detail") {
       $("d-md").textContent = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      detailProgress.hidden = true;
       void refreshCacheStatus(next.skill.name, token);
     }
     status(`加载失败：${errorMessage(error)}`, () => void navigate(next));
@@ -776,6 +785,17 @@ function applyHostContext(context: HostContext) {
   }
 }
 transport.on("ui/notifications/host-context-changed", applyHostContext);
+transport.on("notifications/progress", (params: {
+  progressToken?: string | number; progress?: number; total?: number; message?: string;
+}) => {
+  if (disposed || view.view !== "detail" || String(params.progressToken) !== detailProgressToken) return;
+  const total = Math.max(1, Number(params.total) || 1);
+  const done = Math.max(0, Math.min(total, Number(params.progress) || 0));
+  detailProgress.max = total;
+  detailProgress.value = done;
+  detailProgress.hidden = false;
+  $("d-cache-detail").textContent = params.message || `正在下载 ${done}/${total} 个文件`;
+});
 transport.handle("ping", () => ({}));
 function dispose() {
   disposed = true; cancelNavigation();

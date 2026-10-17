@@ -83,9 +83,9 @@ addEventListener("message", (event) => {
       { name: "开发与自动化", skill_count: 64 }, { name: "设计与多媒体", skill_count: 42 },
     ] } });
     if (name === "skills.query") return reply(message.id, { structuredContent: { results: skills } });
-    if (name === "skill_status") return reply(message.id, { structuredContent: { requested: 1, complete_count: 1, truncated: false,
-      skills: [{ name: "awesome-journal-skills", found: true, cached: true, complete: true, catalog_current: true,
-        files_total: 2281, files_missing_count: 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
+    if (name === "skill_status") return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
+      skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
+        files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
     if (name === "load_skill_file") {
       const large = String(args.file_path || "").endsWith("dataset.jsonl");
@@ -101,6 +101,13 @@ addEventListener("message", (event) => {
   }
   if (message.method === "resources/read") {
     const file = !message.params.uri.endsWith("awesome-journal-skills");
+    if (!file && state === "progress") {
+      frame.contentWindow.postMessage({ jsonrpc: "2.0", method: "notifications/progress", params: {
+        progressToken: message.params._meta?.progressToken, progress: 1245, total: 2281,
+        message: "Fetching 1245/2281 files for awesome-journal-skills",
+      } }, "*");
+      return;
+    }
     return reply(message.id, { contents: [{ text: file ? "# Getting started\\n\\n这是文件预览内容。" : instructions }] });
   }
   if (message.method === "ui/update-model-context") return reply(message.id, {});
@@ -204,7 +211,9 @@ try {
   await command("Page.navigate", {
     url: `http://127.0.0.1:${address.port}/?state=${encodeURIComponent(values.state)}`,
   });
-  const readyExpression = values.state === "detail"
+  const readyExpression = values.state === "progress"
+    ? `document.querySelector("#app")?.contentDocument?.querySelector("#d-progress")?.hidden === false`
+    : values.state === "detail"
     ? `document.querySelector("#app")?.contentDocument?.querySelector("#d-md")?.textContent?.includes("Awesome Journal")`
     : values.state === "file_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`

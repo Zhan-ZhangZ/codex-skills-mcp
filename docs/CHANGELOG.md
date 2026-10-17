@@ -8,6 +8,7 @@
 - App 全局搜索返回 total/offset/has_more，并支持继续加载；现有 `skills.query` 工具获得稳定分页，不新增工具。
 - 大文本文件支持 UTF-8 字节分段：`load_skill_file` 返回 `next_offset`，App 文件预览可继续加载，单段 1 KiB–2 MiB。
 - 缓存徽标展示完整缓存、部分缓存、未缓存、缓存版本待验证及文件数/体积；详情读取完成后即时确认完整缓存。
+- 技能资源读取请求携带 progress token，服务端转发真实文件下载进度，App 显示进度条和 done/total。
 - 工具结构化输出增加分页 entries 和 cache status 明细，App 不再解析人读文本；工具总数保持 16。
 - 补齐快速切换、旧响应失效、文件预览竞争、状态竞争、YAML 子技能搜索和 20 项 App 交互回归。
 - 新增固定模拟宿主和 Chrome 渲染截图；修复窄屏工具栏溢出与长列表预览位置，详见 [BETA-7-REVIEW.md](BETA-7-REVIEW.md)。

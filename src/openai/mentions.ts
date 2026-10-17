@@ -346,7 +346,19 @@ export function registerOpenAIMentions(
         }
 
         const selectedEntry = entry;
-        const { instructions, cache } = await readWithDeadline(() => loader.readInstructionsWithState(selectedEntry), config, extra.signal);
+        const progressToken = extra?._meta?.progressToken;
+        const onProgress = progressToken === undefined ? undefined :
+          (done: number, total: number, message: string) => {
+            if (!extra.signal.aborted) {
+              void extra.sendNotification({
+                method: "notifications/progress",
+                params: { progressToken, progress: done, total, message },
+              }).catch(() => {});
+            }
+          };
+        const { instructions, cache } = await readWithDeadline(
+          () => loader.readInstructionsWithState(selectedEntry, onProgress), config, extra.signal
+        );
         if (typeof searchEngine.recordUsage === "function") {
           searchEngine.recordUsage(entry.name);
         }

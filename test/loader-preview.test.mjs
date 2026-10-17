@@ -69,8 +69,9 @@ function resource(config, loader, selected = entry) {
       getButlerEntry: () => selected.name === "00_codex_skills" ? selected : undefined,
       defaultSuggestions: () => [selected], recordUsage: (name) => usage.push(name) }, loader
   );
-  return { usage, read: (signal = new AbortController().signal) => handlers.get("skill")(
-    new URL(`skill://${encodeURIComponent(selected.name)}`), { name: encodeURIComponent(selected.name) }, { signal }
+  return { usage, read: (signal = new AbortController().signal, extra = {}) => handlers.get("skill")(
+    new URL(`skill://${encodeURIComponent(selected.name)}`), { name: encodeURIComponent(selected.name) },
+    { signal, ...extra }
   ) };
 }
 
@@ -181,6 +182,26 @@ test("instructions fully materialize supporting files and repair missing or trun
   fixture.requests.length = 0;
   await preview.read();
   assert.equal(fixture.requests.length, 0, "a complete warm preview stays offline");
+});
+
+test("resource instructions forward opt-in materialization progress", async (t) => {
+  const config = setup(t);
+  writeSkill(config, { "SKILL.md": "# root", "large.bin": "x" });
+  const loader = new SkillLoader(config, [entry]);
+  t.mock.method(loader, "readInstructionsWithState", async (_selected, onProgress) => {
+    onProgress?.(2, 5, "Fetching 2/5 files");
+    return { instructions: "# root", cache: loader.cacheState(entry) };
+  });
+  const notifications = [];
+  const result = await resource(config, loader).read(new AbortController().signal, {
+    _meta: { progressToken: "fixture-progress" },
+    sendNotification: async (notification) => { notifications.push(notification); },
+  });
+  assert.match(result.contents[0].text, /# root/);
+  assert.deepEqual(notifications, [{
+    method: "notifications/progress",
+    params: { progressToken: "fixture-progress", progress: 2, total: 5, message: "Fetching 2/5 files" },
+  }]);
 });
 
 test("instructions reject corrupted supporting downloads even when SKILL.md is ready", async (t) => {

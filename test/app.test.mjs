@@ -80,6 +80,10 @@ function harness() {
       for (const [id, timer] of timers) if (timer.delay === delay) { timers.delete(id); timer.fn(); }
       await flush();
     },
+    async notify(method, params) {
+      await listeners.get("message")?.({ source: window.parent, data: { jsonrpc: "2.0", method, params } });
+      await flush();
+    },
     async dispose() { listeners.get("pagehide")?.(); await flush(); },
   };
 }
@@ -493,5 +497,27 @@ test("large file previews continue by byte offset without losing earlier content
   await app.reply(second, { structuredContent: fileResult("第二段", { offset: 12, size_bytes: 24 }) });
   assert.equal(app.node("preview-content").textContent, "第一段😀第二段");
   assert.equal(app.node("preview-more").hidden, true);
+  await app.dispose();
+});
+
+test("skill materialization displays live file progress only for the current detail", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const request = app.latest("resources/read");
+  const token = request.params._meta.progressToken;
+  assert.ok(token);
+  await app.notify("notifications/progress", {
+    progressToken: token, progress: 3, total: 10, message: "Fetching 3/10 files for alpha",
+  });
+  assert.equal(app.node("d-progress").hidden, false);
+  assert.equal(app.node("d-progress").value, 3);
+  assert.equal(app.node("d-progress").max, 10);
+  assert.match(app.node("d-cache-detail").textContent, /3\/10 files/);
+  await app.notify("notifications/progress", {
+    progressToken: "another-skill", progress: 9, total: 10, message: "wrong skill",
+  });
+  assert.equal(app.node("d-progress").value, 3);
+  await app.reply(request, { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-progress").hidden, true);
   await app.dispose();
 });

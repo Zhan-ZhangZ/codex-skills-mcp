@@ -25,6 +25,8 @@ beta.6 解决了 Agent 读取大技能时的输出、分页和并发问题。bet
 
 详情读取成功后立即显示“已完整缓存”，随后用深度状态检查补上文件统计。先发出的未完成状态不能覆盖后发出的完整状态。切换技能、页签、路径或文件时，旧请求结果会被身份检查丢弃；慢文件不能被后点击的文件覆盖。
 
+App 读取技能资源时发送 progress token，服务端在完整物化过程中转发文件下载进度；详情页显示进度条和 `done/total`，切换技能后旧 token 的进度会被忽略。
+
 ## 结构化协议
 
 - `list_skill_files.structuredContent` 新增当前页 `entries`，每项包含名称、完整路径、类型、描述、大小和显示文本。
@@ -36,6 +38,10 @@ beta.6 解决了 Agent 读取大技能时的输出、分页和并发问题。bet
 `scripts/preview-mcp-app.mjs` 启动一个确定性的模拟 MCP 宿主，用本机 Chrome DevTools Protocol 等待页面到达指定状态后截图。它覆盖浅色/深色宿主变量、详情、文件、子技能和文件预览页面，不依赖真实网络。
 
 ![详情页](benchmarks/app-preview-detail.png)
+
+首次物化时的真实文件进度：
+
+![下载进度](benchmarks/app-preview-progress.png)
 
 ![文件页](benchmarks/app-preview-files.png)
 
@@ -60,7 +66,7 @@ node scripts/preview-mcp-app.mjs --state files --output /tmp/app.png
 
 ## 验证
 
-- MCP 全量回归 **245/245** 通过。
+- MCP 全量回归 **247/247** 通过。
 - App 重点覆盖：初始化、主题、搜索 IME、详情与附件竞争、缓存状态竞争、文件目录/预览、子技能检索/翻页、旧请求失效。
 - npm 包和插件产物在本轮发布前仍需重新执行 `check:package`。
 - 固定 Chrome 渲染已检查 430px 与 1180px 布局；真实 ChatGPT 宿主内的最终视觉验收仍需在发布前完成。
