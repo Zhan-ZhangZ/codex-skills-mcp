@@ -227,15 +227,16 @@ function setInstructionMode(mode: "rendered" | "raw") {
 
 function renderInstructions(text: string) {
   instructionRaw.textContent = text;
+  const displayText = text.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
   try {
-    const parsed = marked.parse(text, { async: false, gfm: true, breaks: false });
+    const parsed = marked.parse(displayText.trimStart() || text, { async: false, gfm: true, breaks: false });
     renderedInstructions.innerHTML = DOMPurify.sanitize(String(parsed), {
       USE_PROFILES: { html: true },
       FORBID_TAGS: ["img", "video", "audio", "iframe", "object", "embed", "form", "input", "button", "style", "link", "meta"],
       FORBID_ATTR: ["style"],
     });
   } catch {
-    renderedInstructions.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+    renderedInstructions.innerHTML = `<pre>${escapeHtml(displayText.trimStart() || text)}</pre>`;
   }
   setInstructionMode("rendered");
 }

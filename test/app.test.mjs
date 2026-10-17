@@ -160,9 +160,10 @@ test("detail back returns to its search and successful preview updates cache bad
 test("instructions default to rendered view and preserve an exact raw toggle", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
-  const text = "# Alpha\n\n- item one\n- item two";
+  const text = "---\nname: alpha\ndescription: fixture metadata\n---\n\n# Alpha\n\n- item one\n- item two";
   await app.reply(app.latest("resources/read"), { contents: [{ text }] });
   assert.equal(app.node("d-md").textContent, text);
+  assert.doesNotMatch(app.node("d-md-rendered").innerHTML, /fixture metadata/);
   assert.equal(app.node("d-md").hidden, true);
   assert.equal(app.node("d-md-rendered").hidden, false);
   assert.equal(app.node("doc-toggle").textContent, "查看原文");
