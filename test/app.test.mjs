@@ -49,6 +49,8 @@ function harness() {
     window, document, console,
     setTimeout: (fn, delay) => { const id = ++sequence; timers.set(id, { fn, delay }); return id; },
     clearTimeout: (id) => timers.delete(id),
+    setInterval: (fn, delay) => { const id = ++sequence; timers.set(id, { fn, delay, repeat: true }); return id; },
+    clearInterval: (id) => timers.delete(id),
   });
   const flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
   const reply = async (request, result, error) => {
@@ -77,7 +79,10 @@ function harness() {
       await flush();
     },
     async tick(delay) {
-      for (const [id, timer] of timers) if (timer.delay === delay) { timers.delete(id); timer.fn(); }
+      for (const [id, timer] of timers) if (timer.delay === delay) {
+        if (!timer.repeat) timers.delete(id);
+        await timer.fn();
+      }
       await flush();
     },
     async notify(method, params) {
@@ -518,6 +523,23 @@ test("skill materialization displays live file progress only for the current det
   });
   assert.equal(app.node("d-progress").value, 3);
   await app.reply(request, { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-progress").hidden, true);
+  await app.dispose();
+});
+
+test("progress polling falls back to the app tool when host notifications are unavailable", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  const request = app.latestTool("skills.progress");
+  assert.equal(request.params.arguments.name, "alpha");
+  await app.reply(request, { structuredContent: { progress: {
+    name: "alpha", done: 4, total: 12, message: "Fetching 4/12 files for alpha",
+    updated_at: Date.now(), active: true,
+  } } });
+  assert.equal(app.node("d-progress").hidden, false);
+  assert.equal(app.node("d-progress").value, 4);
+  assert.equal(app.node("d-progress").max, 12);
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-progress").hidden, true);
   await app.dispose();
 });

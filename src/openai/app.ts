@@ -36,6 +36,7 @@ import {
 
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
+import { readSkillDownloadProgress } from "../remote/skill-progress.js";
 
 const APP_URI = "ui://codex-skills/app";
 
@@ -228,9 +229,26 @@ export function registerCodexSkillsApp(
     }
   );
 
+  registerAppTool(
+    server,
+    "skills.progress",
+    {
+      title: "Read skill materialization progress",
+      description: "App-facing: read the latest file-download progress for one skill.",
+      inputSchema: z.object({
+        name: z.string().trim().min(1).max(500),
+      }),
+      ...appOnly,
+    },
+    async ({ name }) => ({
+      content: [],
+      structuredContent: { progress: readSkillDownloadProgress(name) },
+    })
+  );
+
   console.error(
     "[codex-skills-mcp] MCP App registered: skills.library (global), " +
-      "skills.tray (thread), skills.browse/query (app-facing)"
+      "skills.tray (thread), skills.browse/query/progress (app-facing)"
   );
   return true;
 }

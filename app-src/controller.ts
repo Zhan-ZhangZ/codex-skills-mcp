@@ -52,6 +52,9 @@ type CacheSkill = {
   completed_at?: string | null;
 };
 type CacheResult = { requested: number; complete_count: number; truncated: boolean; skills: CacheSkill[] };
+type DownloadProgress = {
+  name: string; done: number; total: number; message: string; updated_at: number; active: boolean;
+};
 type FileReadResult = {
   content: string;
   size_bytes: number;
@@ -108,6 +111,8 @@ let previewNextOffset: number | undefined;
 let currentSearch: BrowseResult | undefined;
 let searchMoreLoading = false;
 let detailProgressToken: string | undefined;
+let progressPollTimer: ReturnType<typeof setInterval> | undefined;
+let progressPollLoading = false;
 
 // Keep navigation instant without allowing unbounded query or document caches.
 const cache = new Map<string, { value: BrowseResult | string; expires: number }>();
@@ -159,6 +164,40 @@ function cancelNavigation() {
   revision++;
   explorerRequestRevision++;
   previewRevision++;
+}
+function stopProgressPolling() {
+  if (progressPollTimer !== undefined) clearInterval(progressPollTimer);
+  progressPollTimer = undefined;
+  progressPollLoading = false;
+}
+function startProgressPolling(name: string, token: number) {
+  stopProgressPolling();
+  const poll = async () => {
+    if (disposed || revision !== token || view.view !== "detail") {
+      stopProgressPolling();
+      return;
+    }
+    if (progressPollLoading) return;
+    progressPollLoading = true;
+    try {
+      const result = await call<{ progress: DownloadProgress | null }>("skills.progress", { name });
+      if (disposed || revision !== token || view.view !== "detail") return;
+      const progress = result.progress;
+      if (!progress) return;
+      detailProgress.max = Math.max(1, progress.total);
+      detailProgress.value = Math.max(0, Math.min(progress.total, progress.done));
+      detailProgress.hidden = false;
+      $("d-cache-detail").textContent = progress.message ||
+        `正在下载 ${progress.done}/${progress.total} 个文件`;
+    } catch {
+      // The resource request remains authoritative; a diagnostics-only poll
+      // failure should not interrupt the download.
+    } finally {
+      progressPollLoading = false;
+    }
+  };
+  void poll();
+  progressPollTimer = setInterval(() => void poll(), 750);
 }
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 const formatBytes = (bytes = 0) => {
@@ -283,6 +322,7 @@ function markMaterialized() {
   $("d-cache-detail").textContent = "正在读取文件统计…";
   $("d-revision-note").hidden = true;
   detailProgress.hidden = true;
+  stopProgressPolling();
 }
 
 function setTabs() {
@@ -573,6 +613,7 @@ function showView(next: View) {
     $("d-md").textContent = "正在下载并读取完整技能…";
     $("d-cache-detail").textContent = "";
     detailProgress.hidden = true;
+    stopProgressPolling();
     attach.disabled = attaching;
     clearExplorer();
     setDetailTab("instructions", false);
@@ -602,6 +643,7 @@ async function navigate(next: View) {
       // Always re-read through the resource so source updates can replace a
       // previous cache. A complete local cache makes this an inexpensive read.
       detailProgressToken = `skill-${next.skill.name}-${token}`;
+      startProgressPolling(next.skill.name, token);
       const text = await readResourceText(skillUri(next.skill.name), DETAIL_PREVIEW_LIMIT, detailProgressToken);
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
@@ -640,6 +682,7 @@ async function navigate(next: View) {
     if (next.view === "detail") {
       $("d-md").textContent = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
       detailProgress.hidden = true;
+      stopProgressPolling();
       void refreshCacheStatus(next.skill.name, token);
     }
     status(`加载失败：${errorMessage(error)}`, () => void navigate(next));
@@ -799,6 +842,7 @@ transport.on("notifications/progress", (params: {
 transport.handle("ping", () => ({}));
 function dispose() {
   disposed = true; cancelNavigation();
+  stopProgressPolling();
   cache.clear(); pending.clear();
   explorerStates = { files: emptyExplorer(), sub_skills: emptyExplorer() };
   transport.dispose();

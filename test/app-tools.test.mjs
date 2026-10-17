@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { registerCodexSkillsApp } from "../dist/openai/app.js";
+import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../dist/remote/skill-progress.js";
 
 function fixtures() {
   const tools = new Map();
@@ -28,7 +29,7 @@ function fixtures() {
 
 test("app-only tools expose standard read-only annotations and bounded input", () => {
   const { tools } = fixtures();
-  for (const name of ["skills.browse", "skills.query"]) {
+  for (const name of ["skills.browse", "skills.query", "skills.progress"]) {
     const config = tools.get(name).config;
     assert.equal(config.annotations.readOnlyHint, true);
     assert.equal(config.annotations.destructiveHint, false);
@@ -41,6 +42,20 @@ test("app-only tools expose standard read-only annotations and bounded input", (
   assert.equal(schema.safeParse({ query: "alpha", limit: 31 }).success, false);
   assert.equal(schema.safeParse({ query: "alpha", offset: 10001 }).success, false);
   assert.equal(schema.parse({ query: "alpha", offset: 12 }).offset, 12);
+});
+
+test("app progress tool returns the latest real download counters", async () => {
+  const { tools } = fixtures();
+  reportSkillDownloadProgress("alpha", 3, 9, "Fetching 3/9 files for alpha");
+  const active = await tools.get("skills.progress").handler({ name: "alpha" });
+  assert.deepEqual(active.structuredContent.progress, {
+    name: "alpha", done: 3, total: 9, message: "Fetching 3/9 files for alpha",
+    updated_at: active.structuredContent.progress.updated_at, active: true,
+  });
+  finishSkillDownloadProgress("alpha");
+  const finished = await tools.get("skills.progress").handler({ name: "alpha" });
+  assert.equal(finished.structuredContent.progress.active, false);
+  assert.equal(finished.structuredContent.progress.done, 9);
 });
 
 test("app browsing and searching return immediately while freshness check is pending", async () => {

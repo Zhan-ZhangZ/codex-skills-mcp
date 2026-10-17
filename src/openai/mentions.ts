@@ -30,6 +30,7 @@ import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
+import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../remote/skill-progress.js";
 
 /** Max items returned by mention typeahead (picker ergonomics). */
 const MENTION_LIMIT = 10;
@@ -347,18 +348,19 @@ export function registerOpenAIMentions(
 
         const selectedEntry = entry;
         const progressToken = extra?._meta?.progressToken;
-        const onProgress = progressToken === undefined ? undefined :
-          (done: number, total: number, message: string) => {
-            if (!extra.signal.aborted) {
+        const onProgress = (done: number, total: number, message: string) => {
+          reportSkillDownloadProgress(selectedEntry.name, done, total, message);
+          if (progressToken !== undefined && !extra.signal.aborted) {
               void extra.sendNotification({
                 method: "notifications/progress",
                 params: { progressToken, progress: done, total, message },
               }).catch(() => {});
-            }
-          };
+          }
+        };
         const { instructions, cache } = await readWithDeadline(
           () => loader.readInstructionsWithState(selectedEntry, onProgress), config, extra.signal
         );
+        finishSkillDownloadProgress(selectedEntry.name);
         if (typeof searchEngine.recordUsage === "function") {
           searchEngine.recordUsage(entry.name);
         }
