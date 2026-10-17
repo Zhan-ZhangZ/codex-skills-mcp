@@ -144,6 +144,27 @@ test("large text files stream by UTF-8 byte ranges without splitting characters"
   await assert.rejects(loader.loadSkillFile(entry, "SKILL.md", { maxBytes: 10 }), /max_bytes must be/);
 });
 
+test("Office archives and binary-looking files return metadata instead of raw bytes", async (t) => {
+  const config = setup(t);
+  writeSkill(config, {
+    "SKILL.md": "# root",
+    "report.xlsx": Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 1, 2, 3]),
+    "opaque.bin": Buffer.from([0, 1, 2, 3, 4]),
+    "notes.custom": "plain UTF-8 text",
+  });
+  const loader = new SkillLoader(config, [entry]);
+  const workbook = await loader.loadSkillFile(entry, "report.xlsx");
+  assert.equal(workbook.binary, true);
+  assert.match(workbook.mime_type, /spreadsheetml/);
+  assert.doesNotMatch(workbook.content, /PK/);
+  const opaque = await loader.loadSkillFile(entry, "opaque.bin");
+  assert.equal(opaque.binary, true);
+  assert.equal(opaque.mime_type, "application/octet-stream");
+  const text = await loader.loadSkillFile(entry, "notes.custom");
+  assert.equal(text.binary, false);
+  assert.equal(text.content, "plain UTF-8 text");
+});
+
 test("instructions reject a missing root file and escaping paths", async (t) => {
   const config = setup(t);
   const loader = new SkillLoader(config, [entry]);

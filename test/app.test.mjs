@@ -525,6 +525,31 @@ test("large file previews continue by byte offset without losing earlier content
   await app.dispose();
 });
 
+test("Office files show metadata and a copyable absolute path instead of ZIP bytes", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("skill_status"), { structuredContent: {
+    requested: 1, complete_count: 1, truncated: false,
+    skills: [{ name: "alpha", found: true, cached: true, complete: true, catalog_current: true,
+      local_path: "/cache/alpha", files_total: 2, files_missing_count: 0, size_bytes: 1024 }],
+  }});
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  app.node("tab-files").onclick(); await app.flush();
+  await app.reply(app.latestTool("list_skill_files"), { structuredContent: navResult("files", [
+    navEntry("reports/monthly.xlsx"),
+  ]) });
+  app.node("nav-list").children[0].onclick(); await app.flush();
+  await app.reply(app.latestTool("load_skill_file"), { structuredContent: {
+    ...fileResult(""), binary: true, bytes_returned: 0, has_more: false,
+    mime_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size_bytes: 4096,
+  }});
+  assert.match(app.node("preview-content").textContent, /二进制文件/);
+  assert.doesNotMatch(app.node("preview-content").textContent, /PK/);
+  assert.equal(app.node("preview-copy").textContent, "复制完整路径");
+  assert.equal(app.node("preview-more").hidden, true);
+  await app.dispose();
+});
+
 test("skill materialization displays live file progress only for the current detail", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();

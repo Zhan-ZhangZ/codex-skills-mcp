@@ -65,6 +65,7 @@ type FileReadResult = {
   next_offset?: number;
   has_more: boolean;
   binary: boolean;
+  mime_type?: string;
 };
 type ExplorerState = {
   path: string;
@@ -89,6 +90,7 @@ const detailProgress = $<HTMLProgressElement>("d-progress");
 const renderedInstructions = $<HTMLDivElement>("d-md-rendered");
 const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
+const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
@@ -113,6 +115,8 @@ let previewRevision = 0;
 let previewPath = "";
 let previewText = "";
 let previewNextOffset: number | undefined;
+let previewCopyPath = "";
+let detailLocalPath = "";
 let currentSearch: BrowseResult | undefined;
 let searchMoreLoading = false;
 let detailProgressToken: string | undefined;
@@ -307,10 +311,12 @@ function cacheBadge(state?: CacheSkill) {
   detail.textContent = "";
   revisionNote.hidden = true;
   if (!state || !state.found) {
+    detailLocalPath = "";
     badge.textContent = state ? "技能不存在" : "检查缓存…";
     badge.className = "badge warn";
     return;
   }
+  detailLocalPath = state.local_path ?? "";
   const count = state.files_total ?? 0;
   const size = formatBytes(state.size_bytes ?? 0);
   if (state.complete) {
@@ -577,6 +583,8 @@ async function openFile(path: string) {
   previewPath = path;
   previewText = "";
   previewNextOffset = undefined;
+  previewCopyPath = detailLocalPath ? `${detailLocalPath.replace(/[\\/]$/, "")}/${path}` : path;
+  previewCopyButton.textContent = detailLocalPath ? "复制完整路径" : "复制路径";
   $("preview-path").textContent = path;
   $("preview-content").textContent = "正在读取文件…";
   previewMore.hidden = true;
@@ -601,8 +609,10 @@ async function loadFileChunk(path: string, offset: number, append: boolean) {
     if (disposed || view !== selected || previewRevision !== token) return;
     const combined = (append ? previewText : "") + result.content;
     const limited = combined.length > FILE_PREVIEW_CHARS;
-    previewText = limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
-    previewNextOffset = limited ? undefined : result.next_offset;
+    previewText = result.binary
+      ? `这是二进制文件（${result.mime_type ?? "application/octet-stream"}，${formatBytes(result.size_bytes)}）。\n\n界面不展示内部字节。请使用“复制完整路径”，从技能缓存或 local_path 打开。`
+      : limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
+    previewNextOffset = result.binary || limited ? undefined : result.next_offset;
     $("preview-content").textContent = previewText;
     previewMore.hidden = !previewNextOffset;
   } catch (error) {
@@ -620,6 +630,7 @@ function closePreview() {
   previewPath = "";
   previewText = "";
   previewNextOffset = undefined;
+  previewCopyPath = "";
   $("file-preview").hidden = true;
   $("preview-content").textContent = "";
   $("preview-path").textContent = "";
@@ -821,10 +832,10 @@ previewMore.onclick = () => {
   if (previewPath && previewNextOffset !== undefined) void loadFileChunk(previewPath, previewNextOffset, true);
 };
 $("preview-copy").onclick = () => {
-  if (!previewPath) return;
+  if (!previewCopyPath) return;
   const clipboard = globalThis.navigator?.clipboard;
-  if (!clipboard) { $("status").textContent = `文件路径：${previewPath}`; return; }
-  void clipboard.writeText(previewPath).then(
+  if (!clipboard) { $("status").textContent = `文件路径：${previewCopyPath}`; return; }
+  void clipboard.writeText(previewCopyPath).then(
     () => { $("status").textContent = "文件路径已复制"; },
     (error) => { $("status").textContent = `复制失败：${errorMessage(error)}`; },
   );

@@ -8,6 +8,7 @@
 - 使用说明使用 marked + DOMPurify 安全渲染 Markdown，保留原文切换；脚本、危险链接、嵌入媒体和表单标签被禁止。
 - App 全局搜索返回 total/offset/has_more，并支持继续加载；现有 `skills.query` 工具获得稳定分页，不新增工具。
 - 大文本文件支持 UTF-8 字节分段：`load_skill_file` 返回 `next_offset`，App 文件预览可继续加载，单段 1 KiB–2 MiB。
+- 修复 Office/压缩包等二进制文件被当文本展示的问题；补齐 MIME 表、未知扩展名内容探测和完整缓存路径复制。
 - 缓存徽标展示完整缓存、部分缓存、未缓存、缓存版本待验证及文件数/体积；详情读取完成后即时确认完整缓存。
 - 技能资源读取请求携带 progress token，服务端转发真实文件下载进度，App 显示进度条和 done/total。
 - 为不转发资源 progress 的 MCP Apps 宿主增加隐藏 `skills.progress` 轮询兜底，使用进程内计数，不扫描缓存文件。

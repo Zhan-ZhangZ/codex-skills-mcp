@@ -281,6 +281,8 @@ output: { content, size_bytes, offset, bytes_returned, next_offset?, has_more, b
 
 > 小文件一次返回完整内容；大文本按 UTF-8 字节边界分段，每次默认 500 KiB，最大 2 MiB。继续读取时传入返回的 `next_offset`。二进制文件返回占位说明；路径穿越会自动拦截。
 
+> Office 文档（Word/Excel/PowerPoint）、压缩包、图片、音视频、数据库等按二进制处理，不展示内部字节；App 会提示 MIME 类型并允许复制缓存中的完整路径。
+
 ### 🗂️ list_skill_files
 
 浏览技能的文件树或搜索全部嵌套子技能（不重复根说明）。

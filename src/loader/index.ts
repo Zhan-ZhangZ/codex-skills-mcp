@@ -80,6 +80,7 @@ export interface SkillFileReadResult {
   next_offset?: number;
   has_more: boolean;
   binary: boolean;
+  mime_type?: string;
 }
 
 interface CatalogFile {
@@ -103,6 +104,28 @@ const SKIP_NAMES = new Set([
 const DEFAULT_FILE_CHUNK_BYTES = 500 * 1024;
 const MIN_FILE_CHUNK_BYTES = 1024;
 const MAX_FILE_CHUNK_BYTES = 2 * 1024 * 1024;
+const BINARY_MIME_TYPES: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".ico": "image/x-icon", ".webp": "image/webp", ".tif": "image/tiff", ".tiff": "image/tiff",
+  ".heic": "image/heic", ".bmp": "image/bmp",
+  ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
+  ".zip": "application/zip", ".7z": "application/x-7z-compressed", ".rar": "application/vnd.rar",
+  ".tar": "application/x-tar", ".gz": "application/gzip", ".xz": "application/x-xz",
+  ".pdf": "application/pdf", ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
+  ".ppt": "application/vnd.ms-powerpoint", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".pps": "application/vnd.ms-powerpoint", ".ppsx": "application/vnd.openxmlformats-officedocument.presentationml.slideshow",
+  ".odt": "application/vnd.oasis.opendocument.text", ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+  ".odp": "application/vnd.oasis.opendocument.presentation", ".epub": "application/epub+zip",
+  ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".mp4": "video/mp4",
+  ".mov": "video/quicktime", ".avi": "video/x-msvideo", ".mkv": "video/x-matroska",
+  ".webm": "video/webm", ".psd": "image/vnd.adobe.photoshop", ".wasm": "application/wasm",
+  ".exe": "application/vnd.microsoft.portable-executable", ".dll": "application/vnd.microsoft.portable-executable",
+  ".so": "application/x-sharedlib", ".dylib": "application/x-mach-binary",
+  ".sqlite": "application/vnd.sqlite3", ".sqlite3": "application/vnd.sqlite3",
+  ".parquet": "application/vnd.apache.parquet", ".arrow": "application/vnd.apache.arrow.file",
+};
 const SUMMARY_CACHE_ENTRIES = 8192;
 const SUMMARY_CACHE_BYTES = 4 * 1024 * 1024;
 
@@ -173,6 +196,25 @@ function readUtf8FileChunk(path: string, size: number, requestedOffset: number, 
     has_more: next < size,
     binary: false,
   };
+}
+
+function looksBinary(path: string, size: number): boolean {
+  if (size === 0) return false;
+  const sampleSize = Math.min(size, 8192);
+  const sample = Buffer.allocUnsafe(sampleSize);
+  const fd = openSync(path, "r");
+  try {
+    const read = readSync(fd, sample, 0, sampleSize, 0);
+    let controls = 0;
+    for (let index = 0; index < read; index++) {
+      const byte = sample[index];
+      if (byte === 0) return true;
+      if (byte < 9 || (byte > 13 && byte < 32)) controls++;
+    }
+    return read > 0 && controls / read > 0.05;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function metadataSummary(content: string): Record<string, unknown> | null {
@@ -723,24 +765,19 @@ export class SkillLoader {
       throw new Error(`Path is not a regular file: ${filePath}`);
     }
 
-    // Check if binary
     const ext = extname(fullPath).toLowerCase();
-    const binaryExts = new Set([
-      ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp",
-      ".woff", ".woff2", ".ttf", ".eot",
-      ".zip", ".7z", ".tar", ".gz",
-      ".exe", ".dll", ".so", ".dylib",
-      ".pdf", ".doc", ".docx",
-    ]);
-
-    if (binaryExts.has(ext)) {
+    const declaredMime = BINARY_MIME_TYPES[ext];
+    const isBinary = declaredMime !== undefined || looksBinary(fullPath, stat.size);
+    if (isBinary) {
+      const mime = declaredMime ?? "application/octet-stream";
       return {
-        content: `[Binary file: ${filePath} (${stat.size} bytes)]`,
+        content: `[Binary file: ${filePath} (${stat.size} bytes, ${mime}). Open it from this skill's local_path.]`,
         size_bytes: stat.size,
         offset: 0,
         bytes_returned: 0,
         has_more: false,
         binary: true,
+        mime_type: mime,
       };
     }
 
