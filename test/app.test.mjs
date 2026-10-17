@@ -98,6 +98,9 @@ test("app initializes before fetching and applies the host theme", async () => {
   assert.equal(app.document.documentElement.dataset.theme, "dark");
   assert.equal(app.node("search").disabled, false);
   assert.equal(app.node("cards").children.length, 2);
+  assert.equal(app.node("count").textContent, "2 顶层技能");
+  assert.equal(app.node("stat-total").textContent, "2");
+  assert.match(app.node("hero-kicker").textContent, /2 个顶层技能/);
   assert.equal(app.node("content").attributes["aria-busy"], "false");
   await app.dispose();
 });

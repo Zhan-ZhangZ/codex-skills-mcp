@@ -376,7 +376,7 @@ function renderHomeMeta(data: BrowseResult) {
   const total = data.totalSkills ?? 0;
   const categories = data.categories?.length ?? 0;
   const usage = data.usage ?? { total_reads: 0, used_skills: 0, total_failures: 0 };
-  $("hero-kicker").textContent = `${formatCount(total)} 个技能 · 实时索引`;
+  $("hero-kicker").textContent = `${formatCount(total)} 个顶层技能 · 实时索引`;
   $("stat-total").textContent = formatCount(total);
   $("stat-categories").textContent = formatCount(categories);
   $("stat-usage").textContent = formatCount(usage.total_reads);
@@ -860,7 +860,7 @@ async function navigate(next: View) {
         : call<BrowseResult>("skills.browse", next.view === "category" ? { category: next.category } : {}));
       if (!current()) return;
       if (next.view === "home") {
-        $("count").textContent = `${data.totalSkills ?? 0} 技能`;
+        $("count").textContent = `${formatCount(data.totalSkills ?? 0)} 顶层技能`;
         renderHomeMeta(data);
         renderCards($("cards"), data.top ?? []);
         renderCategories(data.categories ?? []);
