@@ -678,6 +678,8 @@ test("a remounted app adopts host context and clears its attached state with the
     },
   });
   await app.ready();
+  assert.equal(app.node("attached-bar").hidden, false);
+  assert.equal(app.node("attached-list").children[0].children[0].textContent, "gamma");
   app.node("cards").children[0].onclick(); await app.flush();
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-attach").textContent, "再带入此技能");
@@ -687,6 +689,26 @@ test("a remounted app adopts host context and clears its attached state with the
   assert.match(request.params.content[0].text, /# Gamma/);
   assert.match(request.params.content[1].text, /# Alpha/);
   await app.reply(request, {}); await attaching;
+  assert.equal(app.node("attached-list").children.length, 2);
+
+  app.node("attached-list").children[0].children[1].onclick();
+  await app.flush();
+  const removed = app.latest("ui/update-model-context");
+  assert.deepEqual(Array.from(removed.params.structuredContent.skills, (item) => item.name), ["alpha"]);
+  assert.equal(removed.params.content.length, 1);
+  await app.reply(removed, {}); await app.flush();
+  assert.equal(app.node("attached-list").children.length, 1);
+  assert.equal(app.node("attached-list").children[0].children[0].textContent, "alpha");
+  assert.match(app.node("d-attach-status").textContent, /已从当前对话移除「gamma」/);
+
+  app.node("attached-clear").onclick();
+  await app.flush();
+  const cleared = app.latest("ui/update-model-context");
+  assert.equal(cleared.params.structuredContent.skills.length, 0);
+  assert.equal(cleared.params.content.length, 0);
+  await app.reply(cleared, {}); await app.flush();
+  assert.equal(app.node("attached-bar").hidden, true);
+  assert.match(app.node("d-attach-status").textContent, /已清空带入技能/);
 
   await app.notify("ui/notifications/host-context-changed", { "openai/modelContext": null });
   assert.equal(app.node("d-attach").textContent, "带入当前对话");

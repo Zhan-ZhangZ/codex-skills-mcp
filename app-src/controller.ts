@@ -151,6 +151,10 @@ const searchHistoryList = $<HTMLDivElement>("search-history-list");
 const searchHistoryCount = $<HTMLElement>("search-history-count");
 const searchHistoryMore = $<HTMLButtonElement>("search-history-more");
 const searchHistoryClear = $<HTMLButtonElement>("search-history-clear");
+const attachedBar = $<HTMLElement>("attached-bar");
+const attachedSummary = $<HTMLElement>("attached-summary");
+const attachedList = $<HTMLDivElement>("attached-list");
+const attachedClear = $<HTMLButtonElement>("attached-clear");
 const attach = $<HTMLButtonElement>("d-attach");
 const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
 const navSearch = $<HTMLInputElement>("nav-search");
@@ -474,6 +478,82 @@ function handoffBlockSkill(block: Record<string, unknown>): string | undefined {
   }
   return undefined;
 }
+function renderAttachedBar(attached = attachedSkills()): void {
+  attachedBar.hidden = attached.length === 0;
+  attachedSummary.textContent = attached.length > 0
+    ? `${attached.length} 个技能 · 输入框不显示，下一条消息可用`
+    : "";
+  attachedClear.disabled = attaching || attached.length === 0;
+  attachedList.replaceChildren(...attached.map((skill) => {
+    const chip = document.createElement("span");
+    chip.className = "attached-chip";
+    const name = document.createElement("b");
+    name.textContent = skill.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = `从当前对话移除 ${skill.name}`;
+    remove.setAttribute("aria-label", `从当前对话移除 ${skill.name}`);
+    remove.disabled = attaching;
+    remove.onclick = () => void removeAttachedSkills([skill.name]);
+    chip.append(name, remove);
+    return chip;
+  }));
+}
+function attachmentNotice(message: string): void {
+  if (view.view === "detail") attachmentStatus(message);
+  else status(message);
+}
+async function removeAttachedSkills(names: string[], clearAll = false): Promise<void> {
+  if (attaching || !connected) return;
+  const current = attachedSkills();
+  if (current.length === 0) return;
+  const removeKeys = new Set((clearAll ? current.map((item) => item.name) : names)
+    .map((name) => name.toLocaleLowerCase()));
+  const remaining = current.filter((item) => !removeKeys.has(item.name.toLocaleLowerCase()));
+  if (remaining.length === current.length) return;
+
+  attaching = true;
+  updateAttachButton();
+  try {
+    const content = clearAll
+      ? []
+      : (Array.isArray(hostModelContext?.content) ? hostModelContext.content : [])
+          .filter((block): block is Record<string, unknown> => !!block && typeof block === "object")
+          .filter((block) => {
+            const owner = handoffBlockSkill(block)?.toLocaleLowerCase();
+            return !owner || !removeKeys.has(owner);
+          });
+    const structuredContent = {
+      ...(hostModelContext?.structuredContent ?? {}),
+      skill: remaining[0] ?? null,
+      skills: remaining,
+      instruction_chars: remaining.reduce(
+        (total, item) => total + Math.max(0, item.instruction_chars ?? 0),
+        0,
+      ),
+      handoff: remaining.length > 0 ? "full-skill-md" : "removed",
+    };
+    const result = await transport.request<ModelContextUpdateResult>("ui/update-model-context", {
+      content,
+      structuredContent,
+    }, 15_000);
+    if (result?.isError) throw new Error("宿主未接受移除请求");
+    hostModelContext = {
+      content,
+      structuredContent,
+      updateId: result?._meta?.["openai/modelContext"]?.updateId,
+    };
+    attachmentNotice(clearAll
+      ? "已清空带入技能；下一条消息不再附带这些技能。"
+      : `已从当前对话移除「${names.join("、")}」；下一条消息不再附带该技能。`);
+  } catch (error) {
+    attachmentNotice(`移除失败：${errorMessage(error)}`);
+  } finally {
+    attaching = false;
+    updateAttachButton();
+  }
+}
 function updateAttachButton() {
   const ready = connected && view.view === "detail" &&
     !detailMaterializing && !!detailInstructions.trim();
@@ -498,6 +578,7 @@ function updateAttachButton() {
           : attached.length > 0
             ? `当前已带入 ${attached.length} 个技能；输入框不会显示，点击会合并此技能`
             : "点击后带入当前对话；输入框不会显示技能，下一条消息可直接使用";
+  renderAttachedBar(attached);
 }
 function busy(value: boolean) {
   $("content").setAttribute("aria-busy", String(value));
@@ -1496,6 +1577,9 @@ attach.onclick = async () => {
     attaching = false;
     updateAttachButton();
   }
+};
+attachedClear.onclick = () => {
+  if (!attaching) void removeAttachedSkills([], true);
 };
 
 clearCacheButton.onclick = async () => {
