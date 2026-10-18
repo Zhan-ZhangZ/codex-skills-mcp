@@ -114,4 +114,4 @@ MCP App 只内置轻量的浏览器原生预览，不承担通用 Office/PDF 解
 ## 边界
 
 - 当前记录验证的是固定 Chrome 宿主和本地 stdio MCP；真实 ChatGPT MCP App 的最终视觉确认仍需重启 Codex 后由用户完成。
-- npm `beta` 已指向 beta.8；beta.9 搜索历史与长文本修复正在开发。
+- npm `beta` 已指向 beta.8；后续 beta.9 已发布搜索历史与长文本修复，beta.10 补齐共享历史与完整技能带入。
