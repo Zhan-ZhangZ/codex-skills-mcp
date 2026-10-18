@@ -37,6 +37,7 @@ import {
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { readSkillDownloadProgress } from "../remote/skill-progress.js";
+import { clearSearchHistory, readSearchHistory, recordSearchHistory } from "./search-history.js";
 
 const APP_URI = "ui://codex-skills/app";
 
@@ -271,6 +272,80 @@ export function registerCodexSkillsApp(
 
   registerAppTool(
     server,
+    "skills.getSearchHistory",
+    {
+      title: "Read shared search history",
+      description: "App-facing: read the search history shared by every skill tray and conversation.",
+      inputSchema: z.object({}),
+      ...appOnly,
+    },
+    async () => ({
+      content: [],
+      structuredContent: { entries: readSearchHistory() },
+    })
+  );
+
+  registerAppTool(
+    server,
+    "skills.recordSearch",
+    {
+      title: "Record shared search",
+      description: "App-facing: merge one completed search into the shared history file.",
+      inputSchema: z.object({
+        query: z.string().trim().min(1).max(500),
+        at: z.number().int().nonnegative().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      _meta: { ui: { visibility: ["app"] as const } },
+    },
+    async ({ query, at }) => {
+      try {
+        return {
+          content: [],
+          structuredContent: { entries: recordSearchHistory(query, at ?? Date.now()) },
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          }],
+        };
+      }
+    }
+  );
+
+  registerAppTool(
+    server,
+    "skills.clearSearchHistory",
+    {
+      title: "Clear shared search history",
+      description: "App-facing: clear the shared search history for every skill tray and conversation.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      _meta: { ui: { visibility: ["app"] as const } },
+    },
+    async () => {
+      try {
+        return {
+          content: [],
+          structuredContent: { entries: clearSearchHistory() },
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: error instanceof Error ? error.message : String(error),
+          }],
+        };
+      }
+    }
+  );
+
+  registerAppTool(
+    server,
     "skills.progress",
     {
       title: "Read skill materialization progress",
@@ -364,7 +439,7 @@ export function registerCodexSkillsApp(
 
   console.error(
     "[codex-skills-mcp] MCP App registered: skills.library (global), " +
-      "skills.tray (thread), skills.browse/query/progress/previewImage/clearCache (app-facing)"
+      "skills.tray (thread), skills.browse/query/history/progress/previewImage/clearCache (app-facing)"
   );
   return true;
 }

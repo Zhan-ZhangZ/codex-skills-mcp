@@ -32,21 +32,55 @@ class Element {
   dispatch(name, event = {}) { return this.listeners.get(name)?.({ target: this, preventDefault() {}, ...event }); }
 }
 
-function harness(storage = new Map()) {
+function harness(serverHistory = [], initialize = {}) {
   const elements = new Map([...template.matchAll(/id="([^"]+)"/g)].map((match) => [match[1], new Element()]));
   const sent = [];
   const copied = [];
   const listeners = new Map();
   const timers = new Map();
   let sequence = 0;
-  const localStorage = {
-    getItem(key) { return storage.has(key) ? storage.get(key) : null; },
-    setItem(key, value) { storage.set(key, String(value)); },
-    removeItem(key) { storage.delete(key); },
+  const historyEntries = serverHistory;
+  const legacyStorage = initialize.localStorage ?? new Map();
+  const deliverHistory = (request, entries) => {
+    queueMicrotask(() => {
+      listeners.get("message")?.({
+        source: window.parent,
+        data: { jsonrpc: "2.0", id: request.id, result: { structuredContent: { entries } } },
+      });
+    });
   };
   const window = {
-    localStorage,
-    parent: { postMessage(message) { sent.push(message); } },
+    localStorage: {
+      getItem(key) { return legacyStorage.has(key) ? legacyStorage.get(key) : null; },
+      setItem(key, value) { legacyStorage.set(key, String(value)); },
+      removeItem(key) { legacyStorage.delete(key); },
+    },
+    parent: {
+      postMessage(message) {
+        sent.push(message);
+        if (message.method !== "tools/call") return;
+        const name = message.params?.name;
+        if (!["skills.getSearchHistory", "skills.recordSearch", "skills.clearSearchHistory"].includes(name)) return;
+        if (name === "skills.clearSearchHistory") historyEntries.splice(0);
+        if (name === "skills.recordSearch") {
+          const args = message.params?.arguments ?? {};
+          const query = String(args.query ?? "").trim();
+          const at = Number(args.at) || Date.now();
+          if (query) {
+            const last = historyEntries[0];
+            if (last && at - last.at <= 15_000 &&
+                (query.startsWith(last.query) || last.query.startsWith(query))) {
+              historyEntries.shift();
+            }
+            const remaining = historyEntries.filter((entry) =>
+              entry.query.toLocaleLowerCase() !== query.toLocaleLowerCase());
+            historyEntries.splice(0, historyEntries.length, { query, at }, ...remaining);
+            historyEntries.splice(8);
+          }
+        }
+        deliverHistory(message, historyEntries.slice());
+      },
+    },
     opened: [],
     open(url) { this.opened.push(url); return {}; },
     addEventListener(name, callback) { listeners.set(name, callback); },
@@ -79,13 +113,20 @@ function harness(storage = new Map()) {
     message.method === "tools/call" && message.params?.name === name);
   const node = (id) => elements.get(id);
   return {
-    node, sent, copied, reply, latest, latestTool, toolRequests, flush, document, localStorage, storage,
+    node, sent, copied, reply, latest, latestTool, toolRequests, flush, document, historyEntries, legacyStorage,
     async ready(homeData = home) {
       assert.equal(sent.length, 1, "no tool call before initialization");
       assert.equal(sent[0].method, "ui/initialize");
-      await reply(sent[0], { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } });
+      await reply(sent[0], {
+        protocolVersion: "2026-01-26",
+        hostContext: initialize.hostContext ?? { theme: "dark" },
+        ...(initialize.hostCapabilities ? { hostCapabilities: initialize.hostCapabilities } : {}),
+      });
       assert.equal(sent[1].method, "ui/notifications/initialized");
-      await reply(latest("tools/call"), { structuredContent: homeData });
+      const browse = sent.findLast((message) =>
+        message.method === "tools/call" && message.params?.name === "skills.browse");
+      await reply(browse, { structuredContent: homeData });
+      await flush();
     },
     async search(query, immediate = true) {
       node("search").value = query;
@@ -97,6 +138,10 @@ function harness(storage = new Map()) {
         if (!timer.repeat) timers.delete(id);
         await timer.fn();
       }
+      await flush();
+    },
+    async focusWindow() {
+      await listeners.get("focus")?.();
       await flush();
     },
     async notify(method, params) {
@@ -191,9 +236,9 @@ test("detail back returns to its search and successful preview updates cache bad
 });
 
 test("search history persists, compacts long queries and stays out of the page heading", async () => {
-  const storage = new Map();
+  const history = [];
   const longQuery = "please reverse engineer this reference image into a reusable prompt " + "细节".repeat(40);
-  const app = harness(storage);
+  const app = harness(history);
   await app.ready();
   await app.search(longQuery);
   await app.reply(app.latestTool("skills.query"), { structuredContent: {
@@ -229,19 +274,20 @@ test("search history persists, compacts long queries and stays out of the page h
   app.node("search").dispatch("focus");
   assert.equal(app.node("search-history").hidden, false);
 
-  const persisted = harness(storage);
+  const persisted = harness(history);
   await persisted.ready();
   assert.equal(persisted.node("search-history-list").children.length, 1);
   assert.equal(persisted.node("search-history-list").children[0].title, longQuery);
   await persisted.dispose();
 
   app.node("search-history-clear").onclick();
+  await app.flush();
   assert.equal(app.node("search-history").hidden, true);
   assert.equal(app.node("search-history-list").children.length, 0);
-  assert.equal(storage.get("codex-skills.search-history.v1"), "[]");
+  assert.equal(history.length, 0);
   await app.dispose();
 
-  const cleared = harness(storage);
+  const cleared = harness(history);
   await cleared.ready();
   assert.equal(cleared.node("search-history-list").children.length, 0);
   assert.equal(cleared.node("search-history-count").textContent, "0");
@@ -249,14 +295,11 @@ test("search history persists, compacts long queries and stays out of the page h
 });
 
 test("search history shows six recent items and can reveal the remaining saved items", async () => {
-  const storage = new Map();
-  storage.set("codex-skills.search-history.v1", JSON.stringify(
-    Array.from({ length: 8 }, (_, index) => ({
-      query: `query ${index + 1}`,
-      at: Date.now() - index * 1_000,
-    })),
-  ));
-  const app = harness(storage);
+  const history = Array.from({ length: 8 }, (_, index) => ({
+    query: `query ${index + 1}`,
+    at: Date.now() - index * 1_000,
+  }));
+  const app = harness(history);
   await app.ready();
   assert.equal(app.node("search-history").hidden, true);
   app.node("search").dispatch("focus");
@@ -275,6 +318,42 @@ test("search history shows six recent items and can reveal the remaining saved i
   app.node("search-history-more").onclick();
   assert.equal(app.node("search-history-list").children.length, 6);
   assert.equal(app.node("search-history-more").textContent, "更多 2");
+  await app.dispose();
+});
+
+test("legacy iframe search history migrates into the shared store once", async () => {
+  const history = [];
+  const storage = new Map([[
+    "codex-skills.search-history.v1",
+    JSON.stringify([
+      { query: "oldest", at: 1_000 },
+      { query: "latest", at: 2_000 },
+    ]),
+  ]]);
+  const app = harness(history, { localStorage: storage });
+  await app.ready();
+  for (let i = 0; i < 10; i++) await app.flush();
+  assert.deepEqual(Array.from(history, (entry) => entry.query), ["latest", "oldest"]);
+  assert.equal(storage.has("codex-skills.search-history.v1"), false);
+  await app.dispose();
+
+  const reopened = harness(history, { localStorage: storage });
+  await reopened.ready();
+  for (let i = 0; i < 5; i++) await reopened.flush();
+  assert.deepEqual(Array.from(history, (entry) => entry.query), ["latest", "oldest"]);
+  await reopened.dispose();
+});
+
+test("an open skill tray refreshes search history when its window regains focus", async () => {
+  const history = [{ query: "before focus", at: 1_000 }];
+  const app = harness(history);
+  await app.ready();
+  app.node("search").dispatch("focus");
+  assert.equal(app.node("search-history-list").children[0].title, "before focus");
+
+  history.splice(0, history.length, { query: "from another tray", at: 2_000 });
+  await app.focusWindow();
+  assert.equal(app.node("search-history-list").children[0].title, "from another tray");
   await app.dispose();
 });
 
@@ -472,15 +551,145 @@ test("IME composition emits one query only after composition ends", async () => 
 test("duplicate attachment clicks send once and navigation ignores completion", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
+  assert.equal(app.node("d-attach").disabled, true);
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-attach").disabled, false);
   const first = app.node("d-attach").onclick();
   const second = app.node("d-attach").onclick();
   assert.equal(app.sent.filter((item) => item.method === "ui/update-model-context").length, 1);
   const request = app.latest("ui/update-model-context");
   assert.equal(request.params.structuredContent.skill.uri, "skill://alpha");
+  assert.match(request.params.content[0].text, /BEGIN SKILL\.md/);
+  assert.match(request.params.content[0].text, /# Alpha/);
   app.node("back").onclick(); await app.flush();
   const status = app.node("status").textContent;
   await app.reply(request, {}); await Promise.all([first, second]);
   assert.equal(app.node("status").textContent, status);
+  await app.dispose();
+});
+
+test("handoff stays inert until the complete skill has loaded", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  assert.equal(app.node("d-attach").disabled, true);
+  assert.match(app.node("d-attach").title, /不会提前发起对话/);
+
+  // A disabled DOM button normally suppresses the click, but keep the handler
+  // itself inert as well so programmatic clicks cannot submit a partial skill.
+  await app.node("d-attach").onclick();
+  await app.flush();
+  assert.equal(app.sent.some((item) => item.method === "ui/update-model-context"), false);
+
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-attach").disabled, false);
+  assert.match(app.node("d-attach").title, /不会自动发送消息/);
+  await app.dispose();
+});
+
+test("full skill handoff advertises a titled context block and resource link", async () => {
+  const app = harness([], {
+    hostCapabilities: {
+      updateModelContext: { text: {}, resourceLink: {}, structuredContent: {} },
+    },
+  });
+  await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  const attaching = app.node("d-attach").onclick();
+  const request = app.latest("ui/update-model-context");
+  const text = request.params.content.find((block) => block.type === "text");
+  const link = request.params.content.find((block) => block.type === "resource_link");
+  assert.equal(text._meta["openai/title"], "完整技能：alpha");
+  assert.equal(text._meta["codex-skills/skill"], "alpha");
+  assert.deepEqual(Array.from(text.annotations.audience), ["assistant"]);
+  assert.equal(link.uri, "skill://alpha");
+  assert.equal(link._meta["codex-skills/skill"], "alpha");
+  assert.deepEqual(Array.from(link.annotations.audience), ["assistant"]);
+  await app.reply(request, {});
+  await attaching;
+  await app.dispose();
+});
+
+test("a long SKILL.md keeps the UI bounded but hands off the complete file", async () => {
+  const app = harness(); await app.ready();
+  const tail = "\nFULL-SKILL-TAIL";
+  const instructions = "# Alpha\n" + "x".repeat(200_100) + tail;
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: instructions }] });
+  assert.match(app.node("d-md").textContent, /界面预览已截断/);
+  assert.doesNotMatch(app.node("d-md").textContent, /FULL-SKILL-TAIL/);
+
+  const attaching = app.node("d-attach").onclick();
+  const request = app.latest("ui/update-model-context");
+  const text = request.params.content.find((block) => block.type === "text").text;
+  assert.match(text, /FULL-SKILL-TAIL/);
+  assert.equal(request.params.structuredContent.skill.instruction_chars, instructions.length);
+  await app.reply(request, {});
+  await attaching;
+  await app.dispose();
+});
+
+test("attaching another skill preserves the previous full skill instead of replacing it", async () => {
+  const app = harness(); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  const first = app.node("d-attach").onclick();
+  const firstRequest = app.latest("ui/update-model-context");
+  await app.reply(firstRequest, {}); await first;
+  assert.equal(app.node("d-attach").textContent, "更新已带入技能");
+
+  const refresh = app.node("d-attach").onclick();
+  const refreshed = app.latest("ui/update-model-context");
+  assert.deepEqual(Array.from(refreshed.params.structuredContent.skills, (item) => item.name), ["alpha"]);
+  assert.equal(refreshed.params.content.filter((block) => block.type === "text").length, 1);
+  await app.reply(refreshed, {}); await refresh;
+
+  app.node("back").onclick(); await app.flush();
+  await app.reply(app.latestTool("skills.browse"), { structuredContent: home });
+  app.node("cards").children[1].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Beta" }] });
+  const second = app.node("d-attach").onclick();
+  const merged = app.latest("ui/update-model-context");
+  assert.deepEqual(Array.from(merged.params.structuredContent.skills, (item) => item.name), ["alpha", "beta"]);
+  const fullText = merged.params.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("\n");
+  assert.match(fullText, /## 已选择技能：alpha/);
+  assert.match(fullText, /## 已选择技能：beta/);
+  await app.reply(merged, {}); await second;
+  assert.match(app.node("d-attach-status").textContent, /共 2 个完整技能/);
+  await app.dispose();
+});
+
+test("a remounted app adopts host context and clears its attached state with the host", async () => {
+  const app = harness([], {
+    hostContext: {
+      theme: "dark",
+      "openai/modelContext": {
+        updateId: "previous",
+        content: [{ type: "text", text: "## 已选择技能：gamma\n\n--- BEGIN SKILL.md ---\n# Gamma\n--- END SKILL.md ---" }],
+        structuredContent: {
+          handoff: "full-skill-md",
+          skill: { name: "gamma", uri: "skill://gamma", instruction_chars: 9 },
+          skills: [{ name: "gamma", uri: "skill://gamma", instruction_chars: 9 }],
+        },
+      },
+    },
+  });
+  await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("d-attach").textContent, "再带入此技能");
+  const attaching = app.node("d-attach").onclick();
+  const request = app.latest("ui/update-model-context");
+  assert.deepEqual(Array.from(request.params.structuredContent.skills, (item) => item.name), ["gamma", "alpha"]);
+  assert.match(request.params.content[0].text, /# Gamma/);
+  assert.match(request.params.content[1].text, /# Alpha/);
+  await app.reply(request, {}); await attaching;
+
+  await app.notify("ui/notifications/host-context-changed", { "openai/modelContext": null });
+  assert.equal(app.node("d-attach").textContent, "带入完整技能");
   await app.dispose();
 });
 
@@ -496,66 +705,45 @@ test("unsupported handshake blocks tools and offers a connection retry", async (
 });
 
 for (const failed of [false, true]) {
-  test("attachment " + (failed ? "failure" : "success") + " remains visible after a slower preview", async () => {
+  test("full skill handoff reports " + (failed ? "failure" : "success") + " after instructions load", async () => {
     const app = harness(); await app.ready();
     app.node("cards").children[0].onclick(); await app.flush();
-    const preview = app.latest("resources/read");
+    assert.equal(app.node("d-attach").disabled, true);
+    await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+    assert.equal(app.node("d-attach").disabled, false);
     const attaching = app.node("d-attach").onclick();
-    assert.match(app.node("d-attach-status").textContent, /正在将/);
+    assert.match(app.node("d-attach-status").textContent, /完整技能/);
     await app.reply(app.latest("ui/update-model-context"), failed ? { isError: true } : {});
     await attaching;
     const message = app.node("d-attach-status").textContent;
-    assert.match(message, failed ? /加入失败/ : /已将「alpha」加入对话上下文/);
-    await app.reply(preview, { contents: [{ text: "# Alpha" }] });
-    assert.equal(app.node("d-attach-status").textContent, message);
+    assert.match(message, failed ? /加入失败/ : /完整 SKILL\.md 与资源入口/);
     assert.equal(app.node("d-attach-status").hidden, false);
-    assert.equal(app.node("d-md").textContent, "# Alpha");
-    assert.equal(app.node("content").attributes["aria-busy"], "false");
     await app.dispose();
   });
 }
 
-for (const attachmentFirst of [false, true]) {
-  test("preview failure keeps retry available when attachment finishes " + (attachmentFirst ? "first" : "last"), async () => {
-    const app = harness(); await app.ready();
-    app.node("cards").children[0].onclick(); await app.flush();
-    const preview = app.latest("resources/read");
-    const attaching = app.node("d-attach").onclick();
-    const attachment = app.latest("ui/update-model-context");
-    if (attachmentFirst) { await app.reply(attachment, {}); await attaching; }
-    await app.reply(preview, undefined, { code: -32603, message: "download pending" });
-    if (!attachmentFirst) { await app.reply(attachment, {}); await attaching; }
-    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
-    assert.match(app.node("status").textContent, /download pending/);
-    assert.equal(app.node("retry").hidden, false);
-    app.node("retry").onclick(); await app.flush();
-    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
-    await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
-    assert.equal(app.node("retry").hidden, true);
-    assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
-    await app.dispose();
-  });
-}
-
-test("an attachment completing during preview retry stays associated with that detail", async () => {
+test("preview failure keeps full-skill handoff disabled until retry succeeds", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
-  const attaching = app.node("d-attach").onclick();
-  const attachment = app.latest("ui/update-model-context");
   await app.reply(app.latest("resources/read"), undefined, { code: -32603, message: "download pending" });
+  assert.match(app.node("status").textContent, /download pending/);
+  assert.equal(app.node("d-attach").disabled, true);
   app.node("retry").onclick(); await app.flush();
-  await app.reply(attachment, {}); await attaching;
-  assert.match(app.node("d-attach-status").textContent, /已将「alpha」加入对话上下文/);
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
+  assert.equal(app.node("retry").hidden, true);
+  assert.equal(app.node("d-attach").disabled, false);
   await app.dispose();
 });
 
 test("a late attachment result never appears on another skill detail", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   const attaching = app.node("d-attach").onclick();
   const attachment = app.latest("ui/update-model-context");
   app.node("back").onclick(); await app.flush();
   app.node("cards").children[1].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Beta" }] });
   assert.equal(app.node("d-attach-status").hidden, true);
   await app.reply(attachment, {}); await attaching;
   assert.equal(app.node("heading").textContent, "beta");

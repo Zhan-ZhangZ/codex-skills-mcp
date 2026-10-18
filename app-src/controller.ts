@@ -24,7 +24,29 @@ type BrowseResult = {
   cache_mode?: "remote" | "local";
   usage?: { total_reads: number; used_skills: number; total_failures: number };
 };
-type HostContext = { theme?: string; styles?: { variables?: Record<string, string> } };
+type HostModelContext = {
+  content?: Record<string, unknown>[];
+  structuredContent?: Record<string, unknown>;
+  updateId?: string;
+};
+type HostContext = {
+  theme?: string;
+  styles?: { variables?: Record<string, string> };
+  "openai/modelContext"?: HostModelContext | null;
+};
+type HostCapabilities = {
+  updateModelContext?: {
+    text?: unknown;
+    resource?: unknown;
+    resourceLink?: unknown;
+    structuredContent?: unknown;
+  };
+};
+type InitializeResult = {
+  protocolVersion: string;
+  hostContext?: HostContext;
+  hostCapabilities?: HostCapabilities;
+};
 type ToolResult<T> = { structuredContent?: T; isError?: boolean; content?: { type: string; text?: string }[] };
 type DetailTab = "instructions" | "files" | "sub_skills";
 type NavigationView = Exclude<DetailTab, "instructions">;
@@ -94,6 +116,7 @@ type ImagePreviewResult = {
   size_bytes: number;
   data_base64: string;
 };
+type LegacySearchEntry = string | { query?: unknown; at?: unknown };
 type ExplorerState = {
   path: string;
   query: string;
@@ -102,6 +125,19 @@ type ExplorerState = {
   loading: boolean;
 };
 type SearchHistoryEntry = { query: string; at: number };
+type SearchHistoryResult = { entries: SearchHistoryEntry[] };
+type AttachedSkill = {
+  name: string;
+  uri: string;
+  description?: string;
+  category?: string;
+  local_path?: string | null;
+  instruction_chars?: number;
+};
+type ModelContextUpdateResult = {
+  isError?: boolean;
+  _meta?: { "openai/modelContext"?: { updateId?: string } };
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -136,11 +172,11 @@ const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
 const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
-const SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
+const LEGACY_SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
 const SEARCH_HISTORY_LIMIT = 8;
 const SEARCH_HISTORY_VISIBLE_LIMIT = 6;
-const SEARCH_HISTORY_MERGE_MS = 15_000;
 const SEARCH_HISTORY_LABEL_MAX = 56;
+const HANDOFF_BLOCK_META = "codex-skills/skill";
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
 const FILE_PREVIEW_BYTES = 128 * 1024;
@@ -167,6 +203,7 @@ let previewText = "";
 let previewNextOffset: number | undefined;
 let previewCopyPath = "";
 let detailLocalPath = "";
+let detailInstructions = "";
 let currentSearch: BrowseResult | undefined;
 let searchMoreLoading = false;
 let detailProgressToken: string | undefined;
@@ -181,9 +218,13 @@ let detailMaterializing = false;
 let lastCacheState: CacheSkill | undefined;
 let butlerName = "00_codex_skills";
 let suggestReturnFocus: HTMLElement | null = null;
-let searchHistory: SearchHistoryEntry[] = loadSearchHistory();
+let hostCapabilities: HostCapabilities | undefined;
+let hostModelContext: HostModelContext | null = null;
+let searchHistory: SearchHistoryEntry[] = [];
 let searchHistoryExpanded = false;
 let searchFocused = false;
+let historyServerQueue: Promise<void> = Promise.resolve();
+let historyRequestRevision = 0;
 suggestModal.hidden = true;
 
 // Keep navigation instant without allowing unbounded query or document caches.
@@ -212,39 +253,98 @@ let explorerStates: Record<NavigationView, ExplorerState> = {
   sub_skills: emptyExplorer(),
 };
 
-function loadSearchHistory(): SearchHistoryEntry[] {
+function normalizeHistory(entries: SearchHistoryEntry[]): SearchHistoryEntry[] {
+  const seen = new Set<string>();
+  return entries
+    .map((entry) => ({
+      query: typeof entry?.query === "string" ? entry.query.trim().slice(0, 500) : "",
+      at: Number.isFinite(entry?.at) ? entry.at : 0,
+    }))
+    .filter((entry) => entry.query.length > 0)
+    .sort((a, b) => b.at - a.at)
+    .filter((entry) => {
+      const key = entry.query.toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, SEARCH_HISTORY_LIMIT);
+}
+
+function readLegacySearchHistory(): SearchHistoryEntry[] {
   try {
-    const raw = window.localStorage?.getItem(SEARCH_HISTORY_KEY);
+    const raw = window.localStorage?.getItem(LEGACY_SEARCH_HISTORY_KEY);
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    const seen = new Set<string>();
-    return parsed.flatMap((item): SearchHistoryEntry[] => {
+    return normalizeHistory(parsed.flatMap((item: LegacySearchEntry): SearchHistoryEntry[] => {
       const query = typeof item === "string"
         ? item.trim()
-        : item && typeof item === "object" && typeof (item as { query?: unknown }).query === "string"
-          ? (item as { query: string }).query.trim()
+        : item && typeof item === "object" && typeof item.query === "string"
+          ? item.query.trim()
           : "";
       if (!query) return [];
-      const normalized = query.toLocaleLowerCase();
-      if (seen.has(normalized)) return [];
-      seen.add(normalized);
-      const at = item && typeof item === "object" && typeof (item as { at?: unknown }).at === "number"
-        ? (item as { at: number }).at
+      const at = item && typeof item === "object" &&
+        typeof item.at === "number" && Number.isFinite(item.at)
+        ? item.at
         : 0;
-      return [{ query: query.slice(0, 500), at: Number.isFinite(at) ? at : 0 }];
-    }).slice(0, SEARCH_HISTORY_LIMIT);
+      return [{ query, at }];
+    }));
   } catch {
     return [];
   }
 }
 
-function persistSearchHistory(): void {
+function removeLegacySearchHistory(): void {
   try {
-    window.localStorage?.setItem(SEARCH_HISTORY_KEY, JSON.stringify(searchHistory));
+    window.localStorage?.removeItem(LEGACY_SEARCH_HISTORY_KEY);
   } catch {
-    // Sandboxed hosts may deny storage; in-memory history still works.
+    // A restricted host can keep the legacy copy; migration stays idempotent.
   }
+}
+
+function adoptSharedHistory(entries: SearchHistoryEntry[]): void {
+  searchHistory = normalizeHistory(entries);
+  if (searchHistory.length <= SEARCH_HISTORY_VISIBLE_LIMIT) searchHistoryExpanded = false;
+  renderSearchHistory();
+}
+
+function queueHistoryRequest(
+  request: () => Promise<SearchHistoryResult>,
+): Promise<boolean> {
+  const revision = ++historyRequestRevision;
+  let succeeded = false;
+  historyServerQueue = historyServerQueue.catch(() => {}).then(async () => {
+    try {
+      const result = await request();
+      succeeded = true;
+      if (disposed || revision !== historyRequestRevision) return;
+      adoptSharedHistory(result.entries ?? []);
+    } catch {
+      // Keep the optimistic in-memory list when the shared store is offline.
+    }
+  });
+  return historyServerQueue.then(() => succeeded);
+}
+
+function refreshSharedSearchHistory(): Promise<boolean> {
+  if (!connected) return Promise.resolve(false);
+  return queueHistoryRequest(() => call<SearchHistoryResult>("skills.getSearchHistory", {}));
+}
+
+async function migrateLegacySearchHistory(): Promise<void> {
+  const legacy = readLegacySearchHistory();
+  if (legacy.length === 0) return;
+  // Replay oldest to newest so the shared store can merge incremental typing.
+  // A failed import keeps the legacy copy, and every replay is idempotent.
+  for (const entry of [...legacy].sort((a, b) => a.at - b.at)) {
+    const recorded = await queueHistoryRequest(() => call<SearchHistoryResult>("skills.recordSearch", {
+      query: entry.query,
+      at: entry.at,
+    }));
+    if (!recorded) return;
+  }
+  removeLegacySearchHistory();
 }
 
 function searchHistoryLabel(query: string): string {
@@ -295,24 +395,22 @@ function rememberSearch(query: string): void {
   if (!value) return;
   const normalized = value.toLocaleLowerCase();
   const now = Date.now();
-  const last = searchHistory[0];
-  if (last && now - last.at <= SEARCH_HISTORY_MERGE_MS &&
-      (value.startsWith(last.query) || last.query.startsWith(value))) {
-    searchHistory.shift();
-  }
   searchHistory = searchHistory.filter((entry) => entry.query.toLocaleLowerCase() !== normalized);
   searchHistory.unshift({ query: value.slice(0, 500), at: now });
   searchHistory = searchHistory.slice(0, SEARCH_HISTORY_LIMIT);
-  persistSearchHistory();
   renderSearchHistory();
+  void queueHistoryRequest(() => call<SearchHistoryResult>("skills.recordSearch", {
+    query: value.slice(0, 500),
+    at: now,
+  }));
 }
 
 function clearSearchHistory(): void {
   searchHistory = [];
   searchHistoryExpanded = false;
-  persistSearchHistory();
   renderSearchHistory();
   status("已清除搜索历史");
+  void queueHistoryRequest(() => call<SearchHistoryResult>("skills.clearSearchHistory", {}));
 }
 
 function status(message: string, action?: () => void) {
@@ -325,6 +423,81 @@ function status(message: string, action?: () => void) {
 function attachmentStatus(message: string) {
   $("d-attach-status").textContent = message;
   $("d-attach-status").hidden = !message;
+}
+function attachedSkills(context = hostModelContext): AttachedSkill[] {
+  const structured = context?.structuredContent;
+  if (!structured) return [];
+  const raw = Array.isArray(structured.skills)
+    ? structured.skills
+    : structured.skill && typeof structured.skill === "object"
+      ? [structured.skill]
+      : [];
+  const seen = new Set<string>();
+  return raw.flatMap((value): AttachedSkill[] => {
+    if (!value || typeof value !== "object") return [];
+    const item = value as Record<string, unknown>;
+    if (typeof item.name !== "string" || !item.name.trim()) return [];
+    const name = item.name.trim();
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    const instructionChars = Number(item.instruction_chars);
+    return [{
+      name,
+      uri: typeof item.uri === "string" ? item.uri : skillUri(name),
+      ...(typeof item.description === "string" ? { description: item.description } : {}),
+      ...(typeof item.category === "string" ? { category: item.category } : {}),
+      ...(typeof item.local_path === "string" || item.local_path === null
+        ? { local_path: item.local_path }
+        : {}),
+      ...(Number.isFinite(instructionChars) ? { instruction_chars: instructionChars } : {}),
+    }];
+  });
+}
+function handoffBlockSkill(block: Record<string, unknown>): string | undefined {
+  const meta = block._meta;
+  if (meta && typeof meta === "object" && typeof (meta as Record<string, unknown>)[HANDOFF_BLOCK_META] === "string") {
+    return (meta as Record<string, string>)[HANDOFF_BLOCK_META];
+  }
+  if (block.type === "resource_link" && typeof block.uri === "string" && block.uri.startsWith("skill://")) {
+    const encoded = block.uri.slice("skill://".length);
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return encoded;
+    }
+  }
+  if (block.type === "text" && typeof block.text === "string") {
+    const firstLine = block.text.split("\n", 1)[0];
+    const prefix = "## 已选择技能：";
+    return firstLine.startsWith(prefix) ? firstLine.slice(prefix.length).trim() : undefined;
+  }
+  return undefined;
+}
+function updateAttachButton() {
+  const ready = connected && view.view === "detail" &&
+    !detailMaterializing && !!detailInstructions.trim();
+  const attached = attachedSkills();
+  const selected = view.view === "detail" ? view : undefined;
+  const alreadyAttached = !!selected &&
+    attached.some((item) => item.name.toLocaleLowerCase() === selected.skill.name.toLocaleLowerCase());
+  attach.textContent = alreadyAttached
+    ? "更新已带入技能"
+    : attached.length > 0
+      ? "再带入此技能"
+      : "带入完整技能";
+  attach.disabled = attaching || !ready;
+  attach.title = !connected
+    ? "技能库尚未连接"
+    : detailMaterializing
+      ? "技能仍在下载并校验；完整读取成功后才能带入，不会提前发起对话"
+      : !detailInstructions.trim()
+        ? "完整说明尚未加载；不会提前发起对话"
+        : alreadyAttached
+          ? `「${selected!.skill.name}」已在当前上下文中；点击可刷新完整说明，不会自动发送消息`
+          : attached.length > 0
+            ? `当前已带入 ${attached.length} 个技能；点击会合并此技能的完整说明，不会自动发送消息`
+            : "只带入下一轮模型上下文，不会自动发送消息或发起回复";
 }
 function busy(value: boolean) {
   $("content").setAttribute("aria-busy", String(value));
@@ -448,17 +621,21 @@ function setInstructionMode(mode: "rendered" | "raw") {
 }
 
 function renderInstructions(text: string) {
-  instructionRaw.textContent = text;
-  const displayText = text.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
+  detailInstructions = text;
+  const previewText = text.length > DETAIL_PREVIEW_LIMIT
+    ? text.slice(0, DETAIL_PREVIEW_LIMIT) + "\n…（界面预览已截断；带入技能时会发送完整 SKILL.md）"
+    : text;
+  instructionRaw.textContent = previewText;
+  const displayText = previewText.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
   try {
-    const parsed = marked.parse(displayText.trimStart() || text, { async: false, gfm: true, breaks: false });
+    const parsed = marked.parse(displayText.trimStart() || previewText, { async: false, gfm: true, breaks: false });
     renderedInstructions.innerHTML = DOMPurify.sanitize(String(parsed), {
       USE_PROFILES: { html: true },
       FORBID_TAGS: ["img", "video", "audio", "iframe", "object", "embed", "form", "input", "button", "style", "link", "meta"],
       FORBID_ATTR: ["style"],
     });
   } catch {
-    renderedInstructions.innerHTML = `<pre>${escapeHtml(displayText.trimStart() || text)}</pre>`;
+    renderedInstructions.innerHTML = `<pre>${escapeHtml(displayText.trimStart() || previewText)}</pre>`;
   }
   if (typeof renderedInstructions.querySelectorAll === "function") {
     renderedInstructions.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((link) => {
@@ -470,6 +647,7 @@ function renderInstructions(text: string) {
     });
   }
   setInstructionMode("rendered");
+  updateAttachButton();
 }
 
 type RelativeMarkdownTarget = {
@@ -562,14 +740,14 @@ async function call<T>(name: string, args: Record<string, unknown>): Promise<T> 
   return result.structuredContent;
 }
 
-async function readResourceText(uri: string, limit = 20_000, progressToken?: string): Promise<string> {
+async function readResourceText(uri: string, progressToken?: string): Promise<string> {
   const result = await transport.request<{ contents?: { text?: string }[] }>("resources/read", {
     uri,
     ...(progressToken ? { _meta: { progressToken } } : {}),
   }, 90_000);
   const text = result?.contents?.find((item) => typeof item.text === "string")?.text;
   if (typeof text !== "string") throw new Error("服务未返回文件文本");
-  return text.length > limit ? text.slice(0, limit) + "\n…（界面预览已截断，完整文件已保存在技能缓存中）" : text;
+  return text;
 }
 
 function card(skill: SkillCard): HTMLButtonElement {
@@ -790,6 +968,7 @@ function markMaterialized() {
   detailProgress.hidden = true;
   stopProgressPolling();
   updateClearCacheButton();
+  updateAttachButton();
 }
 
 function setTabs() {
@@ -1122,6 +1301,7 @@ function showView(next: View) {
     resetClearCacheButton();
     const rootSkill = next.skill.name === butlerName;
     detailMaterializing = !rootSkill && !next.skill.cached;
+    detailInstructions = "";
     cacheBadge();
     instructionRaw.textContent = "正在下载并读取完整技能…";
     renderedInstructions.textContent = "正在下载并读取完整技能…";
@@ -1130,7 +1310,7 @@ function showView(next: View) {
     if (next.skill.cached || rootSkill) detailProgress.hidden = true;
     else showDownloadProgress();
     stopProgressPolling();
-    attach.disabled = attaching;
+    updateAttachButton();
     clearExplorer();
     setDetailTab("instructions", false);
   } else if (next.view === "home") {
@@ -1161,7 +1341,7 @@ async function navigate(next: View) {
       // previous cache. A complete local cache makes this an inexpensive read.
       detailProgressToken = `skill-${next.skill.name}-${token}`;
       startProgressPolling(next.skill.name, token);
-      const text = await readResourceText(skillUri(next.skill.name), DETAIL_PREVIEW_LIMIT, detailProgressToken);
+      const text = await readResourceText(skillUri(next.skill.name), detailProgressToken);
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
       if (!current()) return;
@@ -1200,10 +1380,12 @@ async function navigate(next: View) {
     if (!current()) return;
     if (next.view === "detail") {
       const failure = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      detailInstructions = "";
       instructionRaw.textContent = failure;
       renderedInstructions.textContent = failure;
       detailProgress.hidden = true;
       detailMaterializing = false;
+      updateAttachButton();
       updateClearCacheButton();
       stopProgressPolling();
       void refreshCacheStatus(next.skill.name, token);
@@ -1215,22 +1397,104 @@ async function navigate(next: View) {
 }
 
 attach.onclick = async () => {
-  if (view.view !== "detail" || attaching || !connected) return;
+  if (view.view !== "detail" || attaching || !connected || detailMaterializing) return;
   const selected = view;
   const skill = selected.skill;
+  if (!detailInstructions.trim()) {
+    attachmentStatus("完整技能尚未缓存完成，请稍后再带入（不会自动发起对话）");
+    return;
+  }
   attaching = true; attach.disabled = true;
-  attachmentStatus(`正在将「${skill.name}」加入对话…`);
+  updateAttachButton();
+  attachmentStatus(`正在将「${skill.name}」的完整技能带入对话…`);
   try {
-    const result = await transport.request<{ isError?: boolean }>("ui/update-model-context", {
-      content: [{ type: "text", text: `已选择技能：${skill.name}。通过 resources/read 读取 ${skillUri(skill.name)} 获取完整使用说明。` }],
-      structuredContent: { skill: { name: skill.name, uri: skillUri(skill.name) } },
+    const handoff = [
+      `## 已选择技能：${skill.name}`,
+      "",
+      "这是用户从 Codex Skills 技能库中明确选择的技能。请将下面的 SKILL.md 视为当前对话中该技能的权威工作流：在执行用户任务前完整阅读并遵循其中的步骤、工具和限制；需要额外文件时使用 load_skill_file 或对应 skill:// 资源，不要用通用知识替代。",
+      "",
+      `- 描述：${skill.description}`,
+      `- 技能资源：${skillUri(skill.name)}`,
+      ...(detailLocalPath ? [`- 本地缓存：${detailLocalPath}`] : []),
+      `- 指令大小：${detailInstructions.length} 字符`,
+      "",
+      "--- BEGIN SKILL.md ---",
+      detailInstructions,
+      "--- END SKILL.md ---",
+    ].join("\n");
+    const selectedSkill: AttachedSkill = {
+      name: skill.name,
+      uri: skillUri(skill.name),
+      description: skill.description,
+      ...(skill.category ? { category: skill.category } : {}),
+      local_path: detailLocalPath || null,
+      instruction_chars: detailInstructions.length,
+    };
+    const normalizedName = skill.name.toLocaleLowerCase();
+    const previousSkills = attachedSkills()
+      .filter((item) => item.name.toLocaleLowerCase() !== normalizedName);
+    const nextSkills = [...previousSkills, selectedSkill];
+    const existingContent = Array.isArray(hostModelContext?.content)
+      ? hostModelContext.content.filter((block): block is Record<string, unknown> =>
+          !!block && typeof block === "object")
+      : [];
+    const content: Record<string, unknown>[] = [
+      ...existingContent.filter((block) =>
+        handoffBlockSkill(block)?.toLocaleLowerCase() !== normalizedName),
+      {
+        type: "text",
+        text: handoff,
+        annotations: { audience: ["assistant"] },
+        _meta: {
+          "openai/title": `完整技能：${skill.name}`,
+          [HANDOFF_BLOCK_META]: skill.name,
+        },
+      },
+    ];
+    const supportsResourceLink = !!hostCapabilities?.updateModelContext?.resourceLink;
+    if (supportsResourceLink) {
+      content.push({
+        type: "resource_link",
+        uri: skillUri(skill.name),
+        name: skill.name,
+        title: skill.name,
+        description: skill.description,
+        mimeType: "text/markdown",
+        annotations: { audience: ["assistant"] },
+        _meta: { [HANDOFF_BLOCK_META]: skill.name },
+      });
+    }
+    const structuredContent = {
+      ...(hostModelContext?.structuredContent ?? {}),
+      skill: selectedSkill,
+      skills: nextSkills,
+      instruction_chars: nextSkills.reduce(
+        (total, item) => total + Math.max(0, item.instruction_chars ?? 0),
+        0,
+      ),
+      handoff: "full-skill-md",
+    };
+    const result = await transport.request<ModelContextUpdateResult>("ui/update-model-context", {
+      content,
+      structuredContent,
     }, 15_000);
     if (result?.isError) throw new Error("宿主未接受技能上下文");
-    if (view === selected && !disposed) attachmentStatus(`已将「${skill.name}」加入对话上下文`);
+    hostModelContext = {
+      content,
+      structuredContent,
+      updateId: result?._meta?.["openai/modelContext"]?.updateId,
+    };
+    updateAttachButton();
+    if (view === selected && !disposed) {
+      attachmentStatus(nextSkills.length === 1
+        ? `已将「${skill.name}」的完整 SKILL.md 与资源入口带入下一轮对话；不会自动发起回复`
+        : `已将「${skill.name}」合并到对话上下文，共 ${nextSkills.length} 个完整技能；下一轮生效，不会自动发起回复`);
+    }
   } catch (error) {
     if (view === selected && !disposed) attachmentStatus(`加入失败：${errorMessage(error)}`);
   } finally {
-    attaching = false; attach.disabled = !connected;
+    attaching = false;
+    updateAttachButton();
   }
 };
 
@@ -1433,6 +1697,7 @@ search.addEventListener("focus", () => {
   clearTimeout(searchBlurTimer);
   searchBlurTimer = undefined;
   syncSearchHistoryVisibility();
+  void refreshSharedSearchHistory();
 });
 search.addEventListener("blur", () => {
   searchFocused = false;
@@ -1477,6 +1742,10 @@ function applyHostContext(context: HostContext) {
   for (const [name, value] of Object.entries(context.styles?.variables ?? {})) {
     if (name.startsWith("--") && typeof value === "string") document.documentElement.style.setProperty(name, value);
   }
+  if (Object.prototype.hasOwnProperty.call(context, "openai/modelContext")) {
+    hostModelContext = context["openai/modelContext"] ?? null;
+    updateAttachButton();
+  }
 }
 transport.on("ui/notifications/host-context-changed", applyHostContext);
 transport.on("notifications/progress", (params: {
@@ -1498,23 +1767,31 @@ function dispose() {
 }
 transport.handle("ui/resource-teardown", () => { setTimeout(dispose, 0); return {}; });
 window.addEventListener("pagehide", dispose, { once: true });
+window.addEventListener("focus", () => {
+  if (connected) void refreshSharedSearchHistory();
+});
 
 async function connect() {
   if (connecting || disposed) return;
   connecting = true; busy(true); search.disabled = true;
   status("正在连接技能库…");
   try {
-    const result = await transport.request<{ protocolVersion: string; hostContext?: HostContext }>("ui/initialize", {
+    const result = await transport.request<InitializeResult>("ui/initialize", {
       protocolVersion: PROTOCOL_VERSION,
       appInfo: { name: "codex-skills", version: __APP_VERSION__ },
       appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
     });
     if (disposed) return;
     if (result.protocolVersion !== PROTOCOL_VERSION) throw new Error(`不支持的界面协议：${result.protocolVersion}`);
+    hostCapabilities = result.hostCapabilities;
     applyHostContext(result.hostContext ?? {});
     transport.notify("ui/notifications/initialized");
     connected = true; search.disabled = false;
+    updateAttachButton();
     await navigate({ view: "home" });
+    void refreshSharedSearchHistory().then((loaded) => {
+      if (loaded) void migrateLegacySearchHistory();
+    });
   } catch (error) {
     if (!disposed) { busy(false); status(`连接失败：${errorMessage(error)}`, () => void connect()); }
   } finally { connecting = false; }

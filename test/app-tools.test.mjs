@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registerCodexSkillsApp } from "../dist/openai/app.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../dist/remote/skill-progress.js";
+
+const settingsDirectory = mkdtempSync(join(tmpdir(), "codex-app-tools-"));
+process.env.CODEX_SKILLS_SETTINGS_DIR = settingsDirectory;
+process.on("exit", () => rmSync(settingsDirectory, { recursive: true, force: true }));
+const { registerCodexSkillsApp } = await import("../dist/openai/app.js");
 
 function fixtures() {
   const tools = new Map();
@@ -45,7 +52,7 @@ function fixtures() {
 
 test("app-only tools expose standard read-only annotations and bounded input", async () => {
   const { tools } = fixtures();
-  for (const name of ["skills.browse", "skills.query", "skills.progress", "skills.previewImage"]) {
+  for (const name of ["skills.browse", "skills.query", "skills.getSearchHistory", "skills.progress", "skills.previewImage"]) {
     const config = tools.get(name).config;
     assert.equal(config.annotations.readOnlyHint, true);
     assert.equal(config.annotations.destructiveHint, false);
@@ -62,11 +69,32 @@ test("app-only tools expose standard read-only annotations and bounded input", a
   assert.equal(clear.annotations.readOnlyHint, false);
   assert.equal(clear.annotations.destructiveHint, true);
   assert.deepEqual(clear._meta.ui.visibility, ["app"]);
+  const record = tools.get("skills.recordSearch").config;
+  assert.equal(record.annotations.readOnlyHint, false);
+  assert.equal(record.annotations.destructiveHint, false);
+  assert.deepEqual(record._meta.ui.visibility, ["app"]);
+  const clearHistory = tools.get("skills.clearSearchHistory").config;
+  assert.equal(clearHistory.annotations.readOnlyHint, false);
+  assert.equal(clearHistory.annotations.destructiveHint, true);
+  assert.deepEqual(clearHistory._meta.ui.visibility, ["app"]);
 
   const image = await tools.get("skills.previewImage").handler({ name: "alpha", path: "assets/hero.png" });
   assert.equal(image.isError, undefined);
   assert.equal(image.structuredContent.mime_type, "image/png");
   assert.equal(image.structuredContent.data_base64, "iVBORw0KGgo=");
+});
+
+test("shared search history app tools merge and clear one server-side list", async () => {
+  const { tools } = fixtures();
+  await tools.get("skills.clearSearchHistory").handler({});
+  const first = await tools.get("skills.recordSearch").handler({ query: "alpha", at: 1_000 });
+  assert.deepEqual(first.structuredContent.entries.map((entry) => entry.query), ["alpha"]);
+  const merged = await tools.get("skills.recordSearch").handler({ query: "alpha prompt", at: 2_000 });
+  assert.deepEqual(merged.structuredContent.entries.map((entry) => entry.query), ["alpha prompt"]);
+  const read = await tools.get("skills.getSearchHistory").handler({});
+  assert.deepEqual(read.structuredContent.entries.map((entry) => entry.query), ["alpha prompt"]);
+  const cleared = await tools.get("skills.clearSearchHistory").handler({});
+  assert.deepEqual(cleared.structuredContent.entries, []);
 });
 
 test("app progress tool returns the latest real download counters", async () => {

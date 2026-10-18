@@ -93,11 +93,6 @@ function navigationArguments(args) {
 }
 
 const mockHost = `<!doctype html><html><body style="margin:0;background:#111">
-<script>
-if (${JSON.stringify(values.state)} === "history" || ${JSON.stringify(values.state)} === "search_long") {
-  localStorage.setItem("codex-skills.search-history.v1", JSON.stringify(${JSON.stringify(historySeed)}));
-}
-</script>
 <iframe id="app" src="/app.html" style="border:0;width:100vw;height:100vh"></iframe>
 <script>
 const frame = document.getElementById("app");
@@ -107,6 +102,7 @@ const categories = ${JSON.stringify(categories)};
 const totalSkills = ${JSON.stringify(totalSkills)};
 const previewImageBase64 = ${JSON.stringify(previewImageBase64)};
 const navigationArguments = ${navigationArguments.toString()};
+let history = ${JSON.stringify(historySeed)};
 window.__rpcLog = [];
 const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
 function reply(id, result) { frame.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*"); }
@@ -115,13 +111,33 @@ addEventListener("message", (event) => {
   const message = event.data;
   if (!message || message.jsonrpc !== "2.0" || !message.id) return;
   window.__rpcLog.push({ method: message.method, name: message.params?.name, uri: message.params?.uri, args: message.params?.arguments });
-  if (message.method === "ui/initialize") return reply(message.id, { protocolVersion: "2026-01-26", hostContext: { theme: "dark" } });
+  if (message.method === "ui/initialize") return reply(message.id, {
+    protocolVersion: "2026-01-26", hostContext: { theme: "dark" },
+    hostCapabilities: { updateModelContext: { text: {}, resource: {}, resourceLink: {} } },
+  });
   if (message.method === "tools/call") {
     const name = message.params.name;
     const args = message.params.arguments || {};
     if (name === "skills.browse") return reply(message.id, { structuredContent: { totalSkills, top: skills,
       cache_mode: "remote", usage: { total_reads: 46, used_skills: 6, total_failures: 1 }, categories } });
     if (name === "skills.query") return reply(message.id, { structuredContent: { results: skills } });
+    if (name === "skills.getSearchHistory") return reply(message.id, { structuredContent: { entries: history } });
+    if (name === "skills.recordSearch") {
+      const query = String(args.query || "").trim();
+      const at = Number(args.at) || Date.now();
+      if (query) {
+        const last = history[0];
+        if (last && at - last.at <= 15_000 &&
+            (query.startsWith(last.query) || last.query.startsWith(query))) history.shift();
+        history = [{ query, at }, ...history.filter((entry) =>
+          entry.query.toLocaleLowerCase() !== query.toLocaleLowerCase())].slice(0, 8);
+      }
+      return reply(message.id, { structuredContent: { entries: history } });
+    }
+    if (name === "skills.clearSearchHistory") {
+      history = [];
+      return reply(message.id, { structuredContent: { entries: history } });
+    }
     if (name === "skills.clearCache") return reply(message.id, { structuredContent: {
       name: args.name, found: true, cleared: true, local_path: "/cache/skill",
       files_removed: 2281, bytes_removed: 48234496, cache_mode: "remote",

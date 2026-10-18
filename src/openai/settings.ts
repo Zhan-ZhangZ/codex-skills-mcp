@@ -42,7 +42,7 @@ export interface EffectiveSettings {
 /** File shape — a partial subset of EffectiveSettings. */
 type PersistedSettings = Partial<EffectiveSettings>;
 
-const SETTINGS_DIR = process.env.CODEX_SKILLS_SETTINGS_DIR
+export const SETTINGS_DIR = process.env.CODEX_SKILLS_SETTINGS_DIR
   ? resolve(process.env.CODEX_SKILLS_SETTINGS_DIR)
   : resolve(homedir(), ".codex-skills-mcp");
 const SETTINGS_PATH = join(SETTINGS_DIR, "settings.json");

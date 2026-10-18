@@ -33,7 +33,7 @@ test('built stdio server completes the entire local skill workflow', async t => 
   await client.connect(transport);
   assert.match(client.getInstructions(), /MATERIALIZE/);
   const tools = (await client.listTools()).tools;
-  assert.equal(tools.length, 19);
+  assert.equal(tools.length, 22);
   const call = (name, args = {}) => client.callTool({ name, arguments: args });
   const text = result => result.content.filter(item => item.type === 'text').map(item => item.text).join('\n');
   assert.match(text(await call('search_skills', { query: 'TypeScript testing' })), /sample/);
