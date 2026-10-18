@@ -101,7 +101,11 @@
       display: block; color: var(--app-cyan); font-size: 9.5px; font-weight: 700;
       letter-spacing: .16em; text-transform: uppercase; margin-bottom: 3px;
     }
-    h1 { color: var(--app-text); font-size: clamp(18px, 2.5vw, 24px); line-height: 1.14; font-weight: 680; letter-spacing: -.025em; overflow-wrap: anywhere; }
+    h1 {
+      color: var(--app-text); font-size: clamp(18px, 2.5vw, 24px); line-height: 1.14;
+      font-weight: 680; letter-spacing: -.025em; max-width: min(72vw, 680px);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     h1 .title-note { color: var(--app-muted); font-size: .56em; font-weight: 520; letter-spacing: .02em; margin-left: 9px; }
     .count-pill {
       flex: 0 0 auto; color: #cfe4ff; border: 1px solid var(--app-line);
@@ -141,6 +145,35 @@
     #search { flex: 1; min-width: 0; margin: 0; padding: 15px 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 14px; }
     .shortcut { margin-right: 14px; border: 1px solid var(--app-line); border-radius: 7px; padding: 3px 7px; color: var(--app-faint); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
     #cat, #search { outline: none; }
+    .search-history {
+      display: flex; flex-direction: column; gap: 8px;
+      margin: -9px 2px 20px; animation: rise-in .2s ease both;
+    }
+    .search-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .search-history-title {
+      display: inline-flex; align-items: center; gap: 7px; color: var(--app-faint);
+      font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase;
+    }
+    .search-history-title::before {
+      content: ""; width: 5px; height: 5px; border-radius: 50%;
+      background: var(--app-cyan); box-shadow: 0 0 11px rgba(125, 211, 252, .8);
+    }
+    .search-history-clear {
+      appearance: none; border: 0; padding: 2px 4px; color: var(--app-faint);
+      background: transparent; font-size: 10px; line-height: 1.4;
+    }
+    .search-history-clear:hover:not(:disabled) { color: var(--app-cyan); background: transparent; box-shadow: none; }
+    .search-history-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .history-chip {
+      max-width: min(100%, 320px); padding: 6px 11px; border-radius: 999px;
+      border-color: rgba(145, 184, 255, .18); color: #bfd4f0;
+      background: rgba(103, 145, 219, .08); font-size: 11px; line-height: 1.25;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .history-chip:hover:not(:disabled) {
+      color: #e7f2ff; border-color: rgba(125, 211, 252, .42);
+      background: rgba(70, 143, 213, .16);
+    }
     #home { animation: rise-in .36s ease both; }
     .hero {
       position: relative; overflow: hidden; padding: clamp(28px, 5vw, 54px) clamp(20px, 4vw, 48px) 24px;
@@ -493,6 +526,13 @@
       </svg>
       <input id="search" type="search" maxlength="500" autocomplete="off" spellcheck="false" placeholder="描述你想完成的任务，或搜索技能名称…" disabled />
       <span class="shortcut" aria-hidden="true">/</span>
+    </div>
+    <div class="search-history" id="search-history" hidden>
+      <div class="search-history-head">
+        <span class="search-history-title">最近搜索</span>
+        <button type="button" class="search-history-clear" id="search-history-clear">清除记录</button>
+      </div>
+      <div class="search-history-list" id="search-history-list" aria-label="最近搜索"></div>
     </div>
 
     <main id="content" aria-busy="true" data-view="home">

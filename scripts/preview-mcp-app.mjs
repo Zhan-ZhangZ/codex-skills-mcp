@@ -44,6 +44,11 @@ const categories = [
   { name: "智能体与协同", skill_count: 28 },
 ];
 const totalSkills = categories.reduce((total, category) => total + category.skill_count, 0);
+const historySeed = [
+  { query: "把这张产品照片反推成可直接使用的生图中英双语提示词，重点还原灯光、材质和镜头层次", at: Date.now() - 3_600_000 },
+  { query: "officecli 生成季度报表", at: Date.now() - 86_400_000 },
+  { query: "webapp-testing", at: Date.now() - 3 * 86_400_000 },
+];
 
 function navigationArguments(args) {
   if (args.view === "sub_skills") {
@@ -83,6 +88,11 @@ function navigationArguments(args) {
 }
 
 const mockHost = `<!doctype html><html><body style="margin:0;background:#111">
+<script>
+if (${JSON.stringify(values.state)} === "history" || ${JSON.stringify(values.state)} === "search_long") {
+  localStorage.setItem("codex-skills.search-history.v1", JSON.stringify(${JSON.stringify(historySeed)}));
+}
+</script>
 <iframe id="app" src="/app.html" style="border:0;width:100vw;height:100vh"></iframe>
 <script>
 const frame = document.getElementById("app");
@@ -226,7 +236,15 @@ frame.addEventListener("load", () => {
     try {
       const first = frame.contentDocument?.querySelector("#cards .card");
       if (first) {
-        if (state !== "home" && state !== "suggest_modal") first.click();
+        if (state !== "home" && state !== "history" && state !== "search_long" && state !== "suggest_modal") first.click();
+        if (state === "search_long") {
+          const input = frame.contentDocument?.querySelector("#search");
+          if (input) {
+            input.value = "把这张产品照片反推成可直接使用的生图中英双语提示词，重点还原灯光、材质、镜头层次、空间关系和画面情绪";
+            input.dispatchEvent(new frame.contentWindow.Event("input", { bubbles: true }));
+            input.dispatchEvent(new frame.contentWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          }
+        }
         clearInterval(wait);
       }
     } catch {}
@@ -315,6 +333,10 @@ try {
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-content")?.textContent?.includes("Getting started")`
     : values.state === "large_preview"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#preview-more")?.hidden === false`
+    : values.state === "history"
+      ? `document.querySelector("#app")?.contentDocument?.querySelector("#search-history")?.hidden === false && document.querySelector("#app")?.contentDocument?.querySelector("#search-history-list")?.children.length > 0`
+    : values.state === "search_long"
+      ? `document.querySelector("#app")?.contentDocument?.querySelector("#heading")?.textContent === "搜索结果" && document.querySelector("#app")?.contentDocument?.querySelector("#cards-list")?.children.length > 0`
     : values.state === "home"
       ? `document.querySelector("#app")?.contentDocument?.querySelector("#cards .card") != null`
       : `document.querySelector("#app")?.contentDocument?.querySelector("#nav-list")?.children.length > 0`;

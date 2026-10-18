@@ -101,6 +101,7 @@ type ExplorerState = {
   index: number;
   loading: boolean;
 };
+type SearchHistoryEntry = { query: string; at: number };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const element = document.getElementById(id);
@@ -109,6 +110,9 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 };
 const transport = createAppTransport();
 const search = $<HTMLInputElement>("search");
+const searchHistoryPanel = $<HTMLDivElement>("search-history");
+const searchHistoryList = $<HTMLDivElement>("search-history-list");
+const searchHistoryClear = $<HTMLButtonElement>("search-history-clear");
 const attach = $<HTMLButtonElement>("d-attach");
 const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
 const navSearch = $<HTMLInputElement>("nav-search");
@@ -130,6 +134,10 @@ const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
 const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
+const SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
+const SEARCH_HISTORY_LIMIT = 8;
+const SEARCH_HISTORY_MERGE_MS = 3_000;
+const SEARCH_HISTORY_LABEL_MAX = 56;
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
 const FILE_PREVIEW_BYTES = 128 * 1024;
@@ -169,6 +177,7 @@ let detailMaterializing = false;
 let lastCacheState: CacheSkill | undefined;
 let butlerName = "00_codex_skills";
 let suggestReturnFocus: HTMLElement | null = null;
+let searchHistory: SearchHistoryEntry[] = loadSearchHistory();
 suggestModal.hidden = true;
 
 // Keep navigation instant without allowing unbounded query or document caches.
@@ -196,6 +205,96 @@ let explorerStates: Record<NavigationView, ExplorerState> = {
   files: emptyExplorer(),
   sub_skills: emptyExplorer(),
 };
+
+function loadSearchHistory(): SearchHistoryEntry[] {
+  try {
+    const raw = window.localStorage?.getItem(SEARCH_HISTORY_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    return parsed.flatMap((item): SearchHistoryEntry[] => {
+      const query = typeof item === "string"
+        ? item.trim()
+        : item && typeof item === "object" && typeof (item as { query?: unknown }).query === "string"
+          ? (item as { query: string }).query.trim()
+          : "";
+      if (!query) return [];
+      const normalized = query.toLocaleLowerCase();
+      if (seen.has(normalized)) return [];
+      seen.add(normalized);
+      const at = item && typeof item === "object" && typeof (item as { at?: unknown }).at === "number"
+        ? (item as { at: number }).at
+        : 0;
+      return [{ query: query.slice(0, 500), at: Number.isFinite(at) ? at : 0 }];
+    }).slice(0, SEARCH_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function persistSearchHistory(): void {
+  try {
+    window.localStorage?.setItem(SEARCH_HISTORY_KEY, JSON.stringify(searchHistory));
+  } catch {
+    // Sandboxed hosts may deny storage; in-memory history still works.
+  }
+}
+
+function searchHistoryLabel(query: string): string {
+  const characters = Array.from(query);
+  return characters.length > SEARCH_HISTORY_LABEL_MAX
+    ? characters.slice(0, SEARCH_HISTORY_LABEL_MAX - 1).join("").trimEnd() + "…"
+    : query;
+}
+
+function syncSearchHistoryVisibility(): void {
+  const visible = searchHistory.length > 0 && view.view !== "detail" &&
+    (view.view === "home" || view.view === "category" ||
+      (view.view === "search" && !search.value.trim()));
+  searchHistoryPanel.hidden = !visible;
+}
+
+function renderSearchHistory(): void {
+  searchHistoryList.replaceChildren(...searchHistory.map((entry) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "history-chip";
+    chip.textContent = searchHistoryLabel(entry.query);
+    chip.title = entry.query;
+    chip.setAttribute("aria-label", `再次搜索：${entry.query}`);
+    chip.addEventListener("click", () => {
+      search.value = entry.query;
+      void navigate({ view: "search", query: entry.query });
+    });
+    return chip;
+  }));
+  syncSearchHistoryVisibility();
+}
+
+function rememberSearch(query: string): void {
+  const value = query.trim();
+  if (!value) return;
+  const normalized = value.toLocaleLowerCase();
+  const now = Date.now();
+  const last = searchHistory[0];
+  if (last && now - last.at <= SEARCH_HISTORY_MERGE_MS &&
+      (value.startsWith(last.query) || last.query.startsWith(value))) {
+    searchHistory.shift();
+  }
+  searchHistory = searchHistory.filter((entry) => entry.query.toLocaleLowerCase() !== normalized);
+  searchHistory.unshift({ query: value.slice(0, 500), at: now });
+  searchHistory = searchHistory.slice(0, SEARCH_HISTORY_LIMIT);
+  persistSearchHistory();
+  renderSearchHistory();
+}
+
+function clearSearchHistory(): void {
+  searchHistory = [];
+  persistSearchHistory();
+  renderSearchHistory();
+  status("已清除搜索历史");
+}
 
 function status(message: string, action?: () => void) {
   $("status").textContent = message;
@@ -990,7 +1089,7 @@ function showView(next: View) {
   $("search-zone").hidden = next.view === "detail";
   $("content").setAttribute("data-view", next.view);
   $("heading").textContent = next.view === "category" ? next.category :
-    next.view === "search" ? `搜索“${next.query}”` :
+    next.view === "search" ? "搜索结果" :
     next.view === "detail" ? next.skill.name : "Codex Skills 技能库";
   $("eyebrow").textContent = next.view === "category" ? "Library · category" :
     next.view === "search" ? "Library · search result" :
@@ -1024,6 +1123,7 @@ function showView(next: View) {
     $("cards-list").replaceChildren();
   }
   searchMore.hidden = true;
+  renderSearchHistory();
   if (document.activeElement?.tagName === "BUTTON") $("heading").focus({ preventScroll: true });
   window.scrollTo(0, 0);
 }
@@ -1064,6 +1164,7 @@ async function navigate(next: View) {
       } else {
         const skills = (next.view === "search" ? data.results : data.skills) ?? [];
         if (next.view === "search") {
+          rememberSearch(next.query);
           currentSearch = data;
           $("count").textContent = `${skills.length}/${data.total ?? skills.length} 结果`;
         } else {
@@ -1169,6 +1270,7 @@ clearCacheButton.onclick = async () => {
 };
 
 $("back").onclick = () => void navigate(view.view === "detail" ? view.from : { view: "home" });
+searchHistoryClear.onclick = clearSearchHistory;
 $("retry").onclick = () => retry?.();
 instructionToggle.onclick = () => setInstructionMode(instructionMode === "rendered" ? "raw" : "rendered");
 searchMore.onclick = async () => {

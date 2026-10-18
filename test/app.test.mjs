@@ -32,14 +32,20 @@ class Element {
   dispatch(name, event = {}) { return this.listeners.get(name)?.({ target: this, preventDefault() {}, ...event }); }
 }
 
-function harness() {
+function harness(storage = new Map()) {
   const elements = new Map([...template.matchAll(/id="([^"]+)"/g)].map((match) => [match[1], new Element()]));
   const sent = [];
   const copied = [];
   const listeners = new Map();
   const timers = new Map();
   let sequence = 0;
+  const localStorage = {
+    getItem(key) { return storage.has(key) ? storage.get(key) : null; },
+    setItem(key, value) { storage.set(key, String(value)); },
+    removeItem(key) { storage.delete(key); },
+  };
   const window = {
+    localStorage,
     parent: { postMessage(message) { sent.push(message); } },
     opened: [],
     open(url) { this.opened.push(url); return {}; },
@@ -73,7 +79,7 @@ function harness() {
     message.method === "tools/call" && message.params?.name === name);
   const node = (id) => elements.get(id);
   return {
-    node, sent, copied, reply, latest, latestTool, toolRequests, flush, document,
+    node, sent, copied, reply, latest, latestTool, toolRequests, flush, document, localStorage, storage,
     async ready(homeData = home) {
       assert.equal(sent.length, 1, "no tool call before initialization");
       assert.equal(sent[0].method, "ui/initialize");
@@ -177,11 +183,49 @@ test("detail back returns to its search and successful preview updates cache bad
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-cached").textContent, "已完整缓存");
   app.node("back").onclick(); await app.flush();
-  assert.equal(app.node("heading").textContent, "搜索“needle”");
+  assert.equal(app.node("heading").textContent, "搜索结果");
   assert.equal(app.node("search").value, "needle");
   assert.equal(app.toolRequests("skills.query").at(-1).params.arguments.query, "needle");
   assert.equal(app.node("cards-list").children[0].children[0].textContent, "alpha");
   await app.dispose();
+});
+
+test("search history persists, compacts long queries and stays out of the page heading", async () => {
+  const storage = new Map();
+  const longQuery = "please reverse engineer this reference image into a reusable prompt " + "细节".repeat(40);
+  const app = harness(storage);
+  await app.ready();
+  await app.search(longQuery);
+  await app.reply(app.latestTool("skills.query"), { structuredContent: {
+    results: [skill("alpha")], total: 1, offset: 0, has_more: false,
+  }});
+  assert.equal(app.node("heading").textContent, "搜索结果");
+  assert.equal(app.node("search").value, longQuery);
+
+  app.node("back").onclick(); await app.flush();
+  await app.reply(app.latestTool("skills.browse"), { structuredContent: home });
+  assert.equal(app.node("search-history").hidden, false);
+  const chip = app.node("search-history-list").children[0];
+  assert.equal(chip.title, longQuery);
+  assert.ok(chip.textContent.length < longQuery.length);
+  assert.match(chip.textContent, /…$/);
+
+  const persisted = harness(storage);
+  await persisted.ready();
+  assert.equal(persisted.node("search-history-list").children.length, 1);
+  assert.equal(persisted.node("search-history-list").children[0].title, longQuery);
+  await persisted.dispose();
+
+  app.node("search-history-clear").onclick();
+  assert.equal(app.node("search-history").hidden, true);
+  assert.equal(app.node("search-history-list").children.length, 0);
+  assert.equal(storage.get("codex-skills.search-history.v1"), "[]");
+  await app.dispose();
+
+  const cleared = harness(storage);
+  await cleared.ready();
+  assert.equal(cleared.node("search-history-list").children.length, 0);
+  await cleared.dispose();
 });
 
 test("home surfaces measured usage and the detail cache can be cleared after confirmation", async () => {
