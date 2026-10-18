@@ -11,7 +11,7 @@
 ### 高价值未用（按价值排序）
 | 能力 | 官方依据 | 我们的用法 |
 |---|---|---|
-| **`ui/message`**（预填/发送） | spec §ui/message：`target:"new"/"active"`、`send` 可 false（仅预填不发送） | 详情页两个按钮：「用此技能开新对话」（new+send）、「填入当前输入框」（active+send:false 预填 `@技能名`） |
+| **`ui/message`**（发送） | 当前 `@modelcontextprotocol/ext-apps` schema 与 `@openai/mcp-extensions` 仅接受 `send: true`；没有“只预填、不发送”的能力 | 可做「用此技能开新对话」，但会把内容作为用户消息发送。当前输入框无法由 MCP App 填入 `@技能名` 或资源 chip |
 | **App 内设置页** | B&B controller 的 settings 面板 + 我们已有的 settings.read/update 5 项 | App 头部 ⚙ 入口：原生表单改 TTL/并发/镜像，热生效——把 openai/settings 与 App UI 统一 |
 | **`sampling/createMessage`** | App 类 API：不经过用户消息直接问模型 | 搜索框旁「AI 帮我选」：自然语言描述任务 → 模型返回 plan_workflow 结果 |
 | **quickAction** | spec §Global Entrypoint：侧边栏图标可挂快捷按钮 | 「搜索技能」快捷动作直达搜索态 |
@@ -32,7 +32,7 @@
 ## 二、前端功能路线图（优先级）
 
 **P0 打磨现有**（1 天）：官方 styles.css 接入（见 §三）、主题/字体/光标同步、技能 letter-avatar 图标、加载骨架屏、空态文案
-**P1 对话交互**（1 天）：加入对话升级（title+structured）、ui/message 双按钮、导出 SKILL.md、quickAction
+**P1 对话交互**（1 天）：加入对话升级（title+structured）、显式发送消息按钮、导出 SKILL.md、quickAction；输入框预填和原生资源 chip 受宿主 API 限制
 **P2 深度整合**（1-2 天）：App 内设置页、AI 帮我选（sampling）、深链分享
 **P3 视宿主解锁**：inline 自适应、资源订阅、表单卡片、onboarding（需授权）
 

@@ -572,7 +572,7 @@ test("handoff stays inert until the complete skill has loaded", async () => {
   const app = harness(); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
   assert.equal(app.node("d-attach").disabled, true);
-  assert.match(app.node("d-attach").title, /不会提前发起对话/);
+  assert.match(app.node("d-attach").title, /完成前不会提交/);
 
   // A disabled DOM button normally suppresses the click, but keep the handler
   // itself inert as well so programmatic clicks cannot submit a partial skill.
@@ -582,7 +582,7 @@ test("handoff stays inert until the complete skill has loaded", async () => {
 
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha" }] });
   assert.equal(app.node("d-attach").disabled, false);
-  assert.match(app.node("d-attach").title, /不会自动发送消息/);
+  assert.match(app.node("d-attach").title, /输入框不会显示技能/);
   await app.dispose();
 });
 
@@ -658,7 +658,7 @@ test("attaching another skill preserves the previous full skill instead of repla
   assert.match(fullText, /## 已选择技能：alpha/);
   assert.match(fullText, /## 已选择技能：beta/);
   await app.reply(merged, {}); await second;
-  assert.match(app.node("d-attach-status").textContent, /共 2 个完整技能/);
+  assert.match(app.node("d-attach-status").textContent, /2 个技能带入当前对话/);
   await app.dispose();
 });
 
@@ -689,7 +689,7 @@ test("a remounted app adopts host context and clears its attached state with the
   await app.reply(request, {}); await attaching;
 
   await app.notify("ui/notifications/host-context-changed", { "openai/modelContext": null });
-  assert.equal(app.node("d-attach").textContent, "带入完整技能");
+  assert.equal(app.node("d-attach").textContent, "带入当前对话");
   await app.dispose();
 });
 
@@ -716,7 +716,7 @@ for (const failed of [false, true]) {
     await app.reply(app.latest("ui/update-model-context"), failed ? { isError: true } : {});
     await attaching;
     const message = app.node("d-attach-status").textContent;
-    assert.match(message, failed ? /加入失败/ : /完整 SKILL\.md 与资源入口/);
+    assert.match(message, failed ? /加入失败/ : /输入框无显示，但已带入/);
     assert.equal(app.node("d-attach-status").hidden, false);
     await app.dispose();
   });

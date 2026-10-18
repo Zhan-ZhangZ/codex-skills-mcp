@@ -485,19 +485,19 @@ function updateAttachButton() {
     ? "更新已带入技能"
     : attached.length > 0
       ? "再带入此技能"
-      : "带入完整技能";
+      : "带入当前对话";
   attach.disabled = attaching || !ready;
   attach.title = !connected
     ? "技能库尚未连接"
     : detailMaterializing
-      ? "技能仍在下载并校验；完整读取成功后才能带入，不会提前发起对话"
+      ? "技能正在下载并校验；完成前不会提交任何技能内容"
       : !detailInstructions.trim()
-        ? "完整说明尚未加载；不会提前发起对话"
+        ? "完整说明尚未加载；完成前不会提交任何技能内容"
         : alreadyAttached
-          ? `「${selected!.skill.name}」已在当前上下文中；点击可刷新完整说明，不会自动发送消息`
+          ? `「${selected!.skill.name}」已在当前对话中；输入框不会显示技能，再次点击可刷新`
           : attached.length > 0
-            ? `当前已带入 ${attached.length} 个技能；点击会合并此技能的完整说明，不会自动发送消息`
-            : "只带入下一轮模型上下文，不会自动发送消息或发起回复";
+            ? `当前已带入 ${attached.length} 个技能；输入框不会显示，点击会合并此技能`
+            : "点击后带入当前对话；输入框不会显示技能，下一条消息可直接使用";
 }
 function busy(value: boolean) {
   $("content").setAttribute("aria-busy", String(value));
@@ -1487,8 +1487,8 @@ attach.onclick = async () => {
     updateAttachButton();
     if (view === selected && !disposed) {
       attachmentStatus(nextSkills.length === 1
-        ? `已将「${skill.name}」的完整 SKILL.md 与资源入口带入下一轮对话；不会自动发起回复`
-        : `已将「${skill.name}」合并到对话上下文，共 ${nextSkills.length} 个完整技能；下一轮生效，不会自动发起回复`);
+        ? `已将「${skill.name}」技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`
+        : `已将「${skill.name}」等 ${nextSkills.length} 个技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`);
     }
   } catch (error) {
     if (view === selected && !disposed) attachmentStatus(`加入失败：${errorMessage(error)}`);
