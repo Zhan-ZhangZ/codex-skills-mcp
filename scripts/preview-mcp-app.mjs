@@ -48,6 +48,11 @@ const historySeed = [
   { query: "把这张产品照片反推成可直接使用的生图中英双语提示词，重点还原灯光、材质和镜头层次", at: Date.now() - 3_600_000 },
   { query: "officecli 生成季度报表", at: Date.now() - 86_400_000 },
   { query: "webapp-testing", at: Date.now() - 3 * 86_400_000 },
+  { query: "humanizer 英文改写", at: Date.now() - 4 * 86_400_000 },
+  { query: "codex-ppt-skill", at: Date.now() - 5 * 86_400_000 },
+  { query: "academic-research-skills-codex 文献综述", at: Date.now() - 6 * 86_400_000 },
+  { query: "image-prompt-reverse 反推提示词", at: Date.now() - 7 * 86_400_000 },
+  { query: "blender-mcp 场景搭建", at: Date.now() - 8 * 86_400_000 },
 ];
 
 function navigationArguments(args) {
@@ -237,6 +242,11 @@ frame.addEventListener("load", () => {
       const first = frame.contentDocument?.querySelector("#cards .card");
       if (first) {
         if (state !== "home" && state !== "history" && state !== "search_long" && state !== "suggest_modal") first.click();
+        if (state === "history") {
+          const input = frame.contentDocument?.querySelector("#search");
+          input?.focus();
+          input?.dispatchEvent(new frame.contentWindow.Event("focus"));
+        }
         if (state === "search_long") {
           const input = frame.contentDocument?.querySelector("#search");
           if (input) {

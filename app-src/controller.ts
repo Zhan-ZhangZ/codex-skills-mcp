@@ -112,6 +112,8 @@ const transport = createAppTransport();
 const search = $<HTMLInputElement>("search");
 const searchHistoryPanel = $<HTMLDivElement>("search-history");
 const searchHistoryList = $<HTMLDivElement>("search-history-list");
+const searchHistoryCount = $<HTMLElement>("search-history-count");
+const searchHistoryMore = $<HTMLButtonElement>("search-history-more");
 const searchHistoryClear = $<HTMLButtonElement>("search-history-clear");
 const attach = $<HTMLButtonElement>("d-attach");
 const clearCacheButton = $<HTMLButtonElement>("d-clear-cache");
@@ -136,7 +138,8 @@ const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
 const SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
 const SEARCH_HISTORY_LIMIT = 8;
-const SEARCH_HISTORY_MERGE_MS = 3_000;
+const SEARCH_HISTORY_VISIBLE_LIMIT = 6;
+const SEARCH_HISTORY_MERGE_MS = 15_000;
 const SEARCH_HISTORY_LABEL_MAX = 56;
 const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
@@ -150,6 +153,7 @@ let connecting = false;
 let composing = false;
 let attaching = false;
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchBlurTimer: ReturnType<typeof setTimeout> | undefined;
 let navSearchTimer: ReturnType<typeof setTimeout> | undefined;
 let navComposing = false;
 let retry: (() => void) | undefined;
@@ -178,6 +182,8 @@ let lastCacheState: CacheSkill | undefined;
 let butlerName = "00_codex_skills";
 let suggestReturnFocus: HTMLElement | null = null;
 let searchHistory: SearchHistoryEntry[] = loadSearchHistory();
+let searchHistoryExpanded = false;
+let searchFocused = false;
 suggestModal.hidden = true;
 
 // Keep navigation instant without allowing unbounded query or document caches.
@@ -249,26 +255,38 @@ function searchHistoryLabel(query: string): string {
 }
 
 function syncSearchHistoryVisibility(): void {
+  const active = document.activeElement;
+  const panelFocused = !!active &&
+    typeof searchHistoryPanel.contains === "function" &&
+    searchHistoryPanel.contains(active);
   const visible = searchHistory.length > 0 && view.view !== "detail" &&
-    (view.view === "home" || view.view === "category" ||
-      (view.view === "search" && !search.value.trim()));
+    !search.value.trim() && (searchFocused || panelFocused);
   searchHistoryPanel.hidden = !visible;
 }
 
 function renderSearchHistory(): void {
-  searchHistoryList.replaceChildren(...searchHistory.map((entry) => {
+  const visibleHistory = searchHistoryExpanded
+    ? searchHistory
+    : searchHistory.slice(0, SEARCH_HISTORY_VISIBLE_LIMIT);
+  searchHistoryList.replaceChildren(...visibleHistory.map((entry, index) => {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "history-chip";
     chip.textContent = searchHistoryLabel(entry.query);
     chip.title = entry.query;
     chip.setAttribute("aria-label", `再次搜索：${entry.query}`);
+    chip.style.animationDelay = `${Math.min(index, 5) * 28}ms`;
     chip.addEventListener("click", () => {
       search.value = entry.query;
       void navigate({ view: "search", query: entry.query });
     });
     return chip;
   }));
+  searchHistoryCount.textContent = String(searchHistory.length);
+  const hiddenCount = Math.max(0, searchHistory.length - SEARCH_HISTORY_VISIBLE_LIMIT);
+  searchHistoryMore.hidden = hiddenCount === 0;
+  searchHistoryMore.textContent = searchHistoryExpanded ? "收起" : `更多 ${hiddenCount}`;
+  searchHistoryMore.setAttribute("aria-expanded", String(searchHistoryExpanded));
   syncSearchHistoryVisibility();
 }
 
@@ -291,6 +309,7 @@ function rememberSearch(query: string): void {
 
 function clearSearchHistory(): void {
   searchHistory = [];
+  searchHistoryExpanded = false;
   persistSearchHistory();
   renderSearchHistory();
   status("已清除搜索历史");
@@ -1270,6 +1289,10 @@ clearCacheButton.onclick = async () => {
 };
 
 $("back").onclick = () => void navigate(view.view === "detail" ? view.from : { view: "home" });
+searchHistoryMore.onclick = () => {
+  searchHistoryExpanded = !searchHistoryExpanded;
+  renderSearchHistory();
+};
 searchHistoryClear.onclick = clearSearchHistory;
 $("retry").onclick = () => retry?.();
 instructionToggle.onclick = () => setInstructionMode(instructionMode === "rendered" ? "raw" : "rendered");
@@ -1405,13 +1428,45 @@ function scheduleSearch(immediate = false) {
   if (immediate) run();
   else { busy(true); status("等待输入…"); searchTimer = setTimeout(run, 250); }
 }
-search.addEventListener("input", () => scheduleSearch());
-search.addEventListener("compositionstart", () => { composing = true; cancelNavigation(); });
-search.addEventListener("compositionend", () => { composing = false; scheduleSearch(); });
+search.addEventListener("focus", () => {
+  searchFocused = true;
+  clearTimeout(searchBlurTimer);
+  searchBlurTimer = undefined;
+  syncSearchHistoryVisibility();
+});
+search.addEventListener("blur", () => {
+  searchFocused = false;
+  clearTimeout(searchBlurTimer);
+  searchBlurTimer = setTimeout(() => {
+    searchBlurTimer = undefined;
+    syncSearchHistoryVisibility();
+  }, 120);
+});
+search.addEventListener("input", () => {
+  syncSearchHistoryVisibility();
+  scheduleSearch();
+});
+search.addEventListener("compositionstart", () => {
+  composing = true;
+  syncSearchHistoryVisibility();
+  cancelNavigation();
+});
+search.addEventListener("compositionend", () => {
+  composing = false;
+  syncSearchHistoryVisibility();
+  scheduleSearch();
+});
 search.addEventListener("keydown", (event) => {
   if (event.isComposing || composing) return;
   if (event.key === "Enter") { event.preventDefault(); scheduleSearch(true); }
   if (event.key === "Escape") { search.value = ""; scheduleSearch(true); }
+});
+searchHistoryPanel.addEventListener("focusout", () => {
+  clearTimeout(searchBlurTimer);
+  searchBlurTimer = setTimeout(() => {
+    searchBlurTimer = undefined;
+    syncSearchHistoryVisibility();
+  }, 0);
 });
 
 function applyHostContext(context: HostContext) {

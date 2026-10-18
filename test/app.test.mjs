@@ -204,11 +204,30 @@ test("search history persists, compacts long queries and stays out of the page h
 
   app.node("back").onclick(); await app.flush();
   await app.reply(app.latestTool("skills.browse"), { structuredContent: home });
+  assert.equal(app.node("search-history").hidden, true);
+  app.node("search").dispatch("focus");
   assert.equal(app.node("search-history").hidden, false);
   const chip = app.node("search-history-list").children[0];
+  assert.equal(app.node("search-history-count").textContent, "1");
+  assert.equal(app.node("search-history-more").hidden, true);
   assert.equal(chip.title, longQuery);
   assert.ok(chip.textContent.length < longQuery.length);
   assert.match(chip.textContent, /…$/);
+  chip.dispatch("click"); await app.flush();
+  assert.equal(app.node("search").value, longQuery);
+  assert.equal(app.latestTool("skills.query").params.arguments.query, longQuery);
+  await app.reply(app.latestTool("skills.query"), { structuredContent: {
+    results: [skill("alpha")], total: 1, offset: 0, has_more: false,
+  }});
+  assert.equal(app.node("heading").textContent, "搜索结果");
+  app.node("back").onclick(); await app.flush();
+  await app.reply(app.latestTool("skills.browse"), { structuredContent: home });
+  app.node("search").dispatch("focus");
+  app.node("search").dispatch("blur");
+  await app.tick(120);
+  assert.equal(app.node("search-history").hidden, true);
+  app.node("search").dispatch("focus");
+  assert.equal(app.node("search-history").hidden, false);
 
   const persisted = harness(storage);
   await persisted.ready();
@@ -225,7 +244,38 @@ test("search history persists, compacts long queries and stays out of the page h
   const cleared = harness(storage);
   await cleared.ready();
   assert.equal(cleared.node("search-history-list").children.length, 0);
+  assert.equal(cleared.node("search-history-count").textContent, "0");
   await cleared.dispose();
+});
+
+test("search history shows six recent items and can reveal the remaining saved items", async () => {
+  const storage = new Map();
+  storage.set("codex-skills.search-history.v1", JSON.stringify(
+    Array.from({ length: 8 }, (_, index) => ({
+      query: `query ${index + 1}`,
+      at: Date.now() - index * 1_000,
+    })),
+  ));
+  const app = harness(storage);
+  await app.ready();
+  assert.equal(app.node("search-history").hidden, true);
+  app.node("search").dispatch("focus");
+  assert.equal(app.node("search-history").hidden, false);
+  assert.equal(app.node("search-history-count").textContent, "8");
+  assert.equal(app.node("search-history-list").children.length, 6);
+  assert.equal(app.node("search-history-more").hidden, false);
+  assert.equal(app.node("search-history-more").textContent, "更多 2");
+  assert.equal(app.node("search-history-more").attributes["aria-expanded"], "false");
+
+  app.node("search-history-more").onclick();
+  assert.equal(app.node("search-history-list").children.length, 8);
+  assert.equal(app.node("search-history-more").textContent, "收起");
+  assert.equal(app.node("search-history-more").attributes["aria-expanded"], "true");
+
+  app.node("search-history-more").onclick();
+  assert.equal(app.node("search-history-list").children.length, 6);
+  assert.equal(app.node("search-history-more").textContent, "更多 2");
+  await app.dispose();
 });
 
 test("home surfaces measured usage and the detail cache can be cleared after confirmation", async () => {

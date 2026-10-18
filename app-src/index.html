@@ -86,6 +86,14 @@
       0%, 100% { opacity: .45; }
       50% { opacity: .82; }
     }
+    @keyframes history-drop {
+      from { opacity: 0; transform: translateY(-8px) scaleY(.96); }
+      to { opacity: 1; transform: translateY(0) scaleY(1); }
+    }
+    @keyframes history-item-in {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     header {
       display: flex; align-items: center; gap: 16px;
       min-height: 54px; margin: 0 2px 26px; padding-top: 4px;
@@ -130,8 +138,9 @@
     :focus-visible { outline: 2px solid var(--app-cyan); outline-offset: 3px; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     button:disabled { opacity: .42; cursor: default; box-shadow: none; }
+    .search-shell { position: relative; z-index: 30; margin: 0 0 24px; }
     .search-zone {
-      position: relative; display: flex; align-items: center; margin: 0 0 24px;
+      position: relative; display: flex; align-items: center; margin: 0;
       border: 1px solid rgba(162, 205, 255, .2); border-radius: 16px;
       background: linear-gradient(180deg, rgba(21, 38, 65, .86), rgba(9, 20, 37, .82));
       box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 18px 50px rgba(0, 0, 0, .2);
@@ -147,7 +156,13 @@
     #cat, #search { outline: none; }
     .search-history {
       display: flex; flex-direction: column; gap: 8px;
-      margin: -9px 2px 20px; animation: rise-in .2s ease both;
+      position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 40;
+      margin: 0; padding: 12px 13px 13px; max-height: min(52vh, 360px); overflow-y: auto;
+      border: 1px solid rgba(151, 200, 255, .3); border-radius: 16px;
+      background: linear-gradient(180deg, rgba(13, 29, 52, .985), rgba(7, 18, 35, .99));
+      box-shadow: 0 24px 65px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255,255,255,.06);
+      backdrop-filter: blur(22px);
+      transform-origin: top center; animation: history-drop .22s cubic-bezier(.2, .8, .2, 1) both;
     }
     .search-history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .search-history-title {
@@ -158,17 +173,29 @@
       content: ""; width: 5px; height: 5px; border-radius: 50%;
       background: var(--app-cyan); box-shadow: 0 0 11px rgba(125, 211, 252, .8);
     }
-    .search-history-clear {
+    .search-history-count {
+      min-width: 18px; padding: 1px 5px; border: 1px solid rgba(145, 184, 255, .18);
+      border-radius: 999px; color: #c6dcff; background: rgba(103, 145, 219, .1);
+      font-size: 9px; line-height: 1.5; letter-spacing: 0; text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .search-history-actions { display: flex; align-items: center; gap: 4px; }
+    .search-history-clear, .search-history-more {
       appearance: none; border: 0; padding: 2px 4px; color: var(--app-faint);
       background: transparent; font-size: 10px; line-height: 1.4;
     }
-    .search-history-clear:hover:not(:disabled) { color: var(--app-cyan); background: transparent; box-shadow: none; }
+    .search-history-clear { display: grid; width: 24px; height: 24px; padding: 0; place-items: center; border-radius: 50%; }
+    .search-history-clear svg { display: block; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .search-history-clear:hover:not(:disabled), .search-history-more:hover:not(:disabled) {
+      color: var(--app-cyan); background: transparent; box-shadow: none;
+    }
     .search-history-list { display: flex; flex-wrap: wrap; gap: 7px; }
     .history-chip {
       max-width: min(100%, 320px); padding: 6px 11px; border-radius: 999px;
       border-color: rgba(145, 184, 255, .18); color: #bfd4f0;
       background: rgba(103, 145, 219, .08); font-size: 11px; line-height: 1.25;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      animation: history-item-in .18s ease both;
     }
     .history-chip:hover:not(:disabled) {
       color: #e7f2ff; border-color: rgba(125, 211, 252, .42);
@@ -518,21 +545,28 @@
       <span class="count-pill" id="count"></span>
     </header>
 
-    <label for="search" class="sr-only">搜索技能</label>
-    <div class="search-zone" id="search-zone">
-      <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="10.8" cy="10.8" r="6.6" stroke="currentColor" stroke-width="1.7"/>
-        <path d="M16 16l4.1 4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-      </svg>
-      <input id="search" type="search" maxlength="500" autocomplete="off" spellcheck="false" placeholder="描述你想完成的任务，或搜索技能名称…" disabled />
-      <span class="shortcut" aria-hidden="true">/</span>
-    </div>
-    <div class="search-history" id="search-history" hidden>
-      <div class="search-history-head">
-        <span class="search-history-title">最近搜索</span>
-        <button type="button" class="search-history-clear" id="search-history-clear">清除记录</button>
+    <div class="search-shell" id="search-shell">
+      <label for="search" class="sr-only">搜索技能</label>
+      <div class="search-zone" id="search-zone">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.6" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M16 16l4.1 4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+        <input id="search" type="search" maxlength="500" autocomplete="off" spellcheck="false" placeholder="描述你想完成的任务，或搜索技能名称…" disabled />
+        <span class="shortcut" aria-hidden="true">/</span>
       </div>
-      <div class="search-history-list" id="search-history-list" aria-label="最近搜索"></div>
+      <div class="search-history" id="search-history" hidden>
+        <div class="search-history-head">
+          <span class="search-history-title">最近搜索 <span class="search-history-count" id="search-history-count">0</span></span>
+          <div class="search-history-actions">
+            <button type="button" class="search-history-more" id="search-history-more" hidden>更多</button>
+            <button type="button" class="search-history-clear" id="search-history-clear" aria-label="清除搜索历史" title="清除搜索历史">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="search-history-list" id="search-history-list" aria-label="最近搜索"></div>
+      </div>
     </div>
 
     <main id="content" aria-busy="true" data-view="home">
