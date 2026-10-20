@@ -242,8 +242,8 @@ export function registerSkillResources(
         if (!entry) {
           throw new Error(`Skill "${name}" not found.`);
         }
-        const preferredReadme = path.toLowerCase() === "readme.md" &&
-          extra?._meta?.["codex-skills/display"] === "readme";
+        const displayReadme = extra?._meta?.["codex-skills/display"] === "readme";
+        const preferredReadme = displayReadme && path.toLowerCase() === "readme.md";
         let selectedPath = path;
         if (preferredReadme) {
           const rootFiles = await loader.listSkillFiles(entry, "", 0);
@@ -262,7 +262,7 @@ export function registerSkillResources(
           : selectedPath.endsWith(".json")
             ? "application/json"
             : "text/plain";
-        const displayOnly = preferredReadme;
+        const displayOnly = displayReadme && preferredReadmeName([selectedPath]) !== undefined;
         const text = displayOnly
           ? content
           : `## ${name} / ${selectedPath} (${size_bytes} bytes; ` +
@@ -278,7 +278,7 @@ export function registerSkillResources(
               uri: uri.href,
               mimeType: mime,
               text,
-              ...(preferredReadme
+              ...(displayOnly
                 ? { _meta: { "codex-skills/readme-path": selectedPath } }
                 : {}),
             },

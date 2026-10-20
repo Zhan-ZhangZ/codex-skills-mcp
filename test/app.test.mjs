@@ -43,6 +43,8 @@ function harness(serverHistory = [], initialize = {}) {
   const legacyStorage = initialize.localStorage ?? new Map();
   const defaultReadme = (name) => `# ${name} README\n\nREADME for ${name}.`;
   const readmeFor = (name) => initialize.readmes?.[name] ?? defaultReadme(name);
+  const readmeNamesFor = (name) => initialize.readmeNames?.[name] ?? ["README.md"];
+  const readmeByPathFor = (name, path) => initialize.readmesByPath?.[name]?.[path];
   const deliverHistory = (request, entries) => {
     queueMicrotask(() => {
       listeners.get("message")?.({
@@ -61,9 +63,10 @@ function harness(serverHistory = [], initialize = {}) {
       postMessage(message) {
         sent.push(message);
         const readmeMatch = message.method === "resources/read" &&
-          String(message.params?.uri ?? "").match(/^skill:\/\/([^/]+)\/README\.md$/);
+          String(message.params?.uri ?? "").match(/^skill:\/\/([^/]+)\/(README[^/]*\.md)$/i);
         if (readmeMatch) {
           const name = decodeURIComponent(readmeMatch[1]);
+          const path = decodeURIComponent(readmeMatch[2]);
           const readmeError = initialize.readmeErrors?.[name];
           queueMicrotask(() => {
             listeners.get("message")?.({
@@ -73,8 +76,8 @@ function harness(serverHistory = [], initialize = {}) {
                     ? { code: -32603, message: readmeError }
                     : readmeError }
                 : { jsonrpc: "2.0", id: message.id, result: { contents: [{
-                    text: readmeFor(name),
-                    _meta: { "codex-skills/readme-path": initialize.readmePaths?.[name] ?? "README.md" },
+                    text: readmeByPathFor(name, path) ?? readmeFor(name),
+                    _meta: { "codex-skills/readme-path": initialize.readmePaths?.[name] ?? path },
                   }] } },
             });
           });
@@ -82,6 +85,37 @@ function harness(serverHistory = [], initialize = {}) {
         }
         if (message.method !== "tools/call") return;
         const name = message.params?.name;
+        if (name === "list_skill_files" && message.params?.arguments?.query === "README" &&
+            message.params?.arguments?.max_depth === 0) {
+          const skillName = String(message.params.arguments.skill_name);
+          const entries = readmeNamesFor(skillName).map((file) => ({
+            name: file,
+            path: file,
+            type: "file",
+            size_bytes: file.length,
+            text: file,
+            excerpted: false,
+          }));
+          queueMicrotask(() => {
+            listeners.get("message")?.({
+              source: window.parent,
+              data: { jsonrpc: "2.0", id: message.id, result: { structuredContent: {
+                skill_name: skillName,
+                view: "files",
+                path: "",
+                query: "README",
+                total: entries.length,
+                matched: entries.length,
+                offset: 0,
+                returned: entries.length,
+                next_cursor: null,
+                descriptions_excerpted: false,
+                entries,
+              } } },
+            });
+          });
+          return;
+        }
         if (!["skills.getSearchHistory", "skills.recordSearch", "skills.clearSearchHistory"].includes(name)) return;
         if (name === "skills.clearSearchHistory") historyEntries.splice(0);
         if (name === "skills.recordSearch") {
@@ -465,15 +499,20 @@ test("skill README defaults to rendered view and preserves an exact raw toggle",
   await app.dispose();
 });
 
-test("skill tray labels the selected Chinese README variant", async () => {
+test("skill tray selects and labels the Chinese README variant", async () => {
   const app = harness([], {
-    readmes: { beta: "# 中文说明\n\n这个技能用于中文内容生产。" },
-    readmePaths: { beta: "README.zh-CN.md" },
+    readmeNames: { beta: ["README.md", "README_zh-TW.md", "README_zh.md"] },
+    readmesByPath: { beta: { "README_zh.md": "# 中文说明\n\n这个技能用于中文内容生产。" } },
   });
   await app.ready();
   app.node("cards").children[1].onclick(); await app.flush();
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Agent SKILL" }] });
-  assert.equal(app.node("doc-source").textContent, "README.zh-CN.md");
+  const readmeRequest = app.sent.findLast((message) =>
+    message.method === "resources/read" && /\/README_zh\.md$/.test(message.params?.uri ?? ""));
+  assert.ok(readmeRequest);
+  assert.equal(readmeRequest.params._meta["codex-skills/display"], "readme");
+  assert.equal(readmeRequest.params._meta["codex-skills/preferred-language"], "zh-CN");
+  assert.equal(app.node("doc-source").textContent, "README_zh.md");
   assert.match(app.node("d-md").textContent, /中文说明/);
   assert.doesNotMatch(app.node("d-md").textContent, /Agent SKILL/);
   await app.dispose();
@@ -949,7 +988,8 @@ test("sub-skill search and pagination keep a local page history", async () => {
   assert.match(app.node("nav-list").children[0].children[1].children[0].textContent, /final/);
   app.node("nav-prev").onclick(); await app.flush();
   assert.match(app.node("nav-list").children[0].children[1].children[0].textContent, /design/);
-  assert.equal(app.toolRequests("list_skill_files").length, 2);
+  assert.equal(app.toolRequests("list_skill_files")
+    .filter((request) => request.params.arguments.view === "sub_skills").length, 2);
 
   app.node("nav-search").value = "needle";
   app.node("nav-search").dispatch("keydown", { key: "Enter" });

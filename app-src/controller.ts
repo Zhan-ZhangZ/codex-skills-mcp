@@ -883,6 +883,85 @@ async function readResourceText(
   return (await readResource(uri, progressToken, meta)).text;
 }
 
+const CHINESE_README_PATTERNS: readonly RegExp[] = [
+  /^readme[._-]zh-cn\.md$/i,
+  /^readme[._-]zh-hans\.md$/i,
+  /^readme[._-]zh\.md$/i,
+  /^readme[._-]zh-tw\.md$/i,
+  /^readme[._-]zh-hant\.md$/i,
+  /^readme[._-]cn\.md$/i,
+  /^readme[._-]chinese\.md$/i,
+  /^readme[._-]中文\.md$/i,
+  /^readme中文\.md$/i,
+];
+
+const ENGLISH_README_PATTERNS: readonly RegExp[] = [
+  /^readme\.md$/i,
+  /^readme[._-]en\.md$/i,
+];
+
+function preferredReadmeName(names: readonly string[]): string | undefined {
+  const sorted = [...names].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  for (const patterns of [CHINESE_README_PATTERNS, ENGLISH_README_PATTERNS]) {
+    for (const pattern of patterns) {
+      const match = sorted.find((name) => pattern.test(name));
+      if (match) return match;
+    }
+  }
+  return undefined;
+}
+
+async function preferredSkillReadmePath(skillName: string): Promise<string> {
+  try {
+    const result = await call<NavigationResult>("list_skill_files", {
+      skill_name: skillName,
+      view: "files",
+      path: "",
+      max_depth: 0,
+      query: "README",
+      limit: 100,
+    });
+    return preferredReadmeName(
+      result.entries
+        .filter((entry) => entry.type === "file" && !entry.path.includes("/"))
+        .map((entry) => entry.name),
+    ) ?? "README.md";
+  } catch {
+    return "README.md";
+  }
+}
+
+function removeReadmeFileEnvelope(text: string, skillName: string, path: string): string {
+  const heading = `## ${skillName} / ${path} (`;
+  if (!text.startsWith(heading)) return text;
+  const body = text.indexOf("\n\n", heading.length);
+  return body >= 0 ? text.slice(body + 2) : text;
+}
+
+async function readSkillReadme(skillName: string): Promise<{
+  text: string;
+  path: string;
+}> {
+  const selectedPath = await preferredSkillReadmePath(skillName);
+  const meta = {
+    "codex-skills/display": "readme",
+    "codex-skills/preferred-language": "zh-CN",
+  };
+  let result: ResourceReadResult;
+  let requestedPath = selectedPath;
+  try {
+    result = await readResource(skillFileUri(skillName, selectedPath), undefined, meta);
+  } catch (error) {
+    if (selectedPath === "README.md") throw error;
+    requestedPath = "README.md";
+    result = await readResource(skillFileUri(skillName, requestedPath), undefined, meta);
+  }
+  const path = typeof result.meta["codex-skills/readme-path"] === "string"
+    ? result.meta["codex-skills/readme-path"]
+    : requestedPath;
+  return { text: removeReadmeFileEnvelope(result.text, skillName, path), path };
+}
+
 function card(skill: SkillCard): HTMLButtonElement {
   const button = document.createElement("button");
   button.className = "card";
@@ -1515,23 +1594,13 @@ async function navigate(next: View) {
       markMaterialized();
       status("技能已缓存，正在读取 README…");
       try {
-        const readmeResult = await readResource(
-          skillFileUri(next.skill.name, "README.md"),
-          undefined,
-          {
-            "codex-skills/display": "readme",
-            "codex-skills/preferred-language": "zh-CN",
-          },
-        );
+        const readmeResult = await readSkillReadme(next.skill.name);
         if (!current()) return;
-        const readmePath = typeof readmeResult.meta["codex-skills/readme-path"] === "string"
-          ? readmeResult.meta["codex-skills/readme-path"]
-          : "README.md";
         renderDocument(
           readmeResult.text.trim()
             ? readmeResult.text
             : fallbackSkillOverview(next.skill, "技能包中的 README.md 为空。"),
-          readmeResult.text.trim() ? readmePath : "技能简介",
+          readmeResult.text.trim() ? readmeResult.path : "技能简介",
         );
         status(readmeResult.text.trim() ? "" : "README.md 为空，当前显示技能简介");
       } catch (readmeError) {

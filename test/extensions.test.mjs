@@ -196,6 +196,35 @@ test("preferred skill README selects a Chinese variant before English", async (t
   assert.equal(result.contents[0]._meta["codex-skills/readme-path"], "README.zh-CN.md");
 });
 
+test("an explicit Chinese README resource is rendered without a file wrapper", async (t) => {
+  const requested = [];
+  const loader = {
+    listSkillFiles: async () => {
+      throw new Error("an explicit README path should not trigger discovery");
+    },
+    loadSkillFile: async (_entry, path) => {
+      requested.push(path);
+      return {
+        content: "# 中文说明\n\n直接显示这个版本。", size_bytes: 31, offset: 0, bytes_returned: 31,
+        has_more: false, binary: false,
+      };
+    },
+  };
+  const client = await session(t, (server, extensions) => registerOpenAIMentions(
+    server, extensions, config(), new SkillSearchEngine(manifest), loader
+  ));
+  const result = await client.readResource({
+    uri: `skill://${encodeURIComponent(names[0])}/README_zh.md`,
+    _meta: {
+      "codex-skills/display": "readme",
+      "codex-skills/preferred-language": "zh-CN",
+    },
+  });
+  assert.deepEqual(requested, ["README_zh.md"]);
+  assert.equal(result.contents[0].text, "# 中文说明\n\n直接显示这个版本。");
+  assert.equal(result.contents[0]._meta["codex-skills/readme-path"], "README_zh.md");
+});
+
 test("resource materialization has a bounded deadline and can be retried", async (t) => {
   let ready = false;
   const loader = { readInstructionsWithState: async () => ready ? { instructions: "ready", cache: { complete: true } } : new Promise(() => {}) };

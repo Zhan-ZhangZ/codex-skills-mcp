@@ -3,6 +3,14 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.5.0-beta.16] - 2026-10-20
+
+### Fixed
+
+- Skill details now select a Chinese README variant directly from the skill
+  root, including names such as `README_zh.md`, so localized descriptions open
+  even when the desktop host does not preserve preferred-language metadata.
+
 ## [1.5.0-beta.15] - 2026-10-20
 
 ### Changed

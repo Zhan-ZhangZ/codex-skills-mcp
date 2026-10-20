@@ -101,6 +101,7 @@ function navigationArguments(args) {
     { name: "references", path: "references", type: "directory", text: "", excerpted: false },
     { name: "SKILL.md", path: "SKILL.md", type: "file", size_bytes: 6400, text: "", excerpted: false },
     { name: "README.md", path: "README.md", type: "file", size_bytes: 3200, text: "", excerpted: false },
+    { name: "README_zh.md", path: "README_zh.md", type: "file", size_bytes: 2600, text: "", excerpted: false },
     { name: "requirements.txt", path: "requirements.txt", type: "file", size_bytes: 96, text: "", excerpted: false },
     { name: "brand-logo.png", path: "brand-logo.png", type: "file", size_bytes: 18000, text: "", excerpted: false },
     { name: "monthly.xlsx", path: "monthly.xlsx", type: "file", size_bytes: 4096, text: "", excerpted: false },
@@ -207,7 +208,8 @@ addEventListener("message", (event) => {
   }
   if (message.method === "resources/read") {
     const skill = message.params.uri === "skill://awesome-journal-skills";
-    const readmeFile = message.params.uri === "skill://awesome-journal-skills/README.md";
+    const readmeMatch = String(message.params.uri).match(/^skill:\/\/awesome-journal-skills\/(README[^/]*\.md)$/);
+    const readmeFile = Boolean(readmeMatch);
     const file = !skill && !readmeFile;
     if (skill && state === "progress") {
       frame.contentWindow.postMessage({ jsonrpc: "2.0", method: "notifications/progress", params: {
@@ -218,7 +220,7 @@ addEventListener("message", (event) => {
     }
     return reply(message.id, { contents: [{
       text: readmeFile ? readme : file ? "# Getting started\\n\\n这是文件预览内容。" : instructions,
-      ...(readmeFile ? { _meta: { "codex-skills/readme-path": "README.zh-CN.md" } } : {}),
+      ...(readmeFile ? { _meta: { "codex-skills/readme-path": readmeMatch[1] } } : {}),
     }] });
   }
   if (message.method === "ui/update-model-context") return reply(message.id, {});
