@@ -9,7 +9,19 @@ const staging = mkdtempSync(join(root, '.package-check-'));
 try {
   const result = JSON.parse(execFileSync('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', staging], { cwd: root, encoding: 'utf8' }));
   const files = new Set(result[0].files.map(file => file.path));
-  for (const required of ['dist/index.js', 'dist/app.html', 'dist/lib/http-server.js', 'package.json']) {
+  for (const required of [
+    'dist/index.js',
+    'dist/app.html',
+    'dist/lib/http-server.js',
+    'package.json',
+    'LICENSE',
+    'LICENSE.zh-CN.md',
+    'NOTICE',
+    'brand/README.md',
+    'brand/logo-white.png',
+    'brand/logo-black.png',
+    'brand/attribution-snippet.html',
+  ]) {
     if (!files.has(required)) throw new Error('Missing package file: ' + required);
   }
   execFileSync('tar', ['-xzf', join(staging, result[0].filename), '-C', staging]);

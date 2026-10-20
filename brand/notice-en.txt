@@ -1,0 +1,2 @@
+Derived work: built on codex-skills-mcp by HESUYANGONG, independently offered by [Seller Name]. Not an official release by the original authors.
+Original project and license: https://github.com/Zhan-ZhangZ/codex-skills-mcp

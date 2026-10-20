@@ -11,7 +11,10 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "brand",
+    "NOTICE",
+    "LICENSE.zh-CN.md"
   ],
   "scripts": {
     "build": "npm run typecheck && npm run build:app && tsc && node -e \"require('fs').copyFileSync('assets/app.html','dist/app.html')\"",
@@ -34,7 +37,7 @@
     "ai-skills",
     "model-context-protocol"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.7.5",
     "@modelcontextprotocol/sdk": "^1.30.0",

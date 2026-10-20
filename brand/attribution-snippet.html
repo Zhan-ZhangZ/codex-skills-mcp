@@ -1,0 +1,57 @@
+<!--
+  Commercial attribution snippet for codex-skills-mcp.
+  Replace [SELLER NAME] / [销售方名称] before publishing.
+  Keep both the logo and notice visible on the offer and product About/Credits page.
+-->
+<section class="csm-attribution" aria-label="开放源代码署名">
+  <style>
+    .csm-attribution {
+      --csm-fg: #10213a;
+      --csm-muted: #526580;
+      --csm-border: rgba(54, 83, 122, .2);
+      --csm-bg: #f6f9fd;
+      display: grid;
+      gap: 10px;
+      padding: 16px 18px;
+      border: 1px solid var(--csm-border);
+      border-radius: 14px;
+      background: var(--csm-bg);
+      color: var(--csm-fg);
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .csm-attribution__logo {
+      display: block;
+      width: 180px;
+      max-width: 100%;
+      height: auto;
+    }
+    .csm-attribution__notice {
+      margin: 0;
+      font-weight: 650;
+    }
+    .csm-attribution__source,
+    .csm-attribution__source:visited {
+      color: var(--csm-muted);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .csm-attribution {
+        --csm-fg: #f2f7ff;
+        --csm-muted: #aabdd7;
+        --csm-border: rgba(151, 190, 247, .24);
+        --csm-bg: #0c1a2d;
+      }
+    }
+  </style>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-white.png">
+    <img class="csm-attribution__logo" src="logo-black.png" alt="合塑研工 HESUYANGONG">
+  </picture>
+  <p class="csm-attribution__notice">
+    非原创：本项目基于 codex-skills-mcp（合塑研工）二次开发，由 [销售方名称] 独立提供，非原作者官方发行版。
+  </p>
+  <a class="csm-attribution__source" href="https://github.com/Zhan-ZhangZ/codex-skills-mcp">
+    原项目、源代码与许可证
+  </a>
+</section>

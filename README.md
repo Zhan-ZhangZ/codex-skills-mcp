@@ -23,6 +23,21 @@
 | **自动网络加速** | 官方加速端点优先，延迟加入 GitHub / CDN / 公共镜像竞速；完整正文通过校验后才接受 |
 | **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
 
+## 授权与商业使用
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/logo-white.png">
+  <img src="brand/logo-black.png" alt="合塑研工 HESUYANGONG" width="200">
+</picture>
+
+- **个人、非商业项目及企业自用**：可免费安装、运行、修改和免费分发，但须保留版权、许可证和来源声明。
+- **商业售卖、收费安装/部署/支持、付费托管，或随付费产品打包**：必须显著展示官方 Logo，并标明“非原创：基于 codex-skills-mcp（合塑研工）二次开发，非原作者官方发行版”。
+- **品牌资源**：[`brand/`](brand/) 提供明暗两版 Logo、中英文声明模板和可直接粘贴的 HTML。使用前请阅读[品牌说明](brand/README.md)。
+
+许可证全文见 [LICENSE](LICENSE)，中文参考译文见 [LICENSE.zh-CN.md](LICENSE.zh-CN.md)，第三方材料与来源说明见 [NOTICE](NOTICE)。
+
+> 这是源码公开（source-available）的自定义许可，不是 MIT，也不是 OSI 认可的开源许可证。GitHub 的自动许可证识别器可能显示为 “View license”；请以根目录 `LICENSE` 为准。
+
 ## beta.12 跨会话搜索历史、技能撤销与完整技能带入
 
 当前源码版本为 **1.5.0-beta.12**，插件版本为 **0.6.3**。npm 的 `beta` 此前已发布 `1.5.0-beta.11`；beta.12 补齐已带入技能的可视管理、单项移除和全部清空。
@@ -439,4 +454,11 @@ npm audit
 
 ## License
 
-MIT
+本项目采用 [Codex Skills MCP Commercial Attribution License 1.0](LICENSE)：
+
+- 个人、非商业及内部使用免费；
+- 商业售卖需显著展示官方 Logo、标注非原创来源并提供原项目链接；
+- Logo 使用范围及禁止事项见 [brand/README.md](brand/README.md)；
+- 第三方依赖和运行期技能内容继续受各自许可证约束，详见 [NOTICE](NOTICE)。
+
+中文参考译文：[LICENSE.zh-CN.md](LICENSE.zh-CN.md)。

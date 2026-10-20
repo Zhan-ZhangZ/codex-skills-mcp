@@ -3,6 +3,7 @@
   "version": "0.6.0",
   "description": "Browse, search, and load a continuously updated library of on-demand expert skills.",
   "author": { "name": "Zhan-ZhangZ" },
+  "license": "SEE LICENSE IN LICENSE",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Skills 技能库",

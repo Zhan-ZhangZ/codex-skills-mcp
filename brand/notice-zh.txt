@@ -1,0 +1,2 @@
+非原创：本项目基于 codex-skills-mcp（合塑研工）二次开发，由 [销售方名称] 独立提供，非原作者官方发行版。
+原项目与许可证：https://github.com/Zhan-ZhangZ/codex-skills-mcp

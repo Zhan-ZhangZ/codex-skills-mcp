@@ -22,4 +22,6 @@ await build({
   },
 });
 await copyFile(resolve(root, "assets/app.html"), resolve(root, "plugin/dist/app.html"));
-console.log("plugin/dist/server.js + app.html bundled from fresh build");
+await copyFile(resolve(root, "LICENSE"), resolve(root, "plugin/LICENSE"));
+await copyFile(resolve(root, "NOTICE"), resolve(root, "plugin/NOTICE"));
+console.log("plugin/dist/server.js + app.html and license files bundled from fresh build");
