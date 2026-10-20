@@ -30,6 +30,7 @@ import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
+import { preferredReadmeName } from "../lib/readme.js";
 import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../remote/skill-progress.js";
 
 /** Max items returned by mention typeahead (picker ergonomics). */
@@ -241,30 +242,45 @@ export function registerSkillResources(
         if (!entry) {
           throw new Error(`Skill "${name}" not found.`);
         }
+        const preferredReadme = path.toLowerCase() === "readme.md" &&
+          extra?._meta?.["codex-skills/display"] === "readme";
+        let selectedPath = path;
+        if (preferredReadme) {
+          const rootFiles = await loader.listSkillFiles(entry, "", 0);
+          selectedPath = preferredReadmeName(
+            rootFiles.filter((file) => file.type === "file").map((file) => file.name),
+          ) ?? "README.md";
+        }
         // loadSkillFile handles remote fetch, path-traversal security and
         // missing-file errors with clear messages.
         const result = await readWithDeadline(
-          () => loader.loadSkillFile(entry, path), config, extra.signal
+          () => loader.loadSkillFile(entry, selectedPath), config, extra.signal
         );
         const { content, size_bytes } = result;
-        const mime = path.endsWith(".md")
+        const mime = selectedPath.endsWith(".md")
           ? "text/markdown"
-          : path.endsWith(".json")
+          : selectedPath.endsWith(".json")
             ? "application/json"
             : "text/plain";
+        const displayOnly = preferredReadme;
+        const text = displayOnly
+          ? content
+          : `## ${name} / ${selectedPath} (${size_bytes} bytes; ` +
+            `${result.binary ? "binary metadata" : `bytes ${result.offset}–${Math.max(result.offset, result.offset + result.bytes_returned - 1)}`})\n\n` +
+            content +
+            (result.has_more && result.next_offset !== undefined
+              ? `\n\n> This resource returned the first ${result.bytes_returned} bytes. ` +
+                `Use load_skill_file with offset=${result.next_offset} to continue.`
+              : "");
         return {
           contents: [
             {
               uri: uri.href,
               mimeType: mime,
-              text:
-                `## ${name} / ${path} (${size_bytes} bytes; ` +
-                `${result.binary ? "binary metadata" : `bytes ${result.offset}–${Math.max(result.offset, result.offset + result.bytes_returned - 1)}`})\n\n` +
-                content +
-                (result.has_more && result.next_offset !== undefined
-                  ? `\n\n> This resource returned the first ${result.bytes_returned} bytes. ` +
-                    `Use load_skill_file with offset=${result.next_offset} to continue.`
-                  : ""),
+              text,
+              ...(preferredReadme
+                ? { _meta: { "codex-skills/readme-path": selectedPath } }
+                : {}),
             },
           ],
         };

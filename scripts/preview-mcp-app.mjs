@@ -125,7 +125,8 @@ const previewImageBase64 = ${JSON.stringify(previewImageBase64)};
 const navigationArguments = ${navigationArguments.toString()};
 let history = ${JSON.stringify(historySeed)};
 window.__rpcLog = [];
-const instructions = "# Awesome Journal Skills\\n\\n## 使用方式\\n\\n先确认研究问题、目标期刊和当前阶段，再读取对应的子技能。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> 完整技能已经缓存在本地，可继续查看文件或子技能。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
+const instructions = "# Awesome Journal Skills\\n\\n## Agent workflow\\n\\nRead the selected sub-skill before execution.";
+const readme = "# Awesome Journal Skills\\n\\n## 技能用途\\n\\n帮助研究者完成期刊选择、研究设计、投稿准备和审稿回复。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n> README 用于帮助用户判断技能用途；带入对话时仍使用完整 SKILL.md。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
 function reply(id, result) { frame.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*"); }
 addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow) return;
@@ -205,15 +206,20 @@ addEventListener("message", (event) => {
     }
   }
   if (message.method === "resources/read") {
-    const file = !message.params.uri.endsWith("awesome-journal-skills");
-    if (!file && state === "progress") {
+    const skill = message.params.uri === "skill://awesome-journal-skills";
+    const readmeFile = message.params.uri === "skill://awesome-journal-skills/README.md";
+    const file = !skill && !readmeFile;
+    if (skill && state === "progress") {
       frame.contentWindow.postMessage({ jsonrpc: "2.0", method: "notifications/progress", params: {
         progressToken: message.params._meta?.progressToken, progress: 1245, total: 2281,
         message: "Fetching 1245/2281 files for awesome-journal-skills",
       } }, "*");
       return;
     }
-    return reply(message.id, { contents: [{ text: file ? "# Getting started\\n\\n这是文件预览内容。" : instructions }] });
+    return reply(message.id, { contents: [{
+      text: readmeFile ? readme : file ? "# Getting started\\n\\n这是文件预览内容。" : instructions,
+      ...(readmeFile ? { _meta: { "codex-skills/readme-path": "README.zh-CN.md" } } : {}),
+    }] });
   }
   if (message.method === "ui/update-model-context") return reply(message.id, {});
 });
@@ -221,7 +227,7 @@ const timer = setInterval(() => {
   try {
     const doc = frame.contentDocument;
     if (!doc) return;
-    if (state === "detail" && doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) {
+    if (state === "detail" && doc.querySelector("#doc-source")?.textContent?.startsWith("README")) {
       clearInterval(timer);
     }
     if (state === "internal_link") {
@@ -235,7 +241,7 @@ const timer = setInterval(() => {
       if (link) { window.__butlerLinkClicked = true; link.click(); }
     }
     if (state === "image_preview") {
-      if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
+      if (doc.querySelector("#doc-source")?.textContent?.startsWith("README")) doc.querySelector("#tab-files")?.click();
       const rows = [...(doc.querySelectorAll("#nav-list .nav-row") || [])];
       const imageRow = rows.find((row) => row.textContent.includes("brand-logo.png"));
       if (imageRow && doc.querySelector("#file-preview")?.hidden !== false) imageRow.click();
@@ -244,7 +250,7 @@ const timer = setInterval(() => {
       }
     }
     if (state === "office_preview") {
-      if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-files")?.click();
+      if (doc.querySelector("#doc-source")?.textContent?.startsWith("README")) doc.querySelector("#tab-files")?.click();
       const rows = [...(doc.querySelectorAll("#nav-list .nav-row") || [])];
       const officeRow = rows.find((row) => row.textContent.includes("monthly.xlsx"));
       if (officeRow && doc.querySelector("#file-preview")?.hidden !== false) officeRow.click();
@@ -268,7 +274,7 @@ const timer = setInterval(() => {
       }
     }
     if (state === "sub_skills") {
-      if (doc.querySelector("#d-md")?.textContent?.includes("Awesome Journal")) doc.querySelector("#tab-sub-skills")?.click();
+      if (doc.querySelector("#doc-source")?.textContent?.startsWith("README")) doc.querySelector("#tab-sub-skills")?.click();
       if (doc.querySelector("#nav-list")?.children.length) clearInterval(timer);
     }
   } catch {}

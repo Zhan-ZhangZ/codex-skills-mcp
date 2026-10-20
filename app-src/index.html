@@ -432,6 +432,11 @@
       border-bottom-color: var(--app-cyan); background: rgba(101, 147, 225, .08); color: #f4f8ff; font-weight: 620;
     }
     .detail-pane { min-height: 180px; }
+    .doc-source {
+      margin-right: auto; padding: 3px 8px; border: 1px solid rgba(125, 211, 252, .24);
+      border-radius: 999px; color: #a9dff8; background: rgba(68, 147, 190, .10);
+      font-size: 10px; letter-spacing: .04em;
+    }
     .explorer-toolbar { display: flex; gap: 9px; align-items: center; margin-bottom: 10px; }
     #nav-search { flex: 1; min-width: 0; }
     #nav-count { white-space: nowrap; }
@@ -688,21 +693,22 @@
         <div class="download-track"><div id="d-progress-fill"></div></div>
         <div id="d-progress-meta" class="download-progress-meta">正在读取文件清单…</div>
       </div>
-      <p id="detail-flow" class="detail-flow">① 查看说明 → ② 带入当前对话 → ③ 在下一条消息里直接描述任务</p>
+      <p id="detail-flow" class="detail-flow">① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务</p>
       <p id="d-attach-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
       <div class="detail-tabs" role="tablist" aria-label="技能详情">
-        <button id="tab-instructions" role="tab" aria-selected="true" aria-controls="instructions-pane">使用说明</button>
+        <button id="tab-instructions" role="tab" aria-selected="true" aria-controls="instructions-pane">技能说明</button>
         <button id="tab-files" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">文件</button>
         <button id="tab-sub-skills" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">子技能</button>
       </div>
       <section id="instructions-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-instructions">
         <p id="d-revision-note" class="detail-summary" role="note" hidden></p>
         <div class="doc-toolbar">
+          <span id="doc-source" class="doc-source">加载中</span>
           <span class="muted">Markdown 安全渲染</span>
           <button id="doc-toggle">查看原文</button>
         </div>
-        <div id="d-md-rendered" class="markdown" tabindex="0" aria-label="技能说明预览">正在下载并读取完整技能…</div>
-        <pre id="d-md" tabindex="0" aria-label="技能说明原文" hidden>正在下载并读取完整技能…</pre>
+        <div id="d-md-rendered" class="markdown" tabindex="0" aria-label="技能 README 或简介预览">正在读取技能简介与 README…</div>
+        <pre id="d-md" tabindex="0" aria-label="技能 README 或简介原文" hidden>正在读取技能简介与 README…</pre>
       </section>
       <section id="explorer-pane" class="detail-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
         <div class="explorer-toolbar">

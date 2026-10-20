@@ -20,6 +20,7 @@ test('built stdio server completes the entire local skill workflow', async t => 
   mkdirSync(join(directory, 'engineering', 'sample'), { recursive: true });
   writeFileSync(join(directory, 'engineering', 'sample', 'SKILL.md'), '# Sample instructions\nRun the supplied validation.');
   writeFileSync(join(directory, 'engineering', 'sample', 'README.md'), 'Supporting text');
+  writeFileSync(join(directory, 'engineering', 'sample', 'README.zh-CN.md'), '# 中文技能说明\n\n用于中文用户判断技能用途。');
   writeFileSync(join(directory, 'engineering', 'sample', 'large.md'), '研究数据😀\n'.repeat(50_000));
   writeFileSync(join(directory, 'skills_manifest.json'), JSON.stringify([{ name: 'sample', description: 'TypeScript code testing 测试', category: 'engineering', folder: 'sample', relative_path: './engineering/sample' }]));
   const transport = new StdioClientTransport({ command: process.execPath,
@@ -58,6 +59,15 @@ test('built stdio server completes the entire local skill workflow', async t => 
   assert.equal((await call('load_skill_file', { skill_name: 'sample', file_path: '../escape' })).isError, true);
   assert.equal((await call('list_skill_files', { skill_name: 'sample', max_depth: 999 })).isError, true);
   assert.match((await client.readResource({ uri: 'skill://sample' })).contents[0].text, /Sample instructions/);
+  const preferredReadme = await client.readResource({
+    uri: 'skill://sample/README.md',
+    _meta: {
+      "codex-skills/display": "readme",
+      "codex-skills/preferred-language": "zh-CN",
+    },
+  });
+  assert.equal(preferredReadme.contents[0].text, '# 中文技能说明\n\n用于中文用户判断技能用途。');
+  assert.equal(preferredReadme.contents[0]._meta["codex-skills/readme-path"], 'README.zh-CN.md');
   assert.ok((await client.readResource({ uri: 'ui://codex-skills/app' })).contents[0].text.includes('ui/initialize'));
   assert.ok(!/Fatal error/.test(stderr), stderr);
 });

@@ -144,7 +144,13 @@ test("mention links and resource catalog round-trip names with URI-reserved char
 
 test("supporting resource paths decode once and malformed encoding fails cleanly", async (t) => {
   const files = [];
-  const loader = { loadSkillFile: async (entry, path) => { files.push([entry.name, path]); return { content: "fixture file", size_bytes: 12 }; } };
+  const loader = { loadSkillFile: async (entry, path) => {
+    files.push([entry.name, path]);
+    return {
+      content: "fixture file", size_bytes: 12, offset: 0, bytes_returned: 12,
+      has_more: false, binary: false,
+    };
+  } };
   const client = await session(t, (server, extensions) => registerOpenAIMentions(
     server, extensions, config(), new SkillSearchEngine(manifest), loader
   ));
@@ -154,7 +160,40 @@ test("supporting resource paths decode once and malformed encoding fails cleanly
   const result = await client.readResource({ uri: `skill://${encodeURIComponent(name)}/${encodedPath}` });
   assert.deepEqual(files, [[name, path]]);
   assert.equal(result.contents[0].mimeType, "text/markdown");
+  assert.match(result.contents[0].text, /^## .+\(12 bytes; bytes 0–11\)\n\nfixture file$/);
   await assert.rejects(client.readResource({ uri: "skill://bad%ZZ" }), /Invalid percent-encoding/);
+});
+
+test("preferred skill README selects a Chinese variant before English", async (t) => {
+  const requested = [];
+  const loader = {
+    listSkillFiles: async () => [
+      { name: "README.md", type: "file", size_bytes: 10 },
+      { name: "README_EN.md", type: "file", size_bytes: 12 },
+      { name: "README.zh-TW.md", type: "file", size_bytes: 14 },
+      { name: "README.zh-CN.md", type: "file", size_bytes: 16 },
+    ],
+    loadSkillFile: async (_entry, path) => {
+      requested.push(path);
+      return {
+        content: "# 中文说明", size_bytes: 17, offset: 0, bytes_returned: 17,
+        has_more: false, binary: false,
+      };
+    },
+  };
+  const client = await session(t, (server, extensions) => registerOpenAIMentions(
+    server, extensions, config(), new SkillSearchEngine(manifest), loader
+  ));
+  const result = await client.readResource({
+    uri: `skill://${encodeURIComponent(names[0])}/README.md`,
+    _meta: {
+      "codex-skills/display": "readme",
+      "codex-skills/preferred-language": "zh-CN",
+    },
+  });
+  assert.deepEqual(requested, ["README.zh-CN.md"]);
+  assert.equal(result.contents[0].text, "# 中文说明");
+  assert.equal(result.contents[0]._meta["codex-skills/readme-path"], "README.zh-CN.md");
 });
 
 test("resource materialization has a bounded deadline and can be retried", async (t) => {

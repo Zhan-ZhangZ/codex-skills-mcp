@@ -41,6 +41,8 @@ function harness(serverHistory = [], initialize = {}) {
   let sequence = 0;
   const historyEntries = serverHistory;
   const legacyStorage = initialize.localStorage ?? new Map();
+  const defaultReadme = (name) => `# ${name} README\n\nREADME for ${name}.`;
+  const readmeFor = (name) => initialize.readmes?.[name] ?? defaultReadme(name);
   const deliverHistory = (request, entries) => {
     queueMicrotask(() => {
       listeners.get("message")?.({
@@ -58,6 +60,26 @@ function harness(serverHistory = [], initialize = {}) {
     parent: {
       postMessage(message) {
         sent.push(message);
+        const readmeMatch = message.method === "resources/read" &&
+          String(message.params?.uri ?? "").match(/^skill:\/\/([^/]+)\/README\.md$/);
+        if (readmeMatch) {
+          const name = decodeURIComponent(readmeMatch[1]);
+          const readmeError = initialize.readmeErrors?.[name];
+          queueMicrotask(() => {
+            listeners.get("message")?.({
+              source: window.parent,
+              data: readmeError
+                ? { jsonrpc: "2.0", id: message.id, error: typeof readmeError === "string"
+                    ? { code: -32603, message: readmeError }
+                    : readmeError }
+                : { jsonrpc: "2.0", id: message.id, result: { contents: [{
+                    text: readmeFor(name),
+                    _meta: { "codex-skills/readme-path": initialize.readmePaths?.[name] ?? "README.md" },
+                  }] } },
+            });
+          });
+          return;
+        }
         if (message.method !== "tools/call") return;
         const name = message.params?.name;
         if (!["skills.getSearchHistory", "skills.recordSearch", "skills.clearSearchHistory"].includes(name)) return;
@@ -168,7 +190,7 @@ test("search UI teaches keyword lookup and the three-step handoff flow", async (
   const app = harness(); await app.ready();
   assert.match(template, /搜索技能名或关键词/);
   assert.match(template, /先按<strong>关键词<\/strong>找到技能/);
-  assert.match(template, /① 查看说明 → ② 带入当前对话 → ③ 在下一条消息里直接描述任务/);
+  assert.match(template, /① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务/);
   await app.dispose();
 });
 
@@ -416,12 +438,18 @@ test("local source skills do not expose cache deletion", async () => {
   await app.dispose();
 });
 
-test("instructions default to rendered view and preserve an exact raw toggle", async () => {
-  const app = harness(); await app.ready();
+test("skill README defaults to rendered view and preserves an exact raw toggle", async () => {
+  const readme = "---\nname: alpha README\ndescription: fixture metadata\n---\n\n# Alpha README\n\n- item one\n- item two";
+  const app = harness([], { readmes: { alpha: readme } }); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
-  const text = "---\nname: alpha\ndescription: fixture metadata\n---\n\n# Alpha\n\n- item one\n- item two";
-  await app.reply(app.latest("resources/read"), { contents: [{ text }] });
-  assert.equal(app.node("d-md").textContent, text);
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha SKILL" }] });
+  assert.match(app.node("detail-flow").textContent, /查看技能说明（README）/);
+  assert.equal(app.node("doc-source").textContent, "README.md");
+  assert.equal(app.node("d-md").textContent, readme);
+  const readmeRequest = app.sent.findLast((message) =>
+    message.method === "resources/read" && /\/README\.md$/.test(message.params?.uri ?? ""));
+  assert.equal(readmeRequest.params._meta["codex-skills/display"], "readme");
+  assert.equal(readmeRequest.params._meta["codex-skills/preferred-language"], "zh-CN");
   assert.doesNotMatch(app.node("d-md-rendered").innerHTML, /fixture metadata/);
   assert.equal(app.node("d-md").hidden, true);
   assert.equal(app.node("d-md-rendered").hidden, false);
@@ -436,15 +464,29 @@ test("instructions default to rendered view and preserve an exact raw toggle", a
   await app.dispose();
 });
 
-test("rendered relative links open skill files instead of navigating the iframe", async () => {
-  const app = harness(); await app.ready();
+test("skill tray labels the selected Chinese README variant", async () => {
+  const app = harness([], {
+    readmes: { beta: "# 中文说明\n\n这个技能用于中文内容生产。" },
+    readmePaths: { beta: "README.zh-CN.md" },
+  });
+  await app.ready();
+  app.node("cards").children[1].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Agent SKILL" }] });
+  assert.equal(app.node("doc-source").textContent, "README.zh-CN.md");
+  assert.match(app.node("d-md").textContent, /中文说明/);
+  assert.doesNotMatch(app.node("d-md").textContent, /Agent SKILL/);
+  await app.dispose();
+});
+
+test("rendered README links open skill files instead of navigating the iframe", async () => {
+  const app = harness([], { readmes: { alpha: "# Alpha README\n\n[README](./README.md)" } }); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
   await app.reply(app.latestTool("skill_status"), { structuredContent: {
     requested: 1, complete_count: 1, truncated: false,
     skills: [{ name: "alpha", found: true, cached: true, complete: true,
       catalog_current: true, files_total: 2, files_missing_count: 0, size_bytes: 100 }],
   }});
-  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha\n\n[README](./README.md)" }] });
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha SKILL" }] });
   let prevented = false;
   app.node("d-md-rendered").dispatch("click", {
     target: { closest: () => ({ getAttribute: () => "./README.md" }) },
@@ -459,14 +501,14 @@ test("rendered relative links open skill files instead of navigating the iframe"
 });
 
 test("raster images render inline through the app-only image preview tool", async () => {
-  const app = harness(); await app.ready();
+  const app = harness([], { readmes: { alpha: "# Alpha README\n\n[Hero](./hero.png)" } }); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
   await app.reply(app.latestTool("skill_status"), { structuredContent: {
     requested: 1, complete_count: 1, truncated: false,
     skills: [{ name: "alpha", found: true, cached: true, complete: true,
       catalog_current: true, files_total: 2, files_missing_count: 0, size_bytes: 100 }],
   }});
-  await app.reply(app.latest("resources/read"), { contents: [{ text: "[Hero](./hero.png)" }] });
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha SKILL" }] });
   app.node("d-md-rendered").dispatch("click", {
     target: { closest: () => ({ getAttribute: () => "./hero.png" }) },
     preventDefault() {},
@@ -490,14 +532,14 @@ test("raster images render inline through the app-only image preview tool", asyn
 });
 
 test("the global SKILL.md link routes to the library butler", async () => {
-  const app = harness(); await app.ready();
+  const app = harness([], { readmes: { alpha: "[大管家](../../../SKILL.md)" } }); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
   await app.reply(app.latestTool("skill_status"), { structuredContent: {
     requested: 1, complete_count: 1, truncated: false,
     skills: [{ name: "alpha", found: true, cached: true, complete: true,
       catalog_current: true, files_total: 1, files_missing_count: 0, size_bytes: 100 }],
   }});
-  await app.reply(app.latest("resources/read"), { contents: [{ text: "[大管家](../../../SKILL.md)" }] });
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha SKILL" }] });
   app.node("d-md-rendered").dispatch("click", {
     target: { closest: () => ({ getAttribute: () => "../../../SKILL.md" }) },
     preventDefault() {},
@@ -517,7 +559,7 @@ test("the global SKILL.md link routes to the library butler", async () => {
 });
 
 test("late detail content never replaces a different skill preview", async () => {
-  const app = harness(); await app.ready();
+  const app = harness([], { readmes: { alpha: "# Alpha README", beta: "# Beta README" } }); await app.ready();
   app.node("cards").children[0].onclick(); await app.flush();
   const alpha = app.latest("resources/read");
   app.node("back").onclick(); await app.flush();
@@ -525,7 +567,7 @@ test("late detail content never replaces a different skill preview", async () =>
   const beta = app.latest("resources/read");
   await app.reply(beta, { contents: [{ text: "# Beta" }] });
   await app.reply(alpha, { contents: [{ text: "# Alpha" }] });
-  assert.equal(app.node("d-md").textContent, "# Beta");
+  assert.equal(app.node("d-md").textContent, "# Beta README");
   assert.equal(app.node("heading").textContent, "beta");
   await app.dispose();
 });
@@ -618,22 +660,39 @@ test("full skill handoff advertises a titled context block and resource link", a
   await app.dispose();
 });
 
-test("a long SKILL.md keeps the UI bounded but hands off the complete file", async () => {
-  const app = harness(); await app.ready();
+test("README preview is bounded while the complete SKILL.md is handed off", async () => {
+  const readme = "# Alpha README\n" + "r".repeat(200_100) + "\nFULL-README-TAIL";
+  const app = harness([], { readmes: { alpha: readme } }); await app.ready();
   const tail = "\nFULL-SKILL-TAIL";
-  const instructions = "# Alpha\n" + "x".repeat(200_100) + tail;
+  const instructions = "# Alpha SKILL\n" + "x".repeat(200_100) + tail;
   app.node("cards").children[0].onclick(); await app.flush();
   await app.reply(app.latest("resources/read"), { contents: [{ text: instructions }] });
   assert.match(app.node("d-md").textContent, /界面预览已截断/);
-  assert.doesNotMatch(app.node("d-md").textContent, /FULL-SKILL-TAIL/);
+  assert.doesNotMatch(app.node("d-md").textContent, /FULL-README-TAIL/);
+  assert.equal(app.node("doc-source").textContent, "README.md");
 
   const attaching = app.node("d-attach").onclick();
   const request = app.latest("ui/update-model-context");
   const text = request.params.content.find((block) => block.type === "text").text;
   assert.match(text, /FULL-SKILL-TAIL/);
+  assert.doesNotMatch(text, /FULL-README-TAIL/);
   assert.equal(request.params.structuredContent.skill.instruction_chars, instructions.length);
   await app.reply(request, {});
   await attaching;
+  await app.dispose();
+});
+
+test("missing README falls back to the manifest description without using SKILL.md as user guidance", async () => {
+  const app = harness([], { readmeErrors: { alpha: "File not found: README.md" } }); await app.ready();
+  app.node("cards").children[0].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), {
+    contents: [{ text: "# Agent-only SKILL\n\nNever show this as the README." }],
+  });
+  assert.equal(app.node("doc-source").textContent, "技能简介");
+  assert.match(app.node("d-md").textContent, /alpha description/);
+  assert.match(app.node("d-md").textContent, /没有返回可显示的 README\.md/);
+  assert.doesNotMatch(app.node("d-md").textContent, /Agent-only SKILL/);
+  assert.equal(app.node("d-attach").disabled, false);
   await app.dispose();
 });
 

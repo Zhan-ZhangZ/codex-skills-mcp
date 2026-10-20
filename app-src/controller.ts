@@ -123,6 +123,10 @@ type ImagePreviewResult = {
   size_bytes: number;
   data_base64: string;
 };
+type ResourceReadResult = {
+  text: string;
+  meta: Record<string, unknown>;
+};
 type LegacySearchEntry = string | { query?: unknown; at?: unknown };
 type ExplorerState = {
   path: string;
@@ -182,6 +186,7 @@ const suggestEmail = "sidian1025@163.com";
 const renderedInstructions = $<HTMLDivElement>("d-md-rendered");
 const instructionRaw = $<HTMLPreElement>("d-md");
 const instructionToggle = $<HTMLButtonElement>("doc-toggle");
+const documentSource = $<HTMLElement>("doc-source");
 const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
 const LEGACY_SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
@@ -590,7 +595,7 @@ function updateAttachButton() {
     ? `已带入 ${attached.length} 个技能；下一条消息直接描述任务即可。`
     : detailMaterializing
       ? "正在准备完整技能；完成后点击“带入当前对话”。"
-      : "① 查看说明 → ② 带入当前对话 → ③ 在下一条消息里直接描述任务";
+      : "① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务";
   detailFlow.className = "detail-flow" + (attached.length > 0 ? " ready" : "");
   renderAttachedBar(attached);
 }
@@ -703,6 +708,8 @@ const fileTypeLabel = (mime?: string) => {
   return (mime && labels[mime]) || mime || "未知类型";
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
+const skillFileUri = (name: string, path: string) =>
+  `${skillUri(name)}/${path.split("/").map(encodeURIComponent).join("/")}`;
 const escapeHtml = (value: string) => value
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -715,8 +722,8 @@ function setInstructionMode(mode: "rendered" | "raw") {
   instructionToggle.setAttribute("aria-pressed", String(mode === "raw"));
 }
 
-function renderInstructions(text: string) {
-  detailInstructions = text;
+function renderDocument(text: string, source: string) {
+  documentSource.textContent = source;
   const previewText = text.length > DETAIL_PREVIEW_LIMIT
     ? text.slice(0, DETAIL_PREVIEW_LIMIT) + "\n…（界面预览已截断；带入技能时会发送完整 SKILL.md）"
     : text;
@@ -742,7 +749,20 @@ function renderInstructions(text: string) {
     });
   }
   setInstructionMode("rendered");
-  updateAttachButton();
+}
+
+function fallbackSkillOverview(skill: SkillCard, note: string): string {
+  return [
+    `# ${skill.name}`,
+    "",
+    skill.description,
+    "",
+    ...(skill.category ? [`**分类：** ${skill.category}`] : []),
+    "",
+    "> " + note,
+    "",
+    "可在“文件”页查看该技能的 `SKILL.md`、脚本、参考资料和其他资源。",
+  ].join("\n");
 }
 
 type RelativeMarkdownTarget = {
@@ -835,14 +855,32 @@ async function call<T>(name: string, args: Record<string, unknown>): Promise<T> 
   return result.structuredContent;
 }
 
-async function readResourceText(uri: string, progressToken?: string): Promise<string> {
-  const result = await transport.request<{ contents?: { text?: string }[] }>("resources/read", {
+async function readResource(
+  uri: string,
+  progressToken?: string,
+  meta: Record<string, unknown> = {},
+): Promise<ResourceReadResult> {
+  const resourceMeta = {
+    ...(progressToken ? { progressToken } : {}),
+    ...meta,
+  };
+  const result = await transport.request<{
+    contents?: { text?: string; _meta?: Record<string, unknown> }[];
+  }>("resources/read", {
     uri,
-    ...(progressToken ? { _meta: { progressToken } } : {}),
+    ...(Object.keys(resourceMeta).length ? { _meta: resourceMeta } : {}),
   }, 90_000);
-  const text = result?.contents?.find((item) => typeof item.text === "string")?.text;
-  if (typeof text !== "string") throw new Error("服务未返回文件文本");
-  return text;
+  const item = result?.contents?.find((entry) => typeof entry.text === "string");
+  if (typeof item?.text !== "string") throw new Error("服务未返回文件文本");
+  return { text: item.text, meta: item._meta ?? {} };
+}
+
+async function readResourceText(
+  uri: string,
+  progressToken?: string,
+  meta: Record<string, unknown> = {},
+): Promise<string> {
+  return (await readResource(uri, progressToken, meta)).text;
 }
 
 function card(skill: SkillCard): HTMLButtonElement {
@@ -1426,8 +1464,9 @@ function showView(next: View) {
     detailMaterializing = !rootSkill && !next.skill.cached;
     detailInstructions = "";
     cacheBadge();
-    instructionRaw.textContent = "正在下载并读取完整技能…";
-    renderedInstructions.textContent = "正在下载并读取完整技能…";
+    documentSource.textContent = "加载中";
+    instructionRaw.textContent = "正在读取技能简介与 README…";
+    renderedInstructions.textContent = "正在读取技能简介与 README…";
     setInstructionMode("rendered");
     $("d-cache-detail").textContent = "";
     if (next.skill.cached || rootSkill) detailProgress.hidden = true;
@@ -1464,13 +1503,51 @@ async function navigate(next: View) {
       // previous cache. A complete local cache makes this an inexpensive read.
       detailProgressToken = `skill-${next.skill.name}-${token}`;
       startProgressPolling(next.skill.name, token);
-      const text = await readResourceText(skillUri(next.skill.name), detailProgressToken);
+      const instructions = await readResourceText(skillUri(next.skill.name), detailProgressToken);
       // Materialization succeeded even if the user has already navigated away.
       next.skill.cached = true;
       if (!current()) return;
-      renderInstructions(text);
+      detailInstructions = instructions;
+      renderDocument(
+        fallbackSkillOverview(next.skill, "正在读取技能包中的 README.md…"),
+        "技能简介",
+      );
       markMaterialized();
-      status("说明已加载；可切换文件或子技能继续查看");
+      status("技能已缓存，正在读取 README…");
+      try {
+        const readmeResult = await readResource(
+          skillFileUri(next.skill.name, "README.md"),
+          undefined,
+          {
+            "codex-skills/display": "readme",
+            "codex-skills/preferred-language": "zh-CN",
+          },
+        );
+        if (!current()) return;
+        const readmePath = typeof readmeResult.meta["codex-skills/readme-path"] === "string"
+          ? readmeResult.meta["codex-skills/readme-path"]
+          : "README.md";
+        renderDocument(
+          readmeResult.text.trim()
+            ? readmeResult.text
+            : fallbackSkillOverview(next.skill, "技能包中的 README.md 为空。"),
+          readmeResult.text.trim() ? readmePath : "技能简介",
+        );
+        status(readmeResult.text.trim()
+          ? `${readmePath} 已加载；可切换文件或子技能继续查看`
+          : "README.md 为空，当前显示技能简介");
+      } catch (readmeError) {
+        if (!current()) return;
+        renderDocument(
+          fallbackSkillOverview(
+            next.skill,
+            "该技能没有返回可显示的 README.md（可能未提供或暂时无法读取）。",
+          ),
+          "技能简介",
+        );
+        status(`README 不可用，已显示技能简介：${errorMessage(readmeError)}`);
+      }
+      updateAttachButton();
       void refreshCacheStatus(next.skill.name, token);
     } else {
       const data = await cached(JSON.stringify(next), () => next.view === "search"
@@ -1504,6 +1581,7 @@ async function navigate(next: View) {
     if (next.view === "detail") {
       const failure = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
       detailInstructions = "";
+      documentSource.textContent = "加载失败";
       instructionRaw.textContent = failure;
       renderedInstructions.textContent = failure;
       detailProgress.hidden = true;
