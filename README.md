@@ -19,10 +19,14 @@
   <img alt="Release beta.14" src="https://img.shields.io/badge/release-1.5.0--beta.14-0f766e">
 </p>
 
-Codex Skills MCP is a production-oriented Model Context Protocol server for a
-continuously updated expert-skill library. It indexes a lightweight catalog,
-searches locally, downloads selected skills on demand, verifies every file, and
-keeps the working set auditable on disk.
+Codex Skills MCP is a production-oriented Model Context Protocol server and an
+installable Codex/ChatGPT desktop plugin for a continuously updated expert-skill
+library. It indexes a lightweight catalog, searches locally, downloads selected
+skills on demand, verifies every file, and keeps the working set auditable on
+disk.
+
+**Available as:** ChatGPT/Codex desktop plugin · standalone stdio MCP server ·
+self-hosted Streamable HTTP MCP server.
 
 ![Codex Skills desktop interface](docs/assets/ui-home.png)
 
@@ -42,13 +46,17 @@ keeps the working set auditable on disk.
 Requirements: Node.js 22 or newer.
 
 ```bash
-npx -y codex-skills-mcp@latest
+npx -y codex-skills-mcp@beta
 ```
+
+The current `main` line is **1.5.0-beta.14**. Use the `beta` dist-tag to test
+the features described here. The `latest` tag still points to stable 1.4.2 and
+may lag behind the current MCP Apps and host-detection work.
 
 ### Codex
 
 ```bash
-codex mcp add codex-skills -- npx -y codex-skills-mcp@latest
+codex mcp add codex-skills -- npx -y codex-skills-mcp@beta
 ```
 
 Or add this to `~/.codex/config.toml`:
@@ -56,7 +64,7 @@ Or add this to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.codex-skills]
 command = "npx"
-args = ["-y", "codex-skills-mcp@latest"]
+args = ["-y", "codex-skills-mcp@beta"]
 ```
 
 ### Claude Desktop
@@ -66,7 +74,7 @@ args = ["-y", "codex-skills-mcp@latest"]
   "mcpServers": {
     "codex-skills": {
       "command": "npx",
-      "args": ["-y", "codex-skills-mcp@latest"]
+      "args": ["-y", "codex-skills-mcp@beta"]
     }
   }
 }
@@ -81,7 +89,7 @@ Create `.cursor/mcp.json` in the project:
   "mcpServers": {
     "codex-skills": {
       "command": "npx",
-      "args": ["-y", "codex-skills-mcp@latest"]
+      "args": ["-y", "codex-skills-mcp@beta"]
     }
   }
 }
@@ -127,6 +135,30 @@ All standard MCP clients receive these 8 tools:
 | `list_skill_files` | Browse files, nested skills, or a bounded file tree |
 | `skill_status` | Verify cache completeness |
 | `diagnostics` | Inspect recent calls, errors, cache and configuration |
+
+### Host compatibility
+
+| Host | Core tools | Interactive library / skill tray | `@` mentions and settings |
+|---|---:|---:|---:|
+| ChatGPT desktop app (local plugin) | Yes | Yes | Yes |
+| Codex desktop app | Yes | Yes | Yes |
+| ChatGPT web/mobile with a compatible remote MCP server | Yes | Depends on MCP Apps support | Depends on host |
+| Codex CLI, Claude Desktop, Cursor, Windsurf and other standard MCP clients | Yes | No | No |
+
+> **中文兼容提示：** 可视技能库和技能托盘（`skills.tray`）是 MCP Apps
+> 界面，不是标准 MCP 能力。安装本项目本地插件时，它们只会在支持 MCP Apps
+> 的 ChatGPT 桌面端或 Codex 桌面端出现。Codex CLI、Claude Desktop、Cursor、
+> Windsurf 等客户端仍可使用 8 个核心工具和 `skill://` 资源，但不会显示技能托盘。
+> 本地插件在 ChatGPT 中也只应在本地执行线程里使用，`@` 提及不会出现在云端线程。
+
+**The bundled local plugin is Desktop only.** Its UI library, `skills.tray` skill
+tray, attachment handoff, `@` mentions and native settings panel require a
+ChatGPT/Codex desktop host that supports MCP Apps and OpenAI MCP extensions.
+The local plugin can only be installed from the ChatGPT desktop app, and the
+manifest is marked with `requires_local_executor`.
+
+Standard MCP clients still receive the complete agent workflow through the 8
+core tools and `skill://` resources; they do not display the visual skill tray.
 
 ### MCP Apps and host extensions
 

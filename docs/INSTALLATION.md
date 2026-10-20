@@ -5,21 +5,46 @@ Codex Skills MCP supports Node.js 22 or newer and two transport modes:
 - **stdio** for local desktop and CLI clients;
 - **Streamable HTTP** for remote clients and controlled self-hosting.
 
+## Host capability matrix
+
+| Host | Core MCP tools | Visual library / `skills.tray` | `@` mentions / settings UI |
+|---|---:|---:|---:|
+| ChatGPT desktop app with the local plugin | Yes | Yes | Yes |
+| Codex desktop app | Yes | Yes | Yes |
+| Codex CLI | Yes | No | No |
+| Claude Desktop, Cursor and Windsurf | Yes | No | No |
+| Compatible remote MCP Apps host | Yes | Host-dependent | Host-dependent |
+
+技能托盘（`skills.tray`）不是标准 MCP 协议的一部分。本项目本地插件安装后，
+可视技能库与技能托盘需要在支持 MCP Apps 的 ChatGPT 桌面端或 Codex 桌面端中
+使用；Codex CLI、Claude Desktop、Cursor 和 Windsurf 不会显示这套 UI。
+ChatGPT 本地插件只应在本地执行线程中使用，`@` 提及不会出现在云端线程。
+
+The visual skill tray is **not** a standard MCP feature. The bundled local
+plugin is desktop-only and is installed from the ChatGPT desktop app. Standard
+MCP clients use the 8 core tools and `skill://` resources without a custom UI.
+
 ## stdio with `npx`
 
 The simplest installation requires no global package:
 
 ```bash
-npx -y codex-skills-mcp@latest
+npx -y codex-skills-mcp@beta
 ```
+
+`main` currently tracks the 1.5.0 beta line. The `beta` dist-tag matches these
+features; `latest` remains on stable 1.4.2 until the 1.5 line is promoted.
 
 The first run downloads the manifest, builds a local search index, and creates
 the cache directory at `~/.codex-skills-cache`.
 
 ## Codex
 
+Codex CLI exposes the standard core tool surface. The fullscreen library and
+conversation-side skill tray appear in the Codex desktop app, not in the CLI.
+
 ```bash
-codex mcp add codex-skills -- npx -y codex-skills-mcp@latest
+codex mcp add codex-skills -- npx -y codex-skills-mcp@beta
 ```
 
 Equivalent `~/.codex/config.toml` entry:
@@ -27,7 +52,7 @@ Equivalent `~/.codex/config.toml` entry:
 ```toml
 [mcp_servers.codex-skills]
 command = "npx"
-args = ["-y", "codex-skills-mcp@latest"]
+args = ["-y", "codex-skills-mcp@beta"]
 ```
 
 ## Claude Desktop
@@ -40,11 +65,14 @@ Add the following to
   "mcpServers": {
     "codex-skills": {
       "command": "npx",
-      "args": ["-y", "codex-skills-mcp@latest"]
+      "args": ["-y", "codex-skills-mcp@beta"]
     }
   }
 }
 ```
+
+Claude Desktop receives the core tools/resources only. It does not provide the
+ChatGPT/Codex MCP Apps skill tray.
 
 ## Cursor
 
@@ -55,11 +83,14 @@ Add `.cursor/mcp.json` to the project:
   "mcpServers": {
     "codex-skills": {
       "command": "npx",
-      "args": ["-y", "codex-skills-mcp@latest"]
+      "args": ["-y", "codex-skills-mcp@beta"]
     }
   }
 }
 ```
+
+Cursor receives the core tools/resources only. It does not render the skill
+tray UI.
 
 ## Windsurf and VS Code MCP clients
 

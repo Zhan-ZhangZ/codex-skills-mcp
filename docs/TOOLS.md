@@ -76,6 +76,11 @@ effective configuration.
 
 These tools are hidden from models where the host supports app visibility:
 
+> The visual library, `skills.tray`, attachment handoff and settings surfaces
+> require a ChatGPT or Codex desktop host with MCP Apps support. Codex CLI,
+> Claude Desktop, Cursor and other standard MCP clients expose only the core
+> tools and resources.
+
 | Tool | Purpose |
 |---|---|
 | `skills.library` | Open the fullscreen library |
@@ -95,3 +100,8 @@ These tools are hidden from models where the host supports app visibility:
 `skill://{name}/{+path}` resolves supporting files such as scripts, references
 and README files. Resources remain available in `core` mode because they are
 not model-callable tools.
+
+`resources/list` advertises the MCP App resource, the library router and every
+indexed skill URI so hosts can resolve `@` references. The catalog size follows
+the live manifest and may contain hundreds of resources; entries intentionally
+omit descriptions to keep host-side resource registry context bounded.

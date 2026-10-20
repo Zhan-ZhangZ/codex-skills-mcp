@@ -94,4 +94,14 @@ verified cache files.
 - HTTP mode validates Host/Origin and binds locally by default.
 - Skill content and third-party dependencies retain their own licenses.
 
+## MCP surface
+
+The server advertises 8 core tools to standard MCP clients. MCP Apps-capable
+desktop hosts receive the full 22-tool surface: 8 core tools, 4 OpenAI extension
+tools and 10 app-facing tools.
+
+`resources/list` exposes the UI resource, the library router and every indexed
+skill URI. Resource reads materialize selected skills on demand, so `@` mention
+links remain resolvable without preloading the complete library.
+
 See [SECURITY.md](../SECURITY.md) for reporting and operational guidance.

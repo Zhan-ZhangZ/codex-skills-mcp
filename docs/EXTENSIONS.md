@@ -20,6 +20,11 @@ next process start. Runtime updates take effect immediately.
 
 ## MCP Apps
 
+The visual library and skill tray are Desktop-only surfaces. They require an MCP
+Apps-capable ChatGPT or Codex desktop host. The local plugin manifest declares
+`requires_local_executor: true`; OpenAI currently describes local stdio plugins
+as installable from the ChatGPT desktop app.
+
 The App bridge registers two host entrypoints:
 
 - `skills.library` for the fullscreen library;
@@ -38,5 +43,17 @@ Unknown `_meta` keys and extension capabilities are ignored by standard MCP
 clients. Codex CLI and generic clients receive `core` by default; Codex Desktop,
 ChatGPT and MCP Apps hosts resolve to `full`.
 
+| Client | Surface |
+|---|---|
+| ChatGPT desktop with local plugin | Core + MCP Apps UI + extension tools |
+| Codex desktop | Core + MCP Apps UI + extension tools |
+| Codex CLI | Core tools/resources only |
+| Claude Desktop / Cursor / Windsurf | Core tools/resources only |
+
 Test coverage includes both profiles and verifies that `skill://` resources stay
 available in `core` mode.
+
+Official references:
+
+- [Package your plugin](https://developers.openai.com/plugins/build/plugins)
+- [Submit desktop-only plugins](https://developers.openai.com/plugins/deploy/desktop-only)

@@ -9,6 +9,13 @@ and versions follow SemVer.
 
 - Dedicated MCP Apps host detection for `codex-mcp-client`, Codex Desktop and
   ChatGPT, preserving mentions, the skill tray and the full tool profile.
+- Searchable npm, Agent Plugins and Codex manifest keywords for Codex, ChatGPT,
+  MCP, agent skills and related client ecosystems.
+- Explicit desktop-only metadata and host compatibility documentation for the
+  interactive library and `skills.tray`.
+- Manifest regressions now verify npm and plugin discovery keywords, the
+  desktop-only flags and host compatibility guidance; the full suite is 289
+  tests.
 - Official brand assets, a commercial attribution template and explicit
   commercial redistribution terms.
 

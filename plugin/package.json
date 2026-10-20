@@ -1,9 +1,26 @@
 {
   "name": "codex-skills-plugin",
   "version": "0.7.1",
+  "description": "Browse, search, and load an on-demand expert skill library in ChatGPT and Codex.",
   "private": true,
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://github.com/Zhan-ZhangZ/codex-skills-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zhan-ZhangZ/codex-skills-mcp.git"
+  },
+  "keywords": [
+    "codex",
+    "codex-plugin",
+    "openai",
+    "mcp",
+    "mcp-server",
+    "chatgpt",
+    "agent-skills",
+    "skill-library",
+    "productivity"
+  ],
   "engines": {
     "node": ">=22"
   }

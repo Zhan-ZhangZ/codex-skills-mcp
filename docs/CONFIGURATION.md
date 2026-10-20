@@ -77,13 +77,13 @@ only to GitHub-hosted requests.
 Disable the built-in official mirror:
 
 ```bash
-npx -y codex-skills-mcp@latest --no-official-mirror
+npx -y codex-skills-mcp@beta --no-official-mirror
 ```
 
 For controlled networks that prefer a deterministic all-route race:
 
 ```bash
-npx -y codex-skills-mcp@latest --no-hedge
+npx -y codex-skills-mcp@beta --no-hedge
 ```
 
 ## Logs and diagnostics

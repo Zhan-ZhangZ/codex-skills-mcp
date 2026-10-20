@@ -54,9 +54,23 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "codex",
+    "codex-plugin",
+    "codex-mcp",
+    "openai-codex",
+    "openai",
+    "chatgpt",
+    "chatgpt-plugin",
     "codex-skills",
+    "skill-library",
+    "agent-skills",
     "ai-skills",
-    "model-context-protocol"
+    "ai-agent",
+    "ai-coding",
+    "claude",
+    "cursor"
   ],
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {

@@ -3,6 +3,12 @@
 This directory is the installable Codex plugin surface for
 [codex-skills-mcp](https://github.com/Zhan-ZhangZ/codex-skills-mcp).
 
+The plugin uses a local stdio MCP server and is marked
+`requires_local_executor`. Its visual skill library, `skills.tray` panel,
+attachment handoff and settings UI are available in supported ChatGPT/Codex
+desktop hosts only. Codex CLI, Claude Desktop, Cursor and other standard clients
+use the server's core tools and resources without this custom UI.
+
 It bundles:
 
 - the MCP server entrypoint;
