@@ -3,6 +3,20 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.5.0-beta.15] - 2026-10-20
+
+### Changed
+
+- The skill-tray detail panel now renders the skill's own `README.md` instead of
+  the agent-facing `SKILL.md`. Chinese README variants are preferred before the
+  default or English version. Missing README files fall back to the manifest
+  description.
+- “Add to conversation” continues to hand off the complete `SKILL.md`.
+
+### Fixed
+
+- Removed redundant post-load status text from the skill detail panel.
+
 ## [1.5.0-beta.14] - 2026-10-20
 
 ### Added

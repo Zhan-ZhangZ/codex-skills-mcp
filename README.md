@@ -16,7 +16,7 @@
   <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white">
   <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-4f46e5">
   <img alt="Source available" src="https://img.shields.io/badge/license-source--available-0ea5e9">
-  <img alt="Release beta.14" src="https://img.shields.io/badge/release-1.5.0--beta.14-0f766e">
+  <img alt="Release beta.15" src="https://img.shields.io/badge/release-1.5.0--beta.15-0f766e">
 </p>
 
 Codex Skills MCP is a production-oriented Model Context Protocol server and an
@@ -49,7 +49,7 @@ Requirements: Node.js 22 or newer.
 npx -y codex-skills-mcp@beta
 ```
 
-The current `main` line is **1.5.0-beta.14**. Use the `beta` dist-tag to test
+The current `main` line is **1.5.0-beta.15**. Use the `beta` dist-tag to test
 the features described here. The `latest` tag still points to stable 1.4.2 and
 may lag behind the current MCP Apps and host-detection work.
 
