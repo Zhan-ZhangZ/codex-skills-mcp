@@ -11,7 +11,10 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "brand",
+    "NOTICE",
+    "LICENSE.zh-CN.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -25,7 +28,7 @@
     "ai-skills",
     "model-context-protocol"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@openai/mcp-extensions": "^0.1.0",

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Codex Skills icon</title>
+  <g fill="none" stroke="#ffffff" stroke-width="36" stroke-linejoin="round">
+    <rect x="86" y="86" width="142" height="142" rx="24"/>
+    <rect x="284" y="86" width="142" height="142" rx="24"/>
+    <rect x="86" y="284" width="142" height="142" rx="24"/>
+    <rect x="284" y="284" width="142" height="142" rx="24"/>
+  </g>
+</svg>
