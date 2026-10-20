@@ -12,34 +12,28 @@ export function registerSearchSkills(
 ): void {
   server.tool(
     "search_skills",
-    "STEP 1 DISCOVER of the agent protocol. Search the codex-skills library by natural language query; results are ranked and carry a [cached] badge when the skill is already fully downloaded on local disk — prefer cached skills when scores are close. After selecting skills you MUST materialize each one with read_skill (downloads the COMPLETE skill) before starting the task.",
+    "Search the skill library. Use short keywords for known skills; mode=task for a full request. Results include confidence, match reasons, cache status, and size.",
     {
-      query: z.string().describe("Natural language description of what you need, e.g. '前端性能优化' or 'video subtitle translation'"),
+      query: z.string().trim().min(1).max(4000).describe("Short skill keywords for known-item lookup (e.g. 'PPT', '视频翻译'), or a full task when mode=task is appropriate"),
       category: z.string().optional().describe("Optional category filter, e.g. '05_多媒体与设计资产'"),
-      limit: z.number().optional().default(8).describe("Max number of results to return (default: 8)"),
+      limit: z.number().int().min(1).max(50).optional().default(8).describe("Max number of results to return (1–50, default: 8)"),
+      mode: z.enum(["auto", "keyword", "task"]).optional().default("auto").describe("auto detects full task requests; keyword is for known-item lookup; task extracts deliverables and reranks candidates"),
       force_refresh: z.boolean().optional().describe("If true, forcefully refreshes the remote skills list cache. Use this when the user just integrated a new skill and it's not showing up."),
     },
-    { readOnlyHint: true },
-    async ({ query, category, limit, force_refresh }) =>
-      withToolLogging("search_skills", { query, category, limit, force_refresh }, async () => {
+    { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    async ({ query, category, limit, mode, force_refresh }) =>
+      withToolLogging("search_skills", { query, category, limit, mode, force_refresh }, async () => {
         // Throttled freshness poll (conditional GET): picks up newly integrated
         // remote skills within --manifest-poll seconds instead of the 24h TTL.
-        if (typeof searchEngine.maybeRefreshManifest === "function") {
-          await searchEngine.maybeRefreshManifest();
+        if (force_refresh) {
+          await searchEngine.refreshManifest();
+        } else {
+          // Serve the current index immediately; revalidate in the background.
+          // Typos and empty result sets must never cause unthrottled downloads.
+          void searchEngine.maybeRefreshManifest();
         }
-
-        let results = searchEngine.search(query, { category, limit });
-
-        // Auto-refresh if explicitly requested or if no results are found (might be a newly added skill)
-        if (force_refresh || results.length === 0) {
-          if (typeof searchEngine.refreshManifest === "function") {
-            console.error(`[codex-skills-mcp] ${force_refresh ? "Explicitly" : "Automatically"} refreshing manifest for query: "${query}"`);
-            const refreshed = await searchEngine.refreshManifest();
-            if (refreshed) {
-              results = searchEngine.search(query, { category, limit });
-            }
-          }
-        }
+        const page = searchEngine.searchWithTotal(query, { category, limit, mode });
+        const results = page.results;
 
         if (results.length === 0) {
           return {
@@ -56,11 +50,16 @@ export function registerSearchSkills(
           .map((r, i) => {
             const entry = searchEngine.findByName(r.name);
             const badge = entry && loader.isCached(entry) ? ` ${CACHED_BADGE}` : "";
-            const hit =
-              Array.isArray(r.matched_terms) && r.matched_terms.length > 0
-                ? `\n   命中: ${r.matched_terms.join("、")}`
-                : "";
-            return `${i + 1}. **${r.name}**${badge} [${r.category}] (score: ${r.score})\n   ${r.description.substring(0, 200)}${r.description.length > 200 ? "..." : ""}${hit}`;
+            const confidence = r.confidence_label
+              ? ` confidence: ${r.confidence_label} (${r.confidence?.toFixed(2)})`
+              : "";
+            const size = r.size_bytes !== undefined
+              ? ` · ${(r.size_bytes / (1024 * 1024)).toFixed(r.size_bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
+              : "";
+            const why = Array.isArray(r.match_reasons)
+              ? r.match_reasons.slice(0, 3).join("、")
+              : "";
+            return `${i + 1}. **${r.name}**${badge} [${r.category}]${confidence}${size}\n   ${r.description.substring(0, 140)}${r.description.length > 140 ? "..." : ""}${why ? `\n   为什么: ${why}` : ""}`;
           })
           .join("\n\n");
 
@@ -68,7 +67,7 @@ export function registerSearchSkills(
           content: [
             {
               type: "text" as const,
-              text: `Found ${results.length} matching skills:\n\n${formatted}\n\n${FOOTER_SEARCH}`,
+              text: `Found ${results.length}${page.total > results.length ? `/${page.total}` : ""} candidate skills (${results[0]?.match_mode ?? mode} mode):\n\n${formatted}\n\n${FOOTER_SEARCH}`,
             },
           ],
         };

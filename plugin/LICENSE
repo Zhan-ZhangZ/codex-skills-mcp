@@ -1,0 +1,337 @@
+CODEX SKILLS MCP COMMERCIAL ATTRIBUTION LICENSE 1.0
+("CSMCA-1.0")
+
+Copyright (c) 2026 合塑研工 (HESUYANGONG), represented by the GitHub account
+@Zhan-ZhangZ, and the codex-skills-mcp contributors.
+All rights reserved except as expressly granted below.
+
+Original project:
+https://github.com/Zhan-ZhangZ/codex-skills-mcp
+
+This License permits free use, modification, and free distribution of the
+Project. It also permits Commercial Sale, but only when the Seller satisfies
+the logo, source-attribution, and non-endorsement conditions in Section 3.
+Because Commercial Sale is subject to these additional conditions, this
+License is a source-available license and is not an OSI-approved open-source
+license.
+
+1. DEFINITIONS
+
+1.1 "Project" means the source code, build scripts, documentation, user
+interface, and original non-Brand Assets made available by the Licensor in the
+repository identified above. The Project excludes Third-Party Materials and
+Brand Assets, except that Brand Assets are licensed only as expressly stated
+in Section 4.
+
+1.2 "Licensor" means the copyright holder or holders identified at the top of
+this License.
+
+1.3 "You" means an individual or legal entity exercising rights under this
+License. "Your" has the corresponding meaning.
+
+1.4 "Free Use" means use of the Project without charging or receiving any fee,
+subscription payment, license payment, in-kind consideration, or other
+compensation from a third party for the Project, a Modified Work, access to
+the Project, or a service materially based on the Project. Free Use includes
+personal, educational, research, charitable, open-source, evaluation, and
+internal business use. Receiving ordinary donations that are not conditioned
+on access to the Project does not by itself make use Commercial Sale.
+
+1.5 "Commercial Sale" means any of the following:
+
+    (a) selling, licensing, renting, leasing, or otherwise distributing the
+        Project or a Modified Work for a fee or other consideration;
+
+    (b) charging for installation, configuration, deployment, integration,
+        customization, maintenance, support, hosting, or access when the
+        Project or a Modified Work is a material part of what is supplied;
+
+    (c) offering access to the Project or a Modified Work through a paid
+        hosted, managed, subscription, API, or similar service;
+
+    (d) bundling the Project or a Modified Work with paid hardware, software,
+        content, or services when the Project or Modified Work is a material
+        feature of the bundle; or
+
+    (e) monetizing access to the Project or a Modified Work through advertising,
+        affiliate revenue, or another commercial arrangement.
+
+Commercial Sale includes a sale made directly or indirectly and includes
+pre-orders. The amount of consideration does not matter.
+
+1.6 "Seller" means a person or entity engaging in Commercial Sale.
+
+1.7 "Modified Work" means any work based on, incorporating, derived from, or
+adapted from the Project, including translations, ports, patches, wrappers,
+bundles, and combined applications.
+
+1.8 "Official Logo" means an unmodified logo supplied in the `brand/`
+directory of the Project repository, including the white and black wordmark
+variants and their scalable equivalents.
+
+1.9 "Brand Assets" means the Official Logo, project name "codex-skills-mcp",
+"Codex Skills", "合塑研工", "HESUYANGONG", and any associated names, marks,
+icons, and visual identity, together with all goodwill in them.
+
+1.10 "Third-Party Materials" means:
+
+    (a) third-party source code, packages, fonts, media, and other materials
+        identified by their own copyright or license notices; and
+
+    (b) skills, skill content, references, and other materials retrieved from
+        an external source repository at runtime.
+
+Third-Party Materials are governed solely by their own licenses and terms.
+Nothing in this License grants rights that the Licensor does not own.
+
+2. GRANT FOR FREE USE
+
+2.1 Subject to this License, the Licensor grants You a worldwide,
+non-exclusive, royalty-free copyright and patent license to:
+
+    (a) use, run, and install the Project;
+
+    (b) reproduce and modify the Project and create Modified Works;
+
+    (c) publicly display and perform the Project and Modified Works; and
+
+    (d) distribute the Project and Modified Works for Free Use.
+
+The patent license in this Section applies only to patent claims owned or
+controlled by the Licensor that are necessarily infringed by the Project as
+provided by the Licensor, and only to the extent necessary to exercise the
+rights expressly granted in this License.
+
+2.2 If You distribute the Project or a Modified Work, You must:
+
+    (a) provide each recipient with a copy of this License and the `NOTICE`
+        file;
+
+    (b) preserve all copyright, license, and attribution notices;
+
+    (c) clearly identify any material modifications You made and the date of
+        those modifications; and
+
+    (d) place recipients on notice that their rights are limited by this
+        License.
+
+2.3 You may sublicense only under this License. You may not relicense the
+Project or a Modified Work under terms that grant recipients broader rights
+than this License, including, without limitation, MIT, Apache-2.0, GPL, or a
+proprietary license that omits these conditions.
+
+2.4 Free Use does not require display of the Official Logo as a condition of
+the license, but all attribution and notice requirements in this License
+continue to apply unless the Licensor gives prior written permission to omit
+them.
+
+3. COMMERCIAL SALE
+
+3.1 Subject to complete compliance with this Section 3, the Licensor grants
+Seller a worldwide, non-exclusive, royalty-free copyright and patent license
+to use, reproduce, modify, display, perform, distribute, and provide access to
+the Project and Modified Works for Commercial Sale.
+
+3.2 Official Logo display. The Seller must display the Official Logo without
+obscuring, recoloring, cropping, distorting, or otherwise altering it, except
+for proportional resizing. The display must be legible and must satisfy all of
+the following:
+
+    (a) On every Commercial Offer Page, including each online store listing,
+        product page, sales page, quotation, app-market listing, and
+        advertisement that includes a purchase or order action, display the
+        Official Logo near the Seller's product name or price. The wordmark must
+        be at least 160 CSS pixels wide on a digital page or 25 mm wide in
+        printed material, and must use the white variant on a dark background
+        or the black variant on a light background.
+
+    (b) In the Seller's product interface, display the Official Logo on the
+        first-run or onboarding screen and on an About, Credits, Legal, or
+        equivalent screen. Each display must be at least 120 CSS pixels wide.
+
+    (c) If the product has no user interface, display the Official Logo on
+        every Commercial Offer Page and in the product README or principal
+        documentation, and output the Official Logo or a link to it in
+        `--version`, help, or equivalent customer-facing identification.
+
+    (d) The Official Logo may appear next to the Seller's own mark, but must
+        not be presented as the Seller's own trademark or as a certification,
+        partnership, sponsorship, or endorsement by the Licensor.
+
+    (e) Placement solely in a source archive, dependency lockfile, hidden
+        license dialog, or third-party credits page does not satisfy this
+        Section.
+
+3.3 Non-original source notice. On every Commercial Offer Page and in the
+About, Credits, Legal, or equivalent screen and principal documentation for
+the product, the Seller must display the following notice adjacent to, or in
+the same clearly visible information block as, the Official Logo:
+
+    For a Chinese-language offer:
+    "非原创：本项目基于 codex-skills-mcp（合塑研工）二次开发，由 [销售方名称] 独立提供，非原作者官方发行版。"
+
+    For an offer in any other language:
+    "Derived work: built on codex-skills-mcp by HESUYANGONG, independently offered by [Seller Name]. Not an official release by the original authors."
+
+The Seller must replace "[销售方名称]" or "[Seller Name]" with its identity
+and must include a nearby, clickable link to the original project URL:
+https://github.com/Zhan-ZhangZ/codex-skills-mcp
+
+3.4 No endorsement. The Seller must make clear that the product is
+independently provided and must not state or imply that the Licensor approved,
+certified, sponsored, supports, or is responsible for the Seller's product,
+claims, support, privacy practices, or outputs.
+
+3.5 Notices and terms. The Seller must:
+
+    (a) preserve all copyright, license, and attribution notices in the
+        Project and Modified Work;
+
+    (b) include this License and the `NOTICE` file with every distribution;
+
+    (c) clearly identify material modifications and their dates; and
+
+    (d) pass these conditions to every recipient and sublicensee.
+
+3.6 Third-Party Materials. Seller is solely responsible for complying with
+all Third-Party Material licenses and for obtaining any permissions needed to
+commercialize skills or other external content. This License does not grant
+permission to sell or sublicense Third-Party Materials.
+
+3.7 Trademark and brand rights. The rights to display the Official Logo under
+this License are limited to the purpose of complying with this Section 3 and
+do not transfer any other rights in the Brand Assets.
+
+4. BRAND ASSET LICENSE
+
+4.1 Subject to this License, the Licensor grants You a limited, revocable,
+non-exclusive, non-transferable, royalty-free right to reproduce and display
+the Official Logo:
+
+    (a) to meet the attribution requirements in Section 3;
+
+    (b) in a factual review, news article, tutorial, or repository reference
+        that accurately identifies the original Project; or
+
+    (c) in a noncommercial fork or documentation where the original Project is
+        clearly identified and no endorsement is implied.
+
+4.2 You may proportionally resize the Official Logo and select the provided
+white or black variant suitable for the background. You must preserve a clear
+space around the logo equal to at least 25% of the logo's height.
+
+4.3 You may not:
+
+    (a) recolor, animate, outline, add effects to, distort, crop, or otherwise
+        modify the Official Logo except for proportional resizing;
+
+    (b) use the Brand Assets as the name, logo, icon, or principal mark of Your
+        product, organization, domain, social media account, or application;
+
+    (c) register or attempt to register the Brand Assets or confusingly similar
+        marks or domains;
+
+    (d) sell, license, or distribute the Official Logo as a standalone asset
+        or merchandise; or
+
+    (e) use the Brand Assets in a way that suggests origin, endorsement,
+        certification, partnership, or sponsorship that does not exist.
+
+4.4 All goodwill from use of the Brand Assets belongs to the Licensor. You may
+not challenge the Licensor's ownership of the Brand Assets.
+
+4.5 The Logo license in this Section terminates automatically if You breach
+it. On termination You must stop displaying the Brand Assets promptly. A
+separate written permission is required for any use not expressly allowed in
+this Section.
+
+5. MODIFIED WORKS
+
+5.1 Modified Works must remain under CSMCA-1.0 when distributed or made
+available to third parties. You must include an accurate statement describing
+which parts were changed.
+
+5.2 A Modified Work must not be described as an official codex-skills-mcp
+release or as endorsed by the Licensor. You may use the Project name only to
+accurately describe the origin of the code.
+
+5.3 You are solely responsible for Your Modified Work, including its security,
+data handling, legal compliance, customer support, marketing claims, and
+third-party content.
+
+6. THIRD-PARTY MATERIALS
+
+6.1 This License does not apply to Third-Party Materials. Their existing
+copyrights, licenses, and attribution requirements continue to apply.
+
+6.2 The Project may retrieve remote skills at runtime. Such skills are not
+relicensed or warranted by the Licensor. A commercial Seller must independently
+review and comply with each source's terms before selling, bundling, hosting,
+or distributing that content.
+
+7. TERM AND TERMINATION
+
+7.1 This License remains effective while You comply with its terms.
+
+7.2 Upon any material breach, the Licensor may terminate this License by
+written notice. The termination becomes effective 30 days after notice unless
+You cure every breach and provide written confirmation of the cure before that
+deadline. The Licensor may terminate immediately, without a cure period, for
+an intentional breach of Section 3 or Section 4 that is repeated after notice,
+or for a use that infringes the Licensor's copyright, patent, or trademark
+rights.
+
+7.3 On termination, You must stop using, distributing, selling, and making
+available the Project and Modified Works, and must stop displaying the Brand
+Assets in connection with them. Termination does not relieve You of liability
+for breaches that occurred before termination.
+
+7.4 Sections 1, 3.4, 3.6, 5, 6, 7.3, 8, and 9 survive termination.
+
+8. DISCLAIMER AND LIMITATION OF LIABILITY
+
+8.1 THE PROJECT AND BRAND ASSETS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT,
+ACCURACY, SECURITY, OR QUIET ENJOYMENT. THE LICENSOR DOES NOT WARRANT THAT THE
+PROJECT WILL BE ERROR-FREE OR UNINTERRUPTED.
+
+8.2 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR WILL NOT BE
+LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR
+PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR
+BUSINESS OPPORTUNITY, ARISING OUT OF OR RELATING TO THE PROJECT, THE BRAND
+ASSETS, OR THIS LICENSE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+8.3 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR'S TOTAL
+AGGREGATE LIABILITY ARISING OUT OF OR RELATING TO THIS LICENSE WILL NOT EXCEED
+THE AMOUNT PAID BY YOU TO THE LICENSOR FOR THE PROJECT. WHERE NO AMOUNT WAS
+PAID, THE MAXIMUM AGGREGATE LIABILITY WILL BE ZERO.
+
+8.4 Nothing in this License excludes or limits liability that cannot be
+excluded or limited under applicable law.
+
+9. GENERAL
+
+9.1 This License is the entire agreement concerning the rights granted to the
+Project, except for separate written terms signed or expressly accepted by the
+Licensor.
+
+9.2 If any provision is held unenforceable, it will be modified only to the
+minimum extent necessary to make it enforceable, and the remaining provisions
+will remain in effect.
+
+9.3 Failure to enforce a provision is not a waiver. No waiver is effective
+unless in writing and signed or expressly issued by the Licensor.
+
+9.4 You may not assign this License or sublicense beyond the rights expressly
+granted here.
+
+9.5 If there is a conflict between this English text and a translation, the
+English text controls.
+
+9.6 This License grants no rights to use the Brand Assets except as expressly
+stated in Section 4.
+
+9.7 This is a custom source-available license. It is not the MIT License, the
+Apache License, a Creative Commons license, or a license approved by the Open
+Source Initiative.

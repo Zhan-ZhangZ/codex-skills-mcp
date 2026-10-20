@@ -21,7 +21,7 @@ export function registerSkillStatus(
 ): void {
   server.tool(
     "skill_status",
-    "STEP 5 VERIFY. Check the local cache state of one or more skills (deep check: every recorded file is present with the expected size; read-only, never downloads). Returns cached/complete flags, local_path, file counts, size, missing files and completion time per skill. Use it before executing to confirm materialization, or to diagnose incomplete/interrupted downloads.",
+    "Check cache completeness and size for one or more skills. Read-only; never downloads.",
     {
       names: z.string().describe("Comma-separated exact skill names, e.g. 'KrillinAI, videocut-skills' (max 20)"),
     },
@@ -48,21 +48,65 @@ export function registerSkillStatus(
 
         const lines: string[] = [];
         let completeCount = 0;
+        const skills: Array<Record<string, unknown>> = [];
+        const butler = typeof searchEngine.getButlerEntry === "function"
+          ? searchEngine.getButlerEntry()
+          : undefined;
 
         for (const name of unique) {
-          const entry = searchEngine.findByName(name);
+          const entry = searchEngine.findByName(name)
+            ?? (butler?.name.toLowerCase() === name.toLowerCase() ? butler : undefined);
           if (!entry) {
             lines.push(`### ❌ ${name}\n- Not found in the library. Use search_skills to find the exact name.`);
+            skills.push({ name, found: false });
+            continue;
+          }
+          if (butler && entry.name === butler.name) {
+            completeCount += 1;
+            skills.push({
+              name: entry.name,
+              found: true,
+              cached: true,
+              complete: true,
+              root: true,
+              cacheable: false,
+              catalog_current: true,
+              local_path: "",
+              files_total: 1,
+              files_missing_count: 0,
+              files_missing_preview: [],
+              size_bytes: 0,
+              completed_at: null,
+            });
+            lines.push(
+              `### 🌐 ${entry.name}\n` +
+              "- Status: ✅ global router — source-root SKILL.md is read directly; no separate cache directory"
+            );
             continue;
           }
           const cache = loader.cacheState(entry);
           if (cache.complete) completeCount += 1;
+          skills.push({
+            name: entry.name,
+            found: true,
+            cached: cache.cached,
+            complete: cache.complete,
+            catalog_current: cache.catalogCurrent ?? null,
+            local_path: cache.localPath,
+            files_total: cache.filesTotal,
+            files_missing_count: cache.filesMissing.length,
+            files_missing_preview: cache.filesMissing.slice(0, 20),
+            size_bytes: cache.sizeBytes,
+            completed_at: cache.completedAt ?? null,
+          });
 
           const status = cache.complete
             ? `✅ complete — ${cache.filesTotal} files (${formatBytes(cache.sizeBytes)})`
-            : cache.cached
-              ? `⚠️ INCOMPLETE — missing ${cache.filesMissing.length}/${cache.filesTotal} files: ${cache.filesMissing.slice(0, 5).join(", ")}${cache.filesMissing.length > 5 ? ", …" : ""}`
-              : "⬜ not downloaded yet — call read_skill to materialize it";
+            : cache.cached && cache.catalogCurrent === false
+              ? `⚠️ cached revision — current manifest catalog not validated. Retry read_skill("${entry.name}") when the source is available.`
+              : cache.cached
+                ? `⚠️ INCOMPLETE — missing ${cache.filesMissing.length}/${cache.filesTotal} files: ${cache.filesMissing.slice(0, 5).join(", ")}${cache.filesMissing.length > 5 ? ", …" : ""}`
+                : "⬜ not downloaded yet — call read_skill to materialize it";
 
           lines.push(
             [
@@ -78,6 +122,12 @@ export function registerSkillStatus(
 
         const header = `Skill cache status: ${completeCount}/${unique.length} complete${truncated ? ` (list truncated to ${MAX_NAMES})` : ""}`;
         return {
+          structuredContent: {
+            requested: unique.length,
+            complete_count: completeCount,
+            truncated,
+            skills,
+          },
           content: [
             {
               type: "text" as const,

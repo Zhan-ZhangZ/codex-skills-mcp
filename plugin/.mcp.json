@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codex-skills": {
+      "command": "node",
+      "args": ["./dist/server.js"],
+      "cwd": ".",
+      "enabled": true,
+      "default_tools_approval_mode": "approve"
+    }
+  }
+}

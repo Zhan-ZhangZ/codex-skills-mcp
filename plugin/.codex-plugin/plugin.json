@@ -1,0 +1,18 @@
+{
+  "name": "codex-skills",
+  "version": "0.7.1",
+  "description": "Browse, search, and load a continuously updated library of on-demand expert skills.",
+  "author": { "name": "Zhan-ZhangZ" },
+  "license": "SEE LICENSE IN LICENSE",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Skills 技能库",
+    "shortDescription": "持续更新的按需专家技能库",
+    "developerName": "Zhan-ZhangZ",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "defaultPrompt": ["@Codex Skills 搜索技能关键词，如 PPT、视频翻译、小红书"]
+  }
+}

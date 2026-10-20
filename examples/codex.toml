@@ -1,0 +1,3 @@
+[mcp_servers.codex-skills]
+command = "npx"
+args = ["-y", "codex-skills-mcp@latest"]

@@ -1,100 +1,57 @@
-# codex-skills-mcp
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo-white.png">
+    <img src="brand/logo-black.png" alt="合塑研工 HESUYANGONG" width="220">
+  </picture>
+</p>
 
-> 🧠 Codex-Skills 技能库的 MCP (Model Context Protocol) Server — 让任意 AI 编程工具都能检索、阅读和使用 180+ 专业技能。
+<h1 align="center">Codex Skills MCP</h1>
 
-## 这是什么
+<p align="center">
+  <strong>Local-first, on-demand skill discovery for MCP clients.</strong><br>
+  让 Agent 只加载真正需要的专业技能，而不是把整套技能库塞进上下文。
+</p>
 
-一个独立的 MCP Server，为 [codex-skills](https://github.com/Zhan-ZhangZ/codex-skills) 技能库提供标准化的 AI 工具接入协议。
+<p align="center">
+  <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white">
+  <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-4f46e5">
+  <img alt="Source available" src="https://img.shields.io/badge/license-source--available-0ea5e9">
+  <img alt="Release beta.14" src="https://img.shields.io/badge/release-1.5.0--beta.14-0f766e">
+</p>
 
-- **无需先下载全部技能文件**：启动只拉取轻量清单（约 108KB），技能全文按需加载；
-- **180+ 技能、14 个分类**：技能库由专家在远端持续维护，用户端零操作；
-- **内置国内网络加速**：自动回退链，国内网络免翻墙可用。
+Codex Skills MCP is a production-oriented Model Context Protocol server for a
+continuously updated expert-skill library. It indexes a lightweight catalog,
+searches locally, downloads selected skills on demand, verifies every file, and
+keeps the working set auditable on disk.
 
-| 特性 | 说明 |
-|------|------|
-| **8 个 MCP Tools** | search_skills, read_skill, load_skill_file, list_skill_files, list_categories, plan_workflow, skill_status, diagnostics |
-| **Agent 行为合约** | server instructions + 工具描述 + 返回体尾部三层强化同一套 5 步工作流（见 [docs/AGENT-PROTOCOL.md](docs/AGENT-PROTOCOL.md)） |
-| **缓存状态可见** | search/plan 结果带 `[cached]` 徽标；read_skill 返回 `local_path`；skill_status 深度校验完整性 |
-| **活动日志与诊断** | 全部工具调用/下载/错误落 JSONL 日志；diagnostics 一键审计 |
-| **三层渐进加载** | 检索(~500 tokens) → 阅读(~5K tokens) → 深入(按需) |
-| **中文搜索优化** | CJK bigram 分词 + Leading Words 权重 |
-| **零外部 AI 依赖** | 纯关键词搜索，不需要 embedding 模型 |
-| **双传输模式** | stdio（本地）+ HTTP（远程） |
-| **自动网络加速** | GitHub 直连 → jsDelivr → gh-proxy.com → ghfast.top 四级回退 |
-| **增量缓存** | 技能文件按大小比对断点续传，重复使用不重复下载 |
+![Codex Skills desktop interface](docs/assets/ui-home.png)
 
-## 授权与商业使用
+## Why Codex Skills MCP
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/logo-white.png">
-  <img src="brand/logo-black.png" alt="合塑研工 HESUYANGONG" width="200">
-</picture>
+| Capability | What it means |
+|---|---|
+| **Progressive loading** | Search costs tokens; full instructions and assets are downloaded only after a skill is selected. |
+| **Small model surface by default** | Standard MCP clients receive 8 focused tools. ChatGPT/Codex MCP Apps hosts can opt into the 22-tool UI surface. |
+| **Integrity-first downloads** | Known files are checked against size and Git blob SHA before entering the cache. |
+| **Local-first cache** | Skills materialize under `~/.codex-skills-cache` and remain reusable across sessions. |
+| **Resilient installation** | Direct GitHub, the official read-only mirror, jsDelivr and fallback mirrors can race without exposing credentials. |
+| **Agent keeps judgment** | Search results are candidates, not mandatory loading instructions. The agent can use none, one, or several skills. |
 
-- **个人、非商业项目及企业自用**：可免费安装、运行、修改和免费分发，但须保留版权、许可证和来源声明。
-- **商业售卖、收费安装/部署/支持、付费托管，或随付费产品打包**：必须显著展示官方 Logo，并标明“非原创：基于 codex-skills-mcp（合塑研工）二次开发，非原作者官方发行版”。
-- **品牌资源**：[`brand/`](brand/) 提供明暗两版 Logo、中英文声明模板和可直接粘贴的 HTML。使用前请阅读[品牌说明](brand/README.md)。
+## Quick Start
 
-许可证全文见 [LICENSE](LICENSE)，中文参考译文见 [LICENSE.zh-CN.md](LICENSE.zh-CN.md)，第三方材料与来源说明见 [NOTICE](NOTICE)。
-
-> 这是源码公开（source-available）的自定义许可，不是 MIT，也不是 OSI 认可的开源许可证。GitHub 的自动许可证识别器可能显示为 “View license”；请以根目录 `LICENSE` 为准。
-
-## 快速开始
-
-### 1. 远程模式（默认，零配置，推荐）
+Requirements: Node.js 22 or newer.
 
 ```bash
 npx -y codex-skills-mcp@latest
 ```
 
-无需安装、无需指定任何路径。启动后自动完成：
-
-1. 从远端技能库拉取清单 `skills_manifest.json`（约 108KB，仅首次）；
-2. 建立本地搜索索引（毫秒级）；
-3. 技能文件按需下载，缓存在 `~/.codex-skills-cache/`（可用 `--cache-dir` / `CODEX_SKILLS_CACHE_DIR` 覆盖）。
-
-### 2. 本地模式（可选）
-
-适用于离线开发或使用本地技能库副本：
-
-```bash
-cd codex-skills-mcp
-npm install
-npm run build
-node dist/index.js --skills-dir /path/to/codex-skills
-```
-
-### 3. HTTP 模式（远程客户端）
-
-```bash
-# 远程模式：无需 --skills-dir，自动拉取远端技能库
-node dist/index.js --http --port 3456
-
-# 本地模式：加 --skills-dir 指定本地技能库
-node dist/index.js --skills-dir /path/to/codex-skills --http --port 3456
-```
-
-启动后：
-
-- MCP 端点：`http://localhost:3456/mcp`（POST / GET / DELETE，支持 `mcp-session-id` 会话管理）
-- 健康检查：`http://localhost:3456/health`
-
-```bash
-curl http://localhost:3456/health
-# 预期输出
-{"status":"ok","name":"codex-skills-mcp","version":"1.2.1","skills":181}
-```
-
-## 客户端配置
-
-### Codex / ChatGPT 桌面端（stdio）
-
-**方式一：通过 CLI 快速添加（推荐）**
+### Codex
 
 ```bash
 codex mcp add codex-skills -- npx -y codex-skills-mcp@latest
 ```
 
-**方式二：编辑 `~/.codex/config.toml` 添加**
+Or add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.codex-skills]
@@ -102,17 +59,7 @@ command = "npx"
 args = ["-y", "codex-skills-mcp@latest"]
 ```
 
-若使用本地技能库副本，可改为：
-
-```toml
-[mcp_servers.codex-skills]
-command = "node"
-args = ["/path/to/codex-skills-mcp/dist/index.js", "--skills-dir", "/path/to/codex-skills"]
-```
-
 ### Claude Desktop
-
-编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
 
 ```json
 {
@@ -127,7 +74,7 @@ args = ["/path/to/codex-skills-mcp/dist/index.js", "--skills-dir", "/path/to/cod
 
 ### Cursor
 
-编辑项目根目录 `.cursor/mcp.json`：
+Create `.cursor/mcp.json` in the project:
 
 ```json
 {
@@ -140,234 +87,160 @@ args = ["/path/to/codex-skills-mcp/dist/index.js", "--skills-dir", "/path/to/cod
 }
 ```
 
-### Windsurf / VS Code + Copilot
+More client and self-hosting setups are in
+[Installation](docs/INSTALLATION.md).
 
-在 MCP 配置中添加同样的 command + args（stdio 模式）。
-
-### 远程 HTTP 客户端
-
-如果你的客户端需要以远程 HTTP 地址接入 MCP（例如 ChatGPT 桌面端集成场景）：
-
-```bash
-node dist/index.js --http --port 3456
-ngrok http 3456
-```
-
-将 `https://xxxx-xxxx.ngrok-free.app/mcp` 填入客户端的 MCP Server URL。
-
-> 💡 ngrok 免费版每次重启会更换地址；需要固定地址可使用付费版或其他隧道工具（如 Cloudflare Tunnel）。
-
-## 工作原理
+## How It Works
 
 ```mermaid
 flowchart LR
-    A["启动 MCP"] --> B["拉取清单 manifest + 建本地索引"]
-    B --> C["plan_workflow / search_skills<br/>DISCOVER（[cached] 徽标）"]
-    C --> D["read_skill x N<br/>MATERIALIZE：完整下载+缓存"]
-    D --> E["skill_status 校验（可选）"]
-    E --> F["按 SKILL.md 从 local_path 执行<br/>load_skill_file 按需补读"]
-    F --> G["diagnostics / 汇报"]
+    A["MCP client"] --> B["Codex Skills MCP"]
+    B --> C["Local manifest + BM25 index"]
+    C --> D["Tool result: candidate skills"]
+    D --> E["read_skill: selected skill only"]
+    E --> F["Verified local cache"]
+    F --> G["Agent executes SKILL.md"]
+    F --> H["MCP App / resources"]
 ```
 
-| 阶段 | 行为 | 耗时 |
-|------|------|------|
-| 启动 | 拉取/加载清单 + 建索引 | 秒级 |
-| 搜索 | 本地索引关键词打分 | 毫秒级 |
-| 取技能 | 2 次 GitHub API 列出文件 → 并发下载缺失文件 | 首次数秒，之后走缓存 |
+The server never downloads the entire library at startup. It loads a compact
+manifest, builds a keyword/task index locally, then materializes complete skill
+directories only after selection. See [Architecture](docs/ARCHITECTURE.md) and
+[Agent protocol](docs/AGENT-PROTOCOL.md).
 
-### 网络加速回退链
+> The screenshot uses the deterministic preview host. Live skill, domain and
+> usage counts come from the current manifest and local usage history.
 
-所有远端文件请求按顺序自动回退，无需任何参数：
+## Tool Surface
 
-1. **GitHub 官方直连**（3 秒超时）；
-2. **jsDelivr CDN**（10 秒超时，国内有节点）；
-3. **gh-proxy.com**（10 秒超时）；
-4. **ghfast.top**（10 秒超时）。
+### Core tools
 
-前一个节点失败时自动降级到下一个；全部失败才会报错。
+All standard MCP clients receive these 8 tools:
 
-### Agent 标准工作流（行为合约）
+| Tool | Purpose |
+|---|---|
+| `search_skills` | Keyword or task-oriented skill discovery |
+| `list_categories` | Browse current categories and counts |
+| `plan_workflow` | Produce a candidate shortlist for a task |
+| `read_skill` | Materialize and read a selected skill |
+| `load_skill_file` | Read a supporting file from the cache |
+| `list_skill_files` | Browse files, nested skills, or a bounded file tree |
+| `skill_status` | Verify cache completeness |
+| `diagnostics` | Inspect recent calls, errors, cache and configuration |
 
-服务端通过 initialize instructions、工具描述、返回体尾部三层向 Agent 强化同一套协议（措辞单点维护于 `src/lib/protocol.ts`）：
+### MCP Apps and host extensions
 
-1. **DISCOVER** — `plan_workflow` / `search_skills` 检索；`[cached]` 徽标 = 已在本地，分数相近优先选；
-2. **SELECT** — 选出覆盖任务的最小技能组合；
-3. **MATERIALIZE（必做）** — 对每个选定技能调用 `read_skill`，完整下载到本地并返回 `local_path`；
-4. **EXECUTE** — 严格按 SKILL.md 执行，脚本从 `local_path` 运行，禁止凭通用知识自行替代；
-5. **VERIFY & REPORT** — `skill_status` 校验缓存完整性；`diagnostics` 排障并审计。
+ChatGPT/Codex MCP Apps hosts additionally receive the interactive library,
+settings, mentions and app-facing tools. This includes:
 
-### 日志与诊断
+- `skills.library`, `skills.tray`, `skills.browse` and `skills.query`;
+- shared search history and progress tools;
+- inline image preview and per-skill cache removal;
+- `settings.read`, `settings.update` and `refresh_skills_list`;
+- `search_mentions` and the `skill://{name}` resource family.
 
-- 活动日志：`~/.codex-skills-cache/logs/mcp-activity-YYYY-MM-DD.jsonl`（按天分文件，保留 14 天，best-effort 不影响主流程）；
-- 记录事件：`tool_call` / `tool_result` / `download_skill_start` / `download_skill_complete` / `tool_error` / `server_start`；
-- `diagnostics` 工具返回：近期调用、近期错误、缓存统计（已缓存技能数/体积）、清单新鲜度与配置摘要；
-- 本地模式（`--skills-dir`）不写文件日志，仅镜像到 stderr。
+Use `--tool-profile core|full|auto` to override host detection. The complete
+reference is in [Tools](docs/TOOLS.md) and
+[Host extensions](docs/EXTENSIONS.md).
 
-### 缓存与增量同步
+## Configuration
 
-- 清单与技能文件缓存在 `~/.codex-skills-cache/`，二次启动秒级完成；
-- 每个技能带 `.codex-skills.tree.json` 标记（文件列表 + 完成状态）；
-- 已完整下载的技能直接本地读取，不重复请求远端；
-- 中断的下载支持断点续传：按文件大小比对，只补拉缺失/不完整的文件；
-- 技能文件并发下载，默认 16（可用 `--download-concurrency` 调整）；
-- 需要强制同步远端最新内容时，删除 `.codex-skills-cache/` 后重启即可。
+The defaults work without a config file. Common options:
 
-## MCP Tools
-
-### 🔍 search_skills
-
-搜索技能库，Agent 的主入口（协议 STEP 1）。结果带 `[cached]` 徽标与"下一步必须 read_skill 物化"的协议尾部。
-
-```
-input:  { query: "前端性能优化", category?: "01_代码工程与架构", limit?: 8 }
-output: 按相关度排序的技能列表（名称、分类、分数、描述）
-```
-
-### 📋 list_categories
-
-列出所有技能分类和数量。
-
-```
-input:  {}
-output: 14 个分类 + 各自的技能数量
+```text
+--cache-dir <path>             Cache location
+--skills-dir <path>            Use a local skill library
+--http                         Start Streamable HTTP transport
+--host <addr>                  HTTP bind address
+--port <port>                  HTTP port
+--tool-profile <mode>          auto | core | full
+--manifest-ttl <seconds>       Manifest refresh age
+--manifest-poll <seconds>      Background freshness poll
+--download-concurrency <n>     Parallel skill file downloads
+--no-official-mirror           Disable the official CN endpoint
+--no-hedge                     Race all endpoints immediately
 ```
 
-### 📖 read_skill
+Full flags, environment variables and persisted settings are documented in
+[Configuration](docs/CONFIGURATION.md).
 
-物化技能（协议 STEP 3，执行前必调）：完整下载技能目录到本地缓存（已缓存则秒回），返回 SKILL.md 指令 + 文件结构 + 依赖 + **Cache & Execution 段（local_path / 完整性 / setup 命令）** + 子技能。
+## Security and Privacy
 
-```
-input:  { name: "MediaCrawler" }
-output: { instructions, structure, dependencies, sub_skills }
-```
+- HTTP mode binds to `127.0.0.1` by default and validates Host/Origin allowlists.
+- GitHub credentials are sent only to GitHub endpoints, never to mirrors.
+- Skill paths are checked for traversal and symlink escapes.
+- Downloaded files are validated before they are accepted as cache content.
+- App Markdown is sanitized, and external links open with `noopener noreferrer`.
 
-### 📂 load_skill_file
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and the threat model.
 
-按需读取技能内的任意文件。
+## Commercial Use
 
-```
-input:  { skill_name: "KrillinAI", file_path: "README.md" }
-output: { content, size_bytes }
-```
+Personal, educational, open-source and internal business use is free. Commercial
+sale, paid deployment/support, paid hosting, or bundling with a paid product
+requires the official logo, non-original-source notice and source link defined
+by the license.
 
-> 单文件上限 500KB；二进制文件返回占位说明而非内容；路径穿越会自动拦截。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/logo-white.png">
+  <img src="brand/logo-black.png" alt="合塑研工 HESUYANGONG" width="180">
+</picture>
 
-### 🗂️ list_skill_files
+**非原创：本项目基于 codex-skills-mcp（合塑研工）二次开发，由 [销售方名称] 独立提供，非原作者官方发行版。**
 
-浏览技能的文件树（不读内容）。
+Read [Commercial licensing](docs/COMMERCIAL-LICENSING.md), the controlling
+[LICENSE](LICENSE), and the ready-to-use [brand assets](brand/README.md).
+This is a source-available license, not a standard OSI-approved license.
 
-```
-input:  { skill_name: "remotion-skills", path?: "src", max_depth?: 2 }
-output: 目录树
-```
+## Documentation
 
-### 🔗 plan_workflow
+| Document | Contents |
+|---|---|
+| [Installation](docs/INSTALLATION.md) | Client setup, local mode, HTTP deployment |
+| [Configuration](docs/CONFIGURATION.md) | CLI, environment and persisted settings |
+| [Architecture](docs/ARCHITECTURE.md) | Runtime components, cache and network design |
+| [Tools](docs/TOOLS.md) | Core, app and extension tool surface |
+| [Agent protocol](docs/AGENT-PROTOCOL.md) | Recommended discovery and execution flow |
+| [Host extensions](docs/EXTENSIONS.md) | MCP Apps and OpenAI extension integration |
+| [Performance](docs/PERFORMANCE.md) | Design constraints and reproducible benchmarks |
+| [Commercial licensing](docs/COMMERCIAL-LICENSING.md) | Free use and commercial conditions |
+| [Releasing](docs/RELEASING.md) | Release checklist and maintainer workflow |
 
-给定任务描述，产出可组合技能的**有序执行计划草稿**（带 `[cached]` 徽标），并强制"先 read_skill 全部选定技能再开工"。
+## Development
 
-```
-input:  { task_description: "把技术博客做成小红书图文" }
-output: 推荐技能列表 + 分类分组
-```
-
-### ✅ skill_status
-
-深度校验一个或多个技能的本地缓存完整性（逐文件大小核对，只读不下载）。
-
-```
-input:  { names: "KrillinAI, videocut-skills" }
-output: cached/complete/local_path/files_total/files_missing/completed_at
-```
-
-### 🩺 diagnostics
-
-审计与排障：近期工具调用、近期错误（活动日志）、缓存统计、清单新鲜度、配置摘要。
-
-```
-input:  { include_log?: true, log_lines?: 20 }
-output: Server / Manifest / Local skill cache / Recent errors / Recent tool calls
+```bash
+npm ci
+npm test
+npm run build:plugin
+npm run check:package
 ```
 
-## OpenAI MCP Extensions（ChatGPT 原生集成 · Phase 1）
+The default suite is offline and covers search, cache validation, hedging,
+HTTP safety, MCP Apps, extension registration and real stdio flows. CI runs on
+Node.js 22 and 24.
 
-基于 [openai/mcp-extensions](https://github.com/openai/mcp-extensions) 规范与官方 SDK 新增，详见 [docs/OPENAI-MCP-EXTENSIONS.md](docs/OPENAI-MCP-EXTENSIONS.md)：
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening
+a pull request. Use [Support](SUPPORT.md) for operational questions.
 
-- **⚙️ `settings.read` / `settings.update`** — ChatGPT 插件详情页的原生设置面板（开关/数字控件）。配置项热生效、原子持久化到 `~/.codex-skills-mcp/settings.json`、重启后自动恢复。
-- **🔄 `refresh_skills_list`** — 设置页按钮型动作：立即刷新远端技能清单。
-- **💬 `search_mentions`** — ChatGPT composer 里 `@技能库` 直接 typeahead 搜索技能（对模型隐藏，仅宿主调用；Codex CLI 实测符合规范）。
-- **📄 `skill://{name}` 资源** — 提及的技能引用经 `resources/read` 解析为 SKILL.md（首读即物化），同时是后续官方 `io.modelcontextprotocol/skills` 扩展的 groundwork。
+## Project Layout
 
-> 兼容性：全部通过 MCP 标准扩展点（`_meta` / capability）实现，非 ChatGPT 宿主（Codex/Claude/Cursor 等）自动忽略，8 个核心工具行为零变化（回归测试覆盖）。
-
-## 使用流程（示例）
-
+```text
+src/         MCP server, search, loader, transport and tools
+app-src/     MCP App frontend source
+assets/      Built app asset
+plugin/      Codex plugin distribution
+brand/       Official logo and commercial attribution kit
+docs/        User and maintainer documentation
+examples/    Ready-to-copy MCP client configurations
+scripts/     Build, verification and benchmark utilities
+test/        Offline regression suites
 ```
-用户: "帮我把这个视频翻译成中文字幕"
-
-Agent → plan_workflow("把视频翻译成中文字幕")          # DISCOVER：拿到组合计划
-Agent → search_skills("视频字幕翻译")                   # DISCOVER：精确定位
-     → 命中: KrillinAI, videocut-skills, VideoClaw      # [cached] 徽标优先
-
-Agent → read_skill("KrillinAI")                         # MATERIALIZE：完整下载
-     → 返回 SKILL.md + local_path + 依赖
-Agent → read_skill("videocut-skills")                   # 每个选定技能都要物化
-
-Agent → skill_status("KrillinAI, videocut-skills")      # VERIFY：确认缓存完整
-
-Agent → 按 SKILL.md 从 local_path 执行任务               # EXECUTE：严格遵循指令
-     → 需要补充文件时 load_skill_file(...)
-```
-
-## 配置参考
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--skills-dir <path>` | - | 本地技能库目录（指定后进入本地模式） |
-| `--local` | - | 强制本地模式（从 cwd 或 `--skills-dir` 查找清单） |
-| `--github-repo` | `Zhan-ZhangZ/codexprojec` | 远端技能库仓库 |
-| `--github-branch` | `main` | 远端分支 |
-| `--github-path` | `codex-skills` | 技能库在仓库内的目录 |
-| `--github-token` | 自动从 git 凭据 / `GITHUB_TOKEN` 获取 | GitHub API 鉴权 |
-| `--http` | - | 启动 HTTP 模式 |
-| `--port` | `3456` | HTTP 端口 |
-| `--download-concurrency` | `16` | 技能文件并发下载数 |
-| `--manifest-ttl <秒>` | `86400` | 清单缓存 TTL（0 = 永不按年龄刷新）。新技能可见性由下面的轮询负责 |
-| `--manifest-poll <秒>` | `300` | **清单新鲜度轮询间隔**：search/plan 调用时对权威源发条件请求（304 级开销），新集成技能最迟此时限内可被搜到；0 = 关闭。环境变量 `CODEX_SKILLS_MANIFEST_POLL_SECONDS` |
-| `--cn-mirror` | - | ⚠️ 已废弃（兼容保留）：网络加速现为自动回退链，此参数不再生效 |
-
-环境变量：`CODEX_SKILLS_DIR`（本地技能库路径）、`GITHUB_TOKEN`、`CODEX_SKILLS_DOWNLOAD_CONCURRENCY`。
-
-技能库清单（`skills_manifest.json`）为 JSON 数组，每项包含 `name` / `description` / `category` / `folder` / `relative_path` 五个字段。
-
-## 常见问题
-
-| 问题 | 处理 |
-|------|------|
-| Agent 读了 SKILL.md 却不按指令执行 | v1.4.0 起三层合约强制 5 步协议；仍异常时用 `diagnostics` 审计该 Agent 实际调用序列 |
-| 想看 Agent 到底做了什么 | `diagnostics` 或直接读 `~/.codex-skills-cache/logs/mcp-activity-*.jsonl` |
-| npx 首次运行较慢 | 首次需下载 npm 包 + 拉取清单，属正常；之后走缓存 |
-| 日志出现 `Network warning` | 当前加速节点失败，自动降级到下一个，可忽略 |
-| 想强制更新技能内容 | 删除 `.codex-skills-cache/` 后重启，或设 `--manifest-ttl 60` 让清单自动高频刷新 |
-| 仓库新增了技能但搜不到 | v1.4.1 起 search/plan 每次调用先做节流条件轮询（默认 5 分钟一次，`--manifest-poll` 可调），新技能最迟一个轮询间隔内可见；read_skill 查无此名也会自动轮询复查。仍异常时 `search_skills(query, force_refresh=true)` 强刷，或删 `.codex-skills-cache/skills_manifest.json` 重启 |
-| `load_skill_file` 读大文件失败 | 单文件上限 500KB，属保护设计 |
-| GitHub API 限流 | 每个技能仅 2 次 API 调用，已缓存技能不再请求；未登录配额 60 次/小时 |
-| 工具列表里看不到 MCP | 客户端未重启，重启会话即可 |
-
-## 技术栈
-
-- TypeScript + ESM
-- `@modelcontextprotocol/sdk` v1.12+
-- `express` v5（仅 HTTP 模式）
-- `zod` v3 运行时 schema 验证
-- Node.js 18+
 
 ## License
 
-本项目采用 [Codex Skills MCP Commercial Attribution License 1.0](LICENSE)：
+[Codex Skills MCP Commercial Attribution License 1.0](LICENSE), with an
+[unofficial Chinese reference](LICENSE.zh-CN.md). Third-party content remains
+under its own terms; see [NOTICE](NOTICE).
 
-- 个人、非商业及内部使用免费；
-- 商业售卖需显著展示官方 Logo、标注非原创来源并提供原项目链接；
-- Logo 使用范围及禁止事项见 [brand/README.md](brand/README.md)；
-- 第三方依赖和运行期技能内容继续受各自许可证约束，详见 [NOTICE](NOTICE)。
-
-中文参考译文：[LICENSE.zh-CN.md](LICENSE.zh-CN.md)。
+Codex Skills MCP is an independent project and is not an official product of
+OpenAI, Anthropic, Cursor or any other MCP host vendor.

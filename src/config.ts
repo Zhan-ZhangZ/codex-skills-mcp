@@ -1,7 +1,9 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+
+export type ToolProfile = "auto" | "core" | "full";
 
 export interface Config {
   skillsDir: string;
@@ -11,18 +13,61 @@ export interface Config {
   githubBranch?: string;
   githubPath: string;
   githubToken?: string;
-  useCnMirror: boolean;
+  /**
+   * Route downloads through the official CN acceleration endpoint
+   * (gh.251716.xyz — a self-hosted read-only reverse proxy of
+   * raw.githubusercontent.com). Disable with --no-official-mirror.
+   * See README "Official acceleration" for the disclosure.
+   */
+  useOfficialMirror: boolean;
+  /**
+   * Keep the primary and 400ms fallback schedule, while also starting a
+   * short-lived integrity-verified winner immediately. Explicit failures
+   * start all fallbacks. Disable with --no-hedge to race all nodes at once.
+   */
+  hedgeEnabled: boolean;
+  /**
+   * Soft overall deadline for read_skill/load_skill_file downloads, in ms.
+   * Applies ONLY when the client did not opt into progress notifications
+   * (no progressToken): the tool then returns a partial-progress response
+   * just before typical client timeouts (~60s) instead of being killed
+   * mid-flight. The download keeps running in the background; the next
+   * call resumes from the cache. Default 55s. 0 = disabled.
+   */
+  softDeadlineMs: number;
+  /**
+   * Hard absolute deadline for any single download call, in ms, regardless
+   * of progress opt-in. Guards against pathological networks hanging a
+   * call forever. Default 285s — deliberately UNDER common client request
+   * timeouts (e.g. Codex uses 300s) so our structured partial-progress
+   * response always arrives BEFORE the client would kill the call.
+   * 0 = disabled.
+   */
+  hardDeadlineMs: number;
   downloadConcurrency: number;
   /** Manifest cache TTL in milliseconds. Default 24 hours. 0 = never refresh. */
   manifestTTL: number;
   /**
    * Throttled manifest freshness poll interval in milliseconds (conditional
    * GET on search/plan calls). Default 5 minutes. 0 = disabled.
-   * See docs/IMPROVEMENT-MANIFEST-FRESHNESS.md.
+   * See docs/ARCHITECTURE.md.
    */
   manifestPollMs: number;
   /** Base download timeout for skill files in milliseconds. Default: 30000 (30s). */
   downloadTimeout: number;
+  /**
+   * Tool exposure profile. `core` registers only the 8 agent-facing tools,
+   * `full` registers OpenAI extensions + MCP App tools as well, and `auto`
+   * uses the client identity after initialize (Codex/unknown = core,
+   * ChatGPT-like MCP Apps hosts = full).
+   */
+  toolProfile: ToolProfile;
+  /**
+   * Option keys explicitly provided via CLI flags this run. Persisted user
+   * settings (~/.codex-skills-mcp/settings.json) must NOT override these —
+   * precedence is CLI > persisted settings > defaults.
+   */
+  explicitCli?: Set<string>;
 }
 
 /**
@@ -30,9 +75,13 @@ export interface Config {
  */
 function getGitGithubToken(): string | undefined {
   try {
-    const output = execSync('printf "protocol=https\nhost=github.com\n" | git credential fill', {
+    const output = execFileSync("git", ["credential", "fill"], {
+      input: "protocol=https\nhost=github.com\n\n",
       encoding: "utf-8",
-      stdio: ["pipe", "pipe", "ignore"]
+      stdio: ["pipe", "pipe", "ignore"],
+      timeout: 2000,
+      maxBuffer: 64 * 1024,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" },
     });
     const match = output.match(/^password=(.+)$/m);
     if (match && match[1]) {
@@ -55,9 +104,33 @@ export function parseConfig(args: string[]): Config {
   // Parse github arguments
   const getArg = (flag: string) => {
     const idx = args.indexOf(flag);
-    return idx !== -1 && args[idx + 1] ? args[idx + 1] : undefined;
+    if (idx === -1) return undefined;
+    const value = args[idx + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${flag} requires a value`);
+    return value;
+  };
+  const integerOption = (flag: string, fallback: string, min: number, max: number) => {
+    const raw = getArg(flag) ?? fallback;
+    const value = Number(raw);
+    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < min || value > max) {
+      throw new Error(`${flag} must be an integer between ${min} and ${max}`);
+    }
+    return value;
   };
   
+  const explicitCli = new Set<string>();
+  const markExplicit = (flag: string, key: string) => {
+    if (args.includes(flag)) explicitCli.add(key);
+  };
+  markExplicit("--no-official-mirror", "official_mirror");
+  markExplicit("--no-hedge", "hedge");
+  markExplicit("--soft-deadline-seconds", "soft_deadline_seconds");
+  markExplicit("--hard-deadline-seconds", "hard_deadline_seconds");
+  markExplicit("--download-concurrency", "download_concurrency");
+  markExplicit("--download-timeout", "download_timeout_seconds");
+  markExplicit("--manifest-ttl", "manifest_ttl_hours");
+  markExplicit("--manifest-poll", "manifest_poll_seconds");
+
   const githubRepo = getArg("--github-repo") || "Zhan-ZhangZ/codexprojec";
   const githubBranch = getArg("--github-branch") || "main";
   const githubPath = getArg("--github-path") || "codex-skills";
@@ -69,14 +142,15 @@ export function parseConfig(args: string[]): Config {
     githubToken = process.env.GITHUB_TOKEN;
   }
   
-  // Fallback to Git credentials
-  if (!githubToken) {
+  const isLocal = args.includes("--local") || args.includes("--skills-dir") || !!process.env.CODEX_SKILLS_DIR;
+  // Local mode never needs a credential helper or interactive prompt.
+  if (!githubToken && !isLocal) {
     githubToken = getGitGithubToken();
   }
 
   // It defaults to remote mode unless explicitly run locally
   let isRemote = true;
-  if (args.includes("--local") || args.indexOf("--skills-dir") !== -1 || process.env.CODEX_SKILLS_DIR) {
+  if (isLocal) {
     isRemote = false;
   }
 
@@ -95,7 +169,7 @@ export function parseConfig(args: string[]): Config {
     // Local mode logic
     const dirIdx = args.indexOf("--skills-dir");
     if (dirIdx !== -1 && args[dirIdx + 1]) {
-      skillsDir = resolve(args[dirIdx + 1]);
+      skillsDir = resolve(getArg("--skills-dir")!);
     }
 
     if (!skillsDir && process.env.CODEX_SKILLS_DIR) {
@@ -127,45 +201,42 @@ export function parseConfig(args: string[]): Config {
     process.exit(1);
   }
 
-  const useCnMirror = args.includes("--cn-mirror");
+  const useOfficialMirror = !args.includes("--no-official-mirror");
+  const hedgeEnabled = !args.includes("--no-hedge");
+
+  // Soft/hard overall call deadlines (seconds; 0 disables). Soft applies
+  // only to clients without a progressToken — see read-skill.ts.
+  const softDeadlineMs = integerOption("--soft-deadline-seconds", "55", 0, 86400) * 1000;
+  // 285s default: just under common 300s client timeouts (e.g. Codex) so
+  // our partial response wins the race against the client giving up.
+  const hardDeadlineMs = integerOption("--hard-deadline-seconds", "285", 0, 86400) * 1000;
 
   // Manifest cache TTL (default: 24 hours). --manifest-ttl <seconds> or 0 to disable.
-  const ttlArg = getArg("--manifest-ttl");
-  const manifestTTL = ttlArg !== undefined ? parseInt(ttlArg, 10) * 1000 : 24 * 60 * 60 * 1000;
+  const manifestTTL = integerOption("--manifest-ttl", "86400", 0, 604800) * 1000;
 
   // Freshness poll interval (default: 5 minutes). --manifest-poll <seconds>
   // or CODEX_SKILLS_MANIFEST_POLL_SECONDS; 0 disables the poll.
-  const pollArg = getArg("--manifest-poll");
   const pollEnv = process.env.CODEX_SKILLS_MANIFEST_POLL_SECONDS;
-  const manifestPollSeconds = parseInt(pollArg || pollEnv || "300", 10);
-  if (!Number.isInteger(manifestPollSeconds) || manifestPollSeconds < 0) {
-    console.error("Error: --manifest-poll must be a non-negative integer (seconds)");
-    process.exit(1);
-  }
+  const manifestPollSeconds = integerOption("--manifest-poll", pollEnv ?? "300", 0, 3600);
   const manifestPollMs = manifestPollSeconds * 1000;
 
   // Concurrent downloads for skill files (default 16). Configurable via
   // --download-concurrency <n> or CODEX_SKILLS_DOWNLOAD_CONCURRENCY env var.
-  const concurrencyArg = getArg("--download-concurrency");
   const concurrencyEnv = process.env.CODEX_SKILLS_DOWNLOAD_CONCURRENCY;
-  const downloadConcurrency = parseInt(concurrencyArg || concurrencyEnv || "16", 10);
-  if (!Number.isInteger(downloadConcurrency) || downloadConcurrency < 1) {
-    console.error("Error: --download-concurrency must be a positive integer");
-    process.exit(1);
-  }
+  const downloadConcurrency = integerOption("--download-concurrency", concurrencyEnv ?? "16", 1, 64);
 
   // Base download timeout for skill files (default 30 seconds). Configurable via
   // --download-timeout <seconds> or CODEX_SKILLS_DOWNLOAD_TIMEOUT env var.
-  const timeoutArg = getArg("--download-timeout");
   const timeoutEnv = process.env.CODEX_SKILLS_DOWNLOAD_TIMEOUT;
-  const downloadTimeoutSeconds = parseInt(timeoutArg || timeoutEnv || "30", 10);
-  if (!Number.isInteger(downloadTimeoutSeconds) || downloadTimeoutSeconds < 1) {
-    console.error("Error: --download-timeout must be a positive integer");
-    process.exit(1);
-  }
+  const downloadTimeoutSeconds = integerOption("--download-timeout", timeoutEnv ?? "30", 1, 300);
   const downloadTimeout = downloadTimeoutSeconds * 1000;
-
+  const toolProfileRaw = getArg("--tool-profile") ?? process.env.CODEX_SKILLS_TOOL_PROFILE ?? "auto";
+  if (!["auto", "core", "full"].includes(toolProfileRaw)) {
+    throw new Error("--tool-profile must be one of: auto, core, full");
+  }
+  const toolProfile = toolProfileRaw as ToolProfile;
   return { 
+    explicitCli,
     skillsDir, 
     manifestPath, 
     isRemote, 
@@ -173,12 +244,25 @@ export function parseConfig(args: string[]): Config {
     githubBranch, 
     githubPath, 
     githubToken,
-    useCnMirror,
+    useOfficialMirror,
+    hedgeEnabled,
+    softDeadlineMs,
+    hardDeadlineMs,
     downloadConcurrency,
     manifestTTL,
     manifestPollMs,
-    downloadTimeout
+    downloadTimeout,
+    toolProfile
   };
+}
+
+export interface ManifestFileIndex {
+  /** Content-addressed catalog path relative to the library root */
+  path: string;
+  /** SHA-256 of the exact catalog bytes */
+  sha256: string;
+  file_count: number;
+  total_bytes: number;
 }
 
 export interface ManifestEntry {
@@ -194,9 +278,49 @@ export interface ManifestEntry {
   dependencies?: string[];
   updated_at?: string;
   stars?: number;
+  /** Optional immutable file catalog emitted by codexproject */
+  file_index?: ManifestFileIndex;
 }
 
 export function loadManifest(manifestPath: string): ManifestEntry[] {
   const raw = readFileSync(manifestPath, "utf-8");
-  return JSON.parse(raw) as ManifestEntry[];
+  return parseManifest(JSON.parse(raw));
+}
+
+/** Validate remote/local data at the boundary, before indexing or writing it. */
+export function parseManifest(value: unknown): ManifestEntry[] {
+  if (!Array.isArray(value)) throw new Error("Manifest must be an array");
+  const names = new Set<string>();
+  for (const [index, entry] of value.entries()) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`Invalid manifest entry ${index}`);
+    }
+    for (const field of ["name", "description", "category", "folder", "relative_path"]) {
+      if (typeof entry[field] !== "string") throw new Error(`Manifest entry ${index}: ${field} must be a string`);
+    }
+    const path = entry.relative_path as string;
+    if (!entry.name.trim() || !path || /^[\/\\]|^[a-z]:/i.test(path) || path.includes("\\") || path.includes("\0") || path.split("/").includes("..")) {
+      throw new Error(`Manifest entry ${index}: invalid name or relative_path`);
+    }
+    const name = entry.name.toLowerCase();
+    if (names.has(name)) throw new Error(`Manifest contains duplicate name: ${entry.name}`);
+    names.add(name);
+    const fileIndex = entry.file_index;
+    if (fileIndex !== undefined) {
+      const validIndex = !!fileIndex && typeof fileIndex === "object" && !Array.isArray(fileIndex) &&
+        typeof fileIndex.path === "string" && /^[0-9a-f]{64}$/.test(fileIndex.sha256 ?? "") &&
+        fileIndex.path === `.catalog/${fileIndex.sha256}.json` &&
+        Number.isSafeInteger(fileIndex.file_count) && fileIndex.file_count > 0 &&
+        Number.isSafeInteger(fileIndex.total_bytes) && fileIndex.total_bytes >= 0;
+      if (!validIndex || path === "./") {
+        throw new Error(`Manifest entry ${index}: invalid file_index`);
+      }
+    }
+    for (const field of ["aliases", "tags", "dependencies"]) {
+      if (entry[field] !== undefined && (!Array.isArray(entry[field]) || !entry[field].every((v: unknown) => typeof v === "string"))) {
+        throw new Error(`Manifest entry ${index}: ${field} must be a string array`);
+      }
+    }
+  }
+  return value as ManifestEntry[];
 }

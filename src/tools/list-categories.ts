@@ -8,7 +8,7 @@ export function registerListCategories(
 ): void {
   server.tool(
     "list_categories",
-    "List all skill categories in the codex-skills library with their skill counts. Use it to get an overview of available domains before searching (agent protocol step 1 DISCOVER).",
+    "List skill categories and their counts. Use when browsing by domain or when a search is too broad.",
     {},
     { readOnlyHint: true },
     async () =>
@@ -25,7 +25,7 @@ export function registerListCategories(
           content: [
             {
               type: "text" as const,
-              text: `Codex-Skills Library: ${total} skills across ${categories.length} categories\n\n${formatted}\n\nUse search_skills(query) or plan_workflow(task_description) to DISCOVER skills; results carry a [cached] badge for skills already on local disk. Then read_skill EVERY selected skill before starting work.`,
+              text: `Codex-Skills Library: ${total} skills across ${categories.length} categories\n\n${formatted}\n\nUse search_skills(keywords) or plan_workflow(task) to discover skills. If you choose one, call read_skill for that skill; no skill is required.`,
             },
           ],
         };

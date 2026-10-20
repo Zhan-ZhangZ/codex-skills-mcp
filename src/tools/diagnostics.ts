@@ -8,6 +8,7 @@ import type { Config } from "../config.js";
 import { FOOTER_DIAGNOSTICS } from "../lib/protocol.js";
 import { withToolLogging, readRecentEvents, loggerActive, logDirPath } from "../lib/logger.js";
 import { readManifestMeta } from "../remote/github.js";
+import { readHttpBudgetState } from "../remote/http-budget.js";
 
 const TREE_MARKER = ".codex-skills.tree.json";
 const SKIP_DIRS = new Set(["node_modules", ".git", "__pycache__", "logs"]);
@@ -63,10 +64,10 @@ export function registerDiagnostics(
 ): void {
   server.tool(
     "diagnostics",
-    "Audit and troubleshoot the skill library: recent tool calls and recent errors from the activity log, cache statistics (cached skill count / total size), manifest freshness and config summary. Use it when a call fails, when a download looks wrong, or to verify what the agent actually did (which tools ran, which skills downloaded).",
+    "Audit recent tool calls/errors, cache statistics, manifest freshness, and config.",
     {
       include_log: z.boolean().optional().default(true).describe("Include recent activity-log entries (default: true)"),
-      log_lines: z.number().optional().default(20).describe("Max log entries per section (default: 20)"),
+      log_lines: z.number().int().min(1).max(200).optional().default(20).describe("Max log entries per section (1–200, default: 20)"),
     },
     { readOnlyHint: true },
     async ({ include_log, log_lines }) =>
@@ -92,12 +93,26 @@ export function registerDiagnostics(
           [
             `- Version: ${version}`,
             `- Mode: ${config.isRemote ? "remote (on-demand download)" : "local (skills-dir)"}`,
+            `- Tool profile: ${config.toolProfile ?? "auto"}`,
             `- Remote: ${config.githubRepo ?? "-"}@${config.githubBranch ?? "-"}`,
             `- Cache dir: \`${config.skillsDir}\``,
           ].join("\n")
         );
 
+        const budget = readHttpBudgetState();
+        sections.push(
+          "## HTTP admission",
+          [
+            `- Capacity: ${budget.limits.capacity} active operations (data ceiling ${budget.limits.capacity - budget.limits.metadataReserve}; manifest reserve ${budget.limits.manifestReserve})`,
+            `- Current: ${budget.active} active, ${budget.queued} queued across ${budget.queuedGroups} group(s)`,
+            `- By class: data ${budget.activeByKind.data}, metadata ${budget.activeByKind.metadata}, manifest ${budget.activeByKind.manifest}`,
+          ].join("\n")
+        );
+
         const meta = readManifestMeta(config);
+        const validators = Object.entries(meta.validators ?? {})
+          .filter(([, value]) => value.etag || value.lastModified)
+          .map(([endpoint, value]) => `${endpoint}: ${value.etag ? value.etag.slice(0, 24) + "…" : "Last-Modified"}`);
         const validated = meta.validatedAt
           ? new Date(meta.validatedAt).toISOString()
           : "never";
@@ -107,7 +122,7 @@ export function registerDiagnostics(
             `- Skills indexed: ${totalSkills}`,
             `- Manifest age: ${manifestAge} (TTL ${Math.round(config.manifestTTL / 3600000)}h)`,
             `- Last freshness check: ${validated} (poll every ${Math.round(config.manifestPollMs / 1000)}s)`,
-            `- ETag: ${meta.etag ? meta.etag.slice(0, 24) + "…" : "(none — next poll fetches full)"}`,
+            `- Conditional validators: ${validators.join("; ") || "(none — next poll fetches full)"}`,
           ].join("\n")
         );
 

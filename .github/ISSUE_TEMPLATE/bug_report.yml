@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible defect in Codex Skills MCP.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove credentials and private data before posting logs.
+        Security vulnerabilities must use the private reporting flow in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `npx codex-skills-mcp --version`.
+      placeholder: 1.5.0-beta.14
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: MCP host
+      placeholder: Codex Desktop, Codex CLI, Claude Desktop, Cursor, HTTP client...
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: Node.js version and operating system.
+      placeholder: Node.js 22.18, macOS 15.6
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include configuration and exact commands.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include diagnostics output with secrets removed.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, cache mode, network conditions or recent changes.

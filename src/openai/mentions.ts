@@ -21,6 +21,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,12 +30,63 @@ import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
+import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../remote/skill-progress.js";
 
 /** Max items returned by mention typeahead (picker ergonomics). */
 const MENTION_LIMIT = 10;
 
 /** The butler (Librarian Router) skill — the fixed entrance to the library. */
 const BUTLER_NAME = "00_codex_skills";
+
+/** Encode each skill as one URI component, including spaces, slashes and %. */
+function skillUri(name: string): string {
+  return `skill://${encodeURIComponent(name)}`;
+}
+
+// The SDK's UriTemplate.match returns raw encoded variables, not decoded text.
+function decodeUriVariable(value: string | string[], label: string): string {
+  if (Array.isArray(value)) throw new McpError(ErrorCode.InvalidParams, `Invalid ${label}`);
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    throw new McpError(ErrorCode.InvalidParams, `Invalid percent-encoding in ${label}`);
+  }
+}
+
+/** Resource reads need the same bounded wait as read_skill, including @ mentions. */
+async function readWithDeadline<T>(
+  operation: () => Promise<T>,
+  config: Config,
+  signal: AbortSignal
+): Promise<T> {
+  signal.throwIfAborted();
+  const soft = config.softDeadlineMs || Infinity;
+  const hard = config.hardDeadlineMs || Infinity;
+  const deadline = Math.min(soft, hard);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<never>((_resolve, reject) => {
+        if (deadline !== Infinity) {
+          timer = setTimeout(() => reject(new McpError(
+            ErrorCode.InternalError,
+            "Skill download is still in progress. Retry this resource read to resume from the local cache.",
+            { code: "DOWNLOAD_PENDING", retryable: true, deadlineMs: deadline }
+          )), deadline);
+        }
+      }),
+      new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(new McpError(ErrorCode.InternalError, "Resource read cancelled"));
+        signal.addEventListener("abort", onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
 
 /**
  * Load the butler's root SKILL.md as a SINGLE FILE. The butler's
@@ -78,21 +130,22 @@ function butlerMatchesQuery(butler: { name: string; description: string }, query
 }
 
 /**
- * Register the mentions handler and the skill:// resource template.
+ * Register the mentions handler and the shared skill:// resources.
  */
 export function registerOpenAIMentions(
   server: McpServer,
   extensions: OpenAIExtensions,
   config: Config,
   searchEngine: SkillSearchEngine,
-  loader: SkillLoader
+  loader: SkillLoader,
+  includeResources = true
 ): void {
   extensions.mentions.setHandler(async ({ query }) =>
     withToolLogging("search_mentions", { query }, async () => {
       // Reuse the same throttled freshness poll as search_skills so newly
       // integrated skills show up in the typeahead as well.
       if (typeof searchEngine.maybeRefreshManifest === "function") {
-        await searchEngine.maybeRefreshManifest();
+        void searchEngine.maybeRefreshManifest();
       }
 
       // Butler placement: PINNED FIRST only on the empty query (picker just
@@ -115,7 +168,7 @@ export function registerOpenAIMentions(
       if (butler && (!q || butlerMatchesQuery(butler, q))) {
         items.push({
           type: "resource_link",
-          uri: `skill://${butler.name}`,
+          uri: skillUri(butler.name),
           name: butler.name,
           title: `管家 · ${butler.name}`,
           description: butler.description.substring(0, 180),
@@ -124,7 +177,7 @@ export function registerOpenAIMentions(
       for (const r of entries) {
         items.push({
           type: "resource_link",
-          uri: `skill://${r.name}`,
+          uri: skillUri(r.name),
           name: r.name,
           title: r.name,
           description: r.description.substring(0, 160),
@@ -141,7 +194,7 @@ export function registerOpenAIMentions(
         for (const r of searchEngine.defaultSuggestions(5)) {
           items.push({
             type: "resource_link",
-            uri: `skill://${r.name}`,
+            uri: skillUri(r.name),
             name: r.name,
             title: r.name,
             description: r.description.substring(0, 160),
@@ -153,6 +206,20 @@ export function registerOpenAIMentions(
     })
   );
 
+  if (includeResources) registerSkillResources(server, config, searchEngine, loader);
+}
+
+/**
+ * Register skill:// resources. These are resources, not model-callable tools,
+ * so core-only Codex clients can keep direct skill:// reads without adding
+ * the mentions/app tool surface to the model.
+ */
+export function registerSkillResources(
+  server: McpServer,
+  config: Config,
+  searchEngine: SkillSearchEngine,
+  loader: SkillLoader
+): void {
   // Supporting files within a skill (README.md, scripts/, references/...).
   // Hosts/models naturally probe sub-paths like skill://<name>/README.md
   // after reading a mention's SKILL.md; without this template those probes
@@ -166,18 +233,23 @@ export function registerOpenAIMentions(
         "scripts, configs, references). Reading materializes the skill if needed.",
       mimeType: "text/plain",
     },
-    async (uri, { name, path }) =>
-      withToolLogging("resources/read skill-file://", { skill: String(name), file: String(path) }, async () => {
-        const entry = searchEngine.findByName(String(name));
+    async (uri, variables, extra) => {
+      const name = decodeUriVariable(variables.name, "skill name");
+      const path = decodeUriVariable(variables.path, "file path");
+      return withToolLogging("resources/read skill-file://", { skill: name, file: path }, async () => {
+        const entry = searchEngine.findByName(name);
         if (!entry) {
           throw new Error(`Skill "${name}" not found.`);
         }
         // loadSkillFile handles remote fetch, path-traversal security and
         // missing-file errors with clear messages.
-        const { content, size_bytes } = await loader.loadSkillFile(entry, String(path));
-        const mime = String(path).endsWith(".md")
+        const result = await readWithDeadline(
+          () => loader.loadSkillFile(entry, path), config, extra.signal
+        );
+        const { content, size_bytes } = result;
+        const mime = path.endsWith(".md")
           ? "text/markdown"
-          : String(path).endsWith(".json")
+          : path.endsWith(".json")
             ? "application/json"
             : "text/plain";
         return {
@@ -185,15 +257,23 @@ export function registerOpenAIMentions(
             {
               uri: uri.href,
               mimeType: mime,
-              text: `## ${name} / ${path} (${size_bytes} bytes)\n\n${content}`,
+              text:
+                `## ${name} / ${path} (${size_bytes} bytes; ` +
+                `${result.binary ? "binary metadata" : `bytes ${result.offset}–${Math.max(result.offset, result.offset + result.bytes_returned - 1)}`})\n\n` +
+                content +
+                (result.has_more && result.next_offset !== undefined
+                  ? `\n\n> This resource returned the first ${result.bytes_returned} bytes. ` +
+                    `Use load_skill_file with offset=${result.next_offset} to continue.`
+                  : ""),
             },
           ],
         };
-      })
+      });
+    }
   );
 
   // Resolve skill:// URIs mentioned in the composer. Reading materializes the
-  // skill (same code path as read_skill) and serves its SKILL.md.
+  // complete skill, then serves SKILL.md without scanning unused metadata.
   server.registerResource(
     "skill",
     new ResourceTemplate("skill://{name}", {
@@ -212,7 +292,7 @@ export function registerOpenAIMentions(
           ...(searchEngine.getButlerEntry()
             ? [
                 {
-                  uri: `skill://${BUTLER_NAME}`,
+                  uri: skillUri(BUTLER_NAME),
                   name: BUTLER_NAME,
                   mimeType: "text/markdown",
                 },
@@ -221,7 +301,7 @@ export function registerOpenAIMentions(
           ...searchEngine
             .defaultSuggestions(Number.MAX_SAFE_INTEGER)
             .map((entry) => ({
-              uri: `skill://${entry.name}`,
+              uri: skillUri(entry.name),
               name: entry.name,
               mimeType: "text/markdown",
             })),
@@ -229,19 +309,20 @@ export function registerOpenAIMentions(
       }),
     }),
     // No template description: the SDK merges it into every resources/list
-    // entry (199 × ~50 bytes); omitting keeps the catalog ~5k tokens, safely
+    // entry; omitting keeps the catalog bounded as the live library grows,
     // under the ~12k-token host truncation observed in ChatGPT.
     { mimeType: "text/markdown" },
-    async (uri, { name }) =>
-      withToolLogging("resources/read skill://", { skill: String(name) }, async () => {
+    async (uri, variables, extra) => {
+      const name = decodeUriVariable(variables.name, "skill name");
+      return withToolLogging("resources/read skill://", { skill: name }, async () => {
         // The butler lives at the repository root: serve its single SKILL.md
         // instead of materializing the entire library as one "skill".
-        if (String(name) === BUTLER_NAME) {
+        if (name === BUTLER_NAME) {
           const butler = searchEngine.getButlerEntry();
           if (!butler) {
             throw new Error("Butler skill (00_codex_skills) missing from manifest.");
           }
-          const text = await loadButlerSkillMd(config);
+          const text = await readWithDeadline(() => loadButlerSkillMd(config), config, extra.signal);
           // Host-compatibility note: the butler's gates were written for
           // filesystem hosts (view_file / reading skills_manifest.json). In
           // MCP hosts this teaches it the resource path, so UNCACHED skills
@@ -267,11 +348,11 @@ export function registerOpenAIMentions(
           };
         }
 
-        let entry = searchEngine.findByName(String(name));
+        let entry = searchEngine.findByName(name);
         if (!entry) {
           if (typeof searchEngine.maybeRefreshManifest === "function") {
             await searchEngine.maybeRefreshManifest();
-            entry = searchEngine.findByName(String(name));
+            entry = searchEngine.findByName(name);
           }
         }
         if (!entry) {
@@ -280,27 +361,45 @@ export function registerOpenAIMentions(
           );
         }
 
-        const result = await loader.readSkill(entry);
+        const selectedEntry = entry;
+        const progressToken = extra?._meta?.progressToken;
+        const onProgress = (done: number, total: number, message: string) => {
+          reportSkillDownloadProgress(selectedEntry.name, done, total, message);
+          if (progressToken !== undefined && !extra.signal.aborted) {
+              void extra.sendNotification({
+                method: "notifications/progress",
+                params: { progressToken, progress: done, total, message },
+              }).catch(() => {});
+          }
+        };
+        const { instructions, cache } = await readWithDeadline(
+          () => loader.readInstructionsWithState(selectedEntry, onProgress), config, extra.signal
+        );
+        finishSkillDownloadProgress(selectedEntry.name);
         if (typeof searchEngine.recordUsage === "function") {
           searchEngine.recordUsage(entry.name);
         }
 
         // Self-describing hint so models reading this resource know where
         // supporting files live (they otherwise probe sub-paths blind).
+        const revisionNote = cache.cached && cache.catalogCurrent === false
+          ? "\n\n> ⚠️ Cached revision — current manifest catalog not validated. These instructions describe the cached revision. Retry this resource read when the source is available."
+          : "";
         const hint =
           `\n\n---\n> 📁 Supporting files for this skill (README.md, scripts/, ` +
           `references/, ...) are readable as MCP resources: ` +
-          "`skill://" + entry.name + "/<relative-path>`.";
+          "`" + skillUri(entry.name) + "/<relative-path>`.";
 
         return {
           contents: [
             {
               uri: uri.href,
               mimeType: "text/markdown",
-              text: result.instructions + hint,
+              text: instructions + revisionNote + hint,
             },
           ],
         };
-      })
+      });
+    }
   );
 }

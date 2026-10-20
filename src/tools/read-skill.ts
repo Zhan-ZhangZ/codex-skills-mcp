@@ -4,6 +4,8 @@ import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { FOOTER_READ } from "../lib/protocol.js";
 import { withToolLogging, logEvent } from "../lib/logger.js";
+import { raceDownloadDeadline, DownloadDeadlineExceeded } from "../lib/deadline.js";
+import { fileNavigationRows, subSkillNavigationRows, navigationPage, navigationFooter, navigationMetadata } from "../lib/navigation.js";
 
 export function registerReadSkill(
   server: McpServer,
@@ -12,11 +14,11 @@ export function registerReadSkill(
 ): void {
   server.tool(
     "read_skill",
-    "STEP 3 MATERIALIZE — MANDATORY before executing any skill, once for EVERY skill you plan to use. Downloads the COMPLETE skill directory (SKILL.md + scripts + configs + references) into the local cache (instant when already cached) and returns the instructions, file structure, dependencies, and local_path — the on-disk path to execute the skill from. After this call you MUST execute the task strictly per the returned instructions; do NOT do the task from general knowledge after reading.",
+    "Download a selected skill and return its full SKILL.md, dependencies, local_path, and a bounded file preview. Complete materialization is cached.",
     {
       name: z.string().describe("Exact skill name from search/plan results, e.g. 'MediaCrawler'"),
     },
-    { readOnlyHint: true },
+    { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     async ({ name }, extra) =>
       withToolLogging("read_skill", { skill: name }, async () => {
         let entry = searchEngine.findByName(name);
@@ -31,6 +33,7 @@ export function registerReadSkill(
         if (!entry) {
           logEvent("warn", "tool_error", { tool: "read_skill", skill: name, error: "skill not found" });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -43,18 +46,36 @@ export function registerReadSkill(
         // MCP progress notifications — clients opt in by sending a progressToken
         // in the request meta. Without one we stay silent (backwards compatible).
         const progressToken = extra?._meta?.progressToken;
+        let progressOpen = true;
         const sendProgress = (progress: number, total: number, message: string) => {
-          if (progressToken !== undefined) {
+          if (progressOpen && progressToken !== undefined && !extra.signal.aborted) {
             void extra.sendNotification({
               method: "notifications/progress",
               params: { progressToken, progress, total, message },
-            });
+            }).catch(() => {});
           }
         };
 
         try {
-          const result = await loader.readSkill(entry, (done, total, message) =>
-            sendProgress(done, total, message)
+          // Deadline strategy: clients WITH a progressToken keep receiving
+          // progress notifications that reset their timeout, so they only
+          // need the hard guard. Clients WITHOUT one typically enforce a
+          // 60s request timeout and would kill the call silently — give
+          // them the soft deadline (default 55s) so the model always gets
+          // a structured response telling it to re-call and resume.
+          const hasProgressToken = progressToken !== undefined;
+          const { softDeadlineMs, hardDeadlineMs } = loader.downloadDeadlines;
+          const deadlineMs = hasProgressToken
+            ? hardDeadlineMs
+            : Math.min(softDeadlineMs || Infinity, hardDeadlineMs || Infinity);
+          const deadlineKind: "soft" | "hard" = hasProgressToken ? "hard" : "soft";
+
+          const result = await raceDownloadDeadline(
+            loader.readSkill(entry, (done, total, message) =>
+              sendProgress(done, total, message)
+            ),
+            deadlineMs === Infinity ? 0 : deadlineMs,
+            deadlineKind
           );
 
           // Record usage for personalized search ranking
@@ -62,22 +83,30 @@ export function registerReadSkill(
             searchEngine.recordUsage(entry.name);
           }
 
-          // Deep cache check right after materialization (read-only, fast)
-          const cache = loader.cacheState(entry);
+          // Reuse the request-bound state checked by the loader. Older custom
+          // loaders can still supply only the original instructions result.
+          const cache = result.cache ?? loader.cacheState(entry);
 
-          // Format structure as a compact tree
-          const structureStr = formatTree(result.structure.files, "");
+          const identity = result.navigationIdentity ?? JSON.stringify([entry.name, entry.relative_path, entry.file_index?.sha256]);
+          const filesContext = { identity, skillName: entry.name, view: "files" as const, maxDepth: 2 };
+          const subSkillsContext = { identity, skillName: entry.name, view: "sub_skills" as const };
+          const filesPage = navigationPage(fileNavigationRows(result.structure.files), filesContext);
+          const subSkillsPage = navigationPage(subSkillNavigationRows(result.structure.sub_skills), subSkillsContext);
+          const structureStr = filesPage.nextCursor
+            ? filesPage.rows.map(item => item.text).join("\n")
+            : formatTree(result.structure.files, "");
+          const structureNavigation = filesPage.nextCursor ? navigationFooter(filesContext, filesPage) : "";
 
           // Format sub-skills if any
           let subSkillsStr = "";
           if (result.structure.sub_skills.length > 0) {
             subSkillsStr =
               "\n## Sub-Skills\n" +
-              result.structure.sub_skills
-                .map((s) => `- **${s.name}** (${s.path}): ${s.description}`)
-                .join("\n");
-            subSkillsStr +=
-              "\n\nUse read_skill or load_skill_file to access sub-skill instructions.";
+              subSkillsPage.rows.map(item => item.text).join("\n");
+            if (subSkillsPage.nextCursor || subSkillsPage.excerpted) subSkillsStr += "\n\n" + navigationFooter(subSkillsContext, subSkillsPage);
+            const first = subSkillsPage.rows[0]?.row.path;
+            subSkillsStr += "\n\nRead complete sub-skill instructions with load_skill_file(" +
+              JSON.stringify({ skill_name: entry.name, file_path: `${first ?? "SUB_SKILL_PATH"}/SKILL.md` }) + ").";
           }
 
           // Format dependencies
@@ -94,11 +123,14 @@ export function registerReadSkill(
             .join(" | ");
 
           // Cache & Execution section: makes "it is on disk, execute from here" visible
+          const cachedRevision = cache.cached && cache.catalogCurrent === false;
           const statusLine = cache.complete
             ? `✅ complete — ${cache.filesTotal} files (${formatBytes(cache.sizeBytes)})${cache.completedAt ? `, downloaded ${cache.completedAt}` : ""}`
-            : cache.cached
-              ? `⚠️ INCOMPLETE — ${cache.filesMissing.length} of ${cache.filesTotal} files missing. Re-call read_skill("${entry.name}") to resume the download.`
-              : `⚠️ not cached — re-call read_skill("${entry.name}") to download.`;
+            : cachedRevision
+              ? `⚠️ cached revision — current manifest catalog not validated. Retry read_skill("${entry.name}") when the source is available.`
+              : cache.cached
+                ? `⚠️ INCOMPLETE — ${cache.filesMissing.length} of ${cache.filesTotal} files missing. Re-call read_skill("${entry.name}") to resume the download.`
+                : `⚠️ not cached — re-call read_skill("${entry.name}") to download.`;
 
           const cacheSection = [
             "## Cache & Execution",
@@ -109,12 +141,17 @@ export function registerReadSkill(
             result.dependencies.setup_command
               ? `\n- Setup before first run: \`${result.dependencies.setup_command}\``
               : "",
-            "\n- The complete skill now lives on local disk. Run its scripts from local_path and follow the Instructions above exactly.",
+            cachedRevision
+              ? "\n- local_path contains a cached revision. The instructions above describe that cached revision; completeness against the current manifest has not been verified."
+              : cache.complete
+                ? "\n- The complete skill now lives on local disk. Run its scripts from local_path and follow the Instructions above exactly."
+                : "\n- Materialization is not complete. Re-call read_skill to finish downloading, then use skill_status to verify completeness before execution.",
           ]
             .filter(Boolean)
             .join("");
 
           return {
+            structuredContent: { navigation: { files: navigationMetadata(filesPage), sub_skills: navigationMetadata(subSkillsPage) } },
             content: [
               {
                 type: "text" as const,
@@ -131,16 +168,45 @@ export function registerReadSkill(
                   "```",
                   structureStr,
                   "```",
+                  structureNavigation,
                   cacheSection,
                   subSkillsStr,
                   "",
                   "---",
-                  FOOTER_READ,
+                  cachedRevision
+                    ? `▶ Retry read_skill("${entry.name}") when the source is available, then use skill_status to verify the current manifest revision before execution.`
+                    : cache.complete
+                      ? FOOTER_READ
+                      : `▶ Re-call read_skill("${entry.name}") to complete materialization, then use skill_status to verify completeness before execution.`,
                 ].join("\n"),
               },
             ],
           };
         } catch (err) {
+          if (err instanceof DownloadDeadlineExceeded) {
+            // Deadline hit — the download CONTINUES in the background and
+            // keeps writing into the cache. Report precise progress and an
+            // explicit resume instruction so the model never sits blind.
+            const cache = loader.cacheState(entry);
+            const total = cache.filesTotal || 0;
+            const have = total - (cache.filesMissing?.length ?? total);
+            logEvent("info", "download_deadline", {
+              tool: "read_skill",
+              skill: entry.name,
+              detail: `${err.kind} deadline, ${have}/${total} files`,
+            });
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text:
+                    `⏳ Skill "${entry.name}" is still downloading: ${have}/${total} files on disk (${Math.round((have / Math.max(total, 1)) * 100)}%).\n\n` +
+                    `The download continues in the background and resumes automatically — nothing is lost.\n\n` +
+                    `**NEXT STEP: re-call read_skill("${entry.name}") now.** It returns instantly once the remaining files land; for very large skills you may need to re-call a few times (each call tops up the cache).`,
+                },
+              ],
+            };
+          }
           // Record the failure so search ranking can demote unreliable skills
           if (typeof searchEngine.recordFailure === "function") {
             searchEngine.recordFailure(entry.name);
@@ -148,6 +214,7 @@ export function registerReadSkill(
           const message = err instanceof Error ? err.message : String(err);
           logEvent("error", "tool_error", { tool: "read_skill", skill: entry.name, error: message });
           return {
+            isError: true,
             content: [
               {
                 type: "text" as const,
@@ -155,6 +222,8 @@ export function registerReadSkill(
               },
             ],
           };
+        } finally {
+          progressOpen = false;
         }
       })
   );

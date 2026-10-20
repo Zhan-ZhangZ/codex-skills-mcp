@@ -152,7 +152,8 @@ export async function withToolLogging<R>(
   logEvent("info", "tool_call", { tool, detail: JSON.stringify(argSummary) });
   try {
     const result = await fn();
-    logEvent("info", "tool_result", { tool, ok: true, duration_ms: Date.now() - startedAt });
+    const failed = !!result && typeof result === "object" && "isError" in result && result.isError === true;
+    logEvent(failed ? "error" : "info", "tool_result", { tool, ok: !failed, duration_ms: Date.now() - startedAt });
     return result;
   } catch (err) {
     logEvent("error", "tool_result", {

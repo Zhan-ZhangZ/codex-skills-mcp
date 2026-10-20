@@ -1,8 +1,19 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.5.0-beta.1",
-  "description": "MCP Server for Codex-Skills - Intelligent skill library search, read and orchestration",
+  "version": "1.5.0-beta.14",
+  "description": "Local-first MCP server for on-demand expert skill discovery, loading, and orchestration",
   "type": "module",
+  "author": {
+    "name": "合塑研工 (HESUYANGONG)"
+  },
+  "homepage": "https://github.com/Zhan-ZhangZ/codex-skills-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zhan-ZhangZ/codex-skills-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Zhan-ZhangZ/codex-skills-mcp/issues"
+  },
   "bin": {
     "codex-skills-mcp": "dist/index.js"
   },
@@ -10,17 +21,36 @@
     "registry": "https://registry.npmjs.org"
   },
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
+    "docs",
     "brand",
+    "CHANGELOG.md",
+    "SECURITY.md",
     "NOTICE",
     "LICENSE.zh-CN.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run typecheck && npm run build:app && tsc && node -e \"require('fs').copyFileSync('assets/app.html','dist/app.html')\"",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.app.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "benchmark": "node scripts/benchmark-search.mjs",
+    "check:package": "node scripts/check-package.mjs",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "build:app": "node scripts/build-app.mjs",
+    "benchmark:loader": "node scripts/benchmark-loader.mjs",
+    "benchmark:remote": "node scripts/benchmark-remote.mjs",
+    "preview:app": "npm run build:app && node scripts/preview-mcp-app.mjs"
   },
   "keywords": [
     "mcp",
@@ -30,17 +60,22 @@
   ],
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@modelcontextprotocol/ext-apps": "^1.7.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/mcp-extensions": "^0.1.0",
+    "dompurify": "^3.4.17",
     "express": "^5.2.1",
+    "marked": "^18.1.1",
+    "yaml": "^2.9.1",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.8.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   }
 }

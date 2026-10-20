@@ -1,0 +1,2 @@
+# Preserve whitespace inside upstream template literals in generated bundles.
+plugin/dist/server.js -diff whitespace=-blank-at-eol

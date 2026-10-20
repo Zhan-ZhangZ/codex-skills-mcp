@@ -1,6 +1,18 @@
 node_modules/
-dist/
+/dist/
 *.js.map
 *.d.ts.map
 .DS_Store
 .codex-skills-cache/
+
+# Personal project-local skills are not part of this repository.
+/.agents/skills/
+
+# Local working copies and generated rendering artifacts.
+/work/
+/marketing/
+/testbits/
+**/.venv*/
+**/.om/
+/marketing/**/review/renders/
+/marketing/**/review/stills/

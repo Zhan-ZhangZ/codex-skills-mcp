@@ -5,7 +5,7 @@
  * Spawns the server (default: node dist/index.js, override with
  * CODEX_SKILLS_MCP_CMD), performs the MCP handshake, issues ONE request, and
  * prints the text content of the result. Designed for end-to-end tests and
- * for agent-driven verification (see docs/IMPROVEMENT-PLAN.md §8.2).
+ * for agent-driven verification (see docs/ARCHITECTURE.md).
  *
  * Usage:
  *   node scripts/mcp-client.mjs instructions
@@ -13,9 +13,12 @@
  *   node scripts/mcp-client.mjs call <tool> '<json-args>'
  */
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 
 const [ , , cmd, ...rest ] = process.argv;
-const SERVER_CMD = (process.env.CODEX_SKILLS_MCP_CMD || "node dist/index.js").split(" ");
+const SERVER_CMD = (process.env.CODEX_SKILLS_MCP_CMD || "node dist/index.js").trim().split(/\s+/);
+const CLIENT_NAME = process.env.MCP_CLIENT_NAME || "mcp-client-cli";
+const CLIENT_VERSION = process.env.MCP_CLIENT_VERSION || "1.0.0";
 
 function usageAndExit(code = 1) {
   console.error("Usage: node scripts/mcp-client.mjs instructions|list|call <tool> '<json-args>'");
@@ -41,52 +44,75 @@ if (cmd === "instructions") {
 
 const child = spawn(SERVER_CMD[0], SERVER_CMD.slice(1), { stdio: ["pipe", "pipe", "inherit"] });
 let nextId = 1;
+let failure;
+let timedOut = false;
 const pending = new Map();
 
-function send(msg) {
-  child.stdin.write(JSON.stringify(msg) + "\n");
+function fail(error) {
+  failure ??= error;
+  for (const { reject } of pending.values()) reject(failure);
+  pending.clear();
 }
 
-function request(m, p) {
-  return new Promise((resolve, reject) => {
-    const id = nextId++;
-    pending.set(id, { resolve, reject });
-    send({ jsonrpc: "2.0", id, method: m, params: p });
+function send(msg) {
+  if (failure) throw failure;
+  if (child.stdin.destroyed || child.stdin.writableEnded) throw new Error("server stdin closed");
+  child.stdin.write(JSON.stringify(msg) + "\n", (error) => {
+    if (error) fail(error);
   });
 }
 
-const timer = setTimeout(() => {
-  console.error("[mcp-client] timed out");
-  child.kill("SIGKILL");
-  process.exit(2);
-}, Number(process.env.MCP_CLIENT_TIMEOUT_MS || 180000));
-
-child.stdout.on("data", (chunk) => {
-  for (const line of chunk.toString("utf-8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let msg;
-    try { msg = JSON.parse(trimmed); } catch { continue; }
-    if (msg.id && pending.has(msg.id)) {
-      const { resolve, reject } = pending.get(msg.id);
-      pending.delete(msg.id);
-      if (msg.error) reject(new Error(JSON.stringify(msg.error)));
-      else resolve(msg.result);
+function request(method, params) {
+  if (failure) return Promise.reject(failure);
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    try {
+      send({ jsonrpc: "2.0", id, method, params });
+    } catch (error) {
+      fail(error);
     }
+  });
+}
+
+const configuredTimeout = Number(process.env.MCP_CLIENT_TIMEOUT_MS || 180000);
+const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 180000;
+const timer = setTimeout(() => {
+  timedOut = true;
+  fail(new Error("timed out"));
+  child.kill("SIGKILL");
+}, timeoutMs);
+
+// A pipe chunk is neither a JSON-RPC frame nor necessarily a complete UTF-8
+// character. readline buffers both safely, including the last line at EOF.
+const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
+lines.on("line", (line) => {
+  if (!line.trim()) return;
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+  if (msg?.id != null && pending.has(msg.id)) {
+    const { resolve, reject } = pending.get(msg.id);
+    pending.delete(msg.id);
+    if (msg.error) reject(new Error(JSON.stringify(msg.error)));
+    else resolve(msg.result);
   }
 });
-
-child.on("exit", (code) => {
-  for (const { reject } of pending.values()) {
-    reject(new Error("server exited early, code=" + code));
-  }
+lines.on("close", () => {
+  if (pending.size) fail(new Error("server stdout closed before a response"));
+});
+child.on("error", (error) => fail(new Error("server process failed: " + error.message)));
+child.stdin.on("error", fail);
+child.stdout.on("error", fail);
+// close follows stdio draining; exit can precede the final response bytes.
+child.on("close", (code, signal) => {
+  fail(new Error("server exited early, " + (signal ? "signal=" + signal : "code=" + code)));
 });
 
 try {
   const init = await request("initialize", {
     protocolVersion: "2025-06-18",
     capabilities: {},
-    clientInfo: { name: "mcp-client-cli", version: "1.0.0" },
+    clientInfo: { name: CLIENT_NAME, version: CLIENT_VERSION },
   });
   send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
 
@@ -96,8 +122,6 @@ try {
   } else {
     result = await request(method, params);
   }
-  clearTimeout(timer);
-
   if (cmd === "instructions") {
     console.log(result?.instructions ?? "(no instructions returned)");
   } else if (cmd === "list") {
@@ -123,14 +147,23 @@ try {
       .join("\n");
     console.log(text || "(empty response)");
   }
-  child.kill();
   // Tool-level failures (e.g. zod argument validation) arrive as successful
   // RPC results with isError=true — surface them through the exit code so
   // calling scripts can detect failure. Found during E2E round 3.
-  process.exit(result?.isError ? 1 : 0);
+  // Let stdout drain naturally: process.exit() truncates large piped results.
+  process.exitCode = result?.isError ? 1 : 0;
 } catch (err) {
-  clearTimeout(timer);
   console.error("[mcp-client] request failed:", err.message);
-  child.kill("SIGKILL");
-  process.exit(1);
+  process.exitCode = timedOut ? 2 : 1;
+} finally {
+  clearTimeout(timer);
+  lines.close();
+  child.stdin.destroy();
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill();
+    // Reap servers that ignore SIGTERM without hanging the verification CLI.
+    const killTimer = setTimeout(() => child.kill("SIGKILL"), 1000);
+    killTimer.unref();
+    child.once("close", () => clearTimeout(killTimer));
+  }
 }

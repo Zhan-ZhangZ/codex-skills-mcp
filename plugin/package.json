@@ -1,0 +1,10 @@
+{
+  "name": "codex-skills-plugin",
+  "version": "0.7.1",
+  "private": true,
+  "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
+  "engines": {
+    "node": ">=22"
+  }
+}
