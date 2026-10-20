@@ -43,7 +43,8 @@ function harness(serverHistory = [], initialize = {}) {
   const legacyStorage = initialize.localStorage ?? new Map();
   const defaultReadme = (name) => `# ${name} README\n\nREADME for ${name}.`;
   const readmeFor = (name) => initialize.readmes?.[name] ?? defaultReadme(name);
-  const readmeNamesFor = (name) => initialize.readmeNames?.[name] ?? ["README.md"];
+  const readmePathsFor = (name) =>
+    initialize.readmeCandidates?.[name] ?? initialize.readmeNames?.[name] ?? ["README.md"];
   const readmeByPathFor = (name, path) => initialize.readmesByPath?.[name]?.[path];
   const deliverHistory = (request, entries) => {
     queueMicrotask(() => {
@@ -63,7 +64,7 @@ function harness(serverHistory = [], initialize = {}) {
       postMessage(message) {
         sent.push(message);
         const readmeMatch = message.method === "resources/read" &&
-          String(message.params?.uri ?? "").match(/^skill:\/\/([^/]+)\/(README[^/]*\.md)$/i);
+          String(message.params?.uri ?? "").match(/^skill:\/\/([^/]+)\/((?:.+\/)?README[^/]*\.md)$/i);
         if (readmeMatch) {
           const name = decodeURIComponent(readmeMatch[1]);
           const path = decodeURIComponent(readmeMatch[2]);
@@ -77,7 +78,7 @@ function harness(serverHistory = [], initialize = {}) {
                     : readmeError }
                 : { jsonrpc: "2.0", id: message.id, result: { contents: [{
                     text: readmeByPathFor(name, path) ?? readmeFor(name),
-                    _meta: { "codex-skills/readme-path": initialize.readmePaths?.[name] ?? path },
+                    _meta: { "codex-skills/readme-path": path },
                   }] } },
             });
           });
@@ -86,14 +87,14 @@ function harness(serverHistory = [], initialize = {}) {
         if (message.method !== "tools/call") return;
         const name = message.params?.name;
         if (name === "list_skill_files" && message.params?.arguments?.query === "README" &&
-            message.params?.arguments?.max_depth === 0) {
+            message.params?.arguments?.max_depth === 2) {
           const skillName = String(message.params.arguments.skill_name);
-          const entries = readmeNamesFor(skillName).map((file) => ({
-            name: file,
-            path: file,
+          const entries = readmePathsFor(skillName).map((path) => ({
+            name: path.slice(path.lastIndexOf("/") + 1),
+            path,
             type: "file",
-            size_bytes: file.length,
-            text: file,
+            size_bytes: path.length,
+            text: path,
             excerpted: false,
           }));
           queueMicrotask(() => {
@@ -514,6 +515,26 @@ test("skill tray selects and labels the Chinese README variant", async () => {
   assert.equal(readmeRequest.params._meta["codex-skills/preferred-language"], "zh-CN");
   assert.equal(app.node("doc-source").textContent, "README_zh.md");
   assert.match(app.node("d-md").textContent, /中文说明/);
+  assert.doesNotMatch(app.node("d-md").textContent, /Agent SKILL/);
+  await app.dispose();
+});
+
+test("skill tray finds a Chinese README in the references directory", async () => {
+  const app = harness([], {
+    readmeCandidates: { beta: ["references/README.md", "references/README.zh-CN.md"] },
+    readmesByPath: { beta: {
+      "references/README.zh-CN.md": "# 浏览器技能说明\n\n用于中文用户判断技能用途。",
+    } },
+  });
+  await app.ready();
+  app.node("cards").children[1].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Agent SKILL" }] });
+  const readmeRequest = app.sent.findLast((message) =>
+    message.method === "resources/read" &&
+    /\/references\/README\.zh-CN\.md$/.test(message.params?.uri ?? ""));
+  assert.ok(readmeRequest);
+  assert.equal(app.node("doc-source").textContent, "references/README.zh-CN.md");
+  assert.match(app.node("d-md").textContent, /浏览器技能说明/);
   assert.doesNotMatch(app.node("d-md").textContent, /Agent SKILL/);
   await app.dispose();
 });

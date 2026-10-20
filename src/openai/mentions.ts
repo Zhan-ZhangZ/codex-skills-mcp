@@ -30,7 +30,8 @@ import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
-import { preferredReadmeName } from "../lib/readme.js";
+import { preferredReadmePath } from "../lib/readme.js";
+import { fileNavigationRows } from "../lib/navigation.js";
 import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../remote/skill-progress.js";
 
 /** Max items returned by mention typeahead (picker ergonomics). */
@@ -246,9 +247,11 @@ export function registerSkillResources(
         const preferredReadme = displayReadme && path.toLowerCase() === "readme.md";
         let selectedPath = path;
         if (preferredReadme) {
-          const rootFiles = await loader.listSkillFiles(entry, "", 0);
-          selectedPath = preferredReadmeName(
-            rootFiles.filter((file) => file.type === "file").map((file) => file.name),
+          const files = await loader.listSkillFiles(entry, "", 2);
+          selectedPath = preferredReadmePath(
+            fileNavigationRows(files)
+              .filter((file) => file.type === "file")
+              .map((file) => file.path),
           ) ?? "README.md";
         }
         // loadSkillFile handles remote fetch, path-traversal security and
@@ -262,7 +265,7 @@ export function registerSkillResources(
           : selectedPath.endsWith(".json")
             ? "application/json"
             : "text/plain";
-        const displayOnly = displayReadme && preferredReadmeName([selectedPath]) !== undefined;
+        const displayOnly = displayReadme && preferredReadmePath([selectedPath]) !== undefined;
         const text = displayOnly
           ? content
           : `## ${name} / ${selectedPath} (${size_bytes} bytes; ` +

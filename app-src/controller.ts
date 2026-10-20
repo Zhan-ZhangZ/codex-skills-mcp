@@ -900,32 +900,54 @@ const ENGLISH_README_PATTERNS: readonly RegExp[] = [
   /^readme[._-]en\.md$/i,
 ];
 
-function preferredReadmeName(names: readonly string[]): string | undefined {
-  const sorted = [...names].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
-  for (const patterns of [CHINESE_README_PATTERNS, ENGLISH_README_PATTERNS]) {
-    for (const pattern of patterns) {
-      const match = sorted.find((name) => pattern.test(name));
-      if (match) return match;
+function preferredReadmePath(paths: readonly string[]): string | undefined {
+  const candidates = [];
+  for (const rawPath of paths) {
+    const path = rawPath.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "");
+    if (!path) continue;
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    for (const [language, patterns] of [CHINESE_README_PATTERNS, ENGLISH_README_PATTERNS].entries()) {
+      const variant = patterns.findIndex((pattern) => pattern.test(name));
+      if (variant < 0) continue;
+      candidates.push({
+        path,
+        language,
+        variant,
+        depth: path.split("/").length - 1,
+      });
+      break;
     }
   }
-  return undefined;
+  candidates.sort((a, b) =>
+    a.language - b.language ||
+    a.depth - b.depth ||
+    a.variant - b.variant ||
+    a.path.localeCompare(b.path, "en", { sensitivity: "base" })
+  );
+  return candidates[0]?.path;
 }
 
 async function preferredSkillReadmePath(skillName: string): Promise<string> {
   try {
-    const result = await call<NavigationResult>("list_skill_files", {
-      skill_name: skillName,
-      view: "files",
-      path: "",
-      max_depth: 0,
-      query: "README",
-      limit: 100,
-    });
-    return preferredReadmeName(
-      result.entries
-        .filter((entry) => entry.type === "file" && !entry.path.includes("/"))
-        .map((entry) => entry.name),
-    ) ?? "README.md";
+    const paths: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await call<NavigationResult>("list_skill_files", {
+        skill_name: skillName,
+        view: "files",
+        path: "",
+        max_depth: 2,
+        query: "README",
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      paths.push(...result.entries
+        .filter((entry) => entry.type === "file")
+        .map((entry) => entry.path));
+      if (!result.next_cursor) break;
+      cursor = result.next_cursor;
+    }
+    return preferredReadmePath(paths) ?? "README.md";
   } catch {
     return "README.md";
   }

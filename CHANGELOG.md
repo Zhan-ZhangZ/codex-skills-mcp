@@ -3,6 +3,14 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.5.0-beta.17] - 2026-10-20
+
+### Fixed
+
+- README discovery now includes localized documentation below the skill root,
+  so packages such as `browser-skill` correctly open
+  `references/README.zh-CN.md` instead of falling back to the manifest summary.
+
 ## [1.5.0-beta.16] - 2026-10-20
 
 ### Fixed

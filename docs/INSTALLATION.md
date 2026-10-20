@@ -149,7 +149,7 @@ Expected shape:
 {
   "status": "ok",
   "name": "codex-skills-mcp",
-  "version": "1.5.0-beta.16",
+  "version": "1.5.0-beta.17",
   "skills": 298
 }
 ```
