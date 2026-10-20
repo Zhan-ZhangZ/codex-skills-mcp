@@ -445,6 +445,7 @@ test("skill README defaults to rendered view and preserves an exact raw toggle",
   await app.reply(app.latest("resources/read"), { contents: [{ text: "# Alpha SKILL" }] });
   assert.match(app.node("detail-flow").textContent, /查看技能说明（README）/);
   assert.equal(app.node("doc-source").textContent, "README.md");
+  assert.equal(app.node("status").textContent, "");
   assert.equal(app.node("d-md").textContent, readme);
   const readmeRequest = app.sent.findLast((message) =>
     message.method === "resources/read" && /\/README\.md$/.test(message.params?.uri ?? ""));

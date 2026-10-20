@@ -1533,9 +1533,7 @@ async function navigate(next: View) {
             : fallbackSkillOverview(next.skill, "技能包中的 README.md 为空。"),
           readmeResult.text.trim() ? readmePath : "技能简介",
         );
-        status(readmeResult.text.trim()
-          ? `${readmePath} 已加载；可切换文件或子技能继续查看`
-          : "README.md 为空，当前显示技能简介");
+        status(readmeResult.text.trim() ? "" : "README.md 为空，当前显示技能简介");
       } catch (readmeError) {
         if (!current()) return;
         renderDocument(
