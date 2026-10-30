@@ -30,6 +30,7 @@ import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import { logEvent } from "../lib/logger.js";
+import type { UsageTelemetry } from "../lib/usage-telemetry.js";
 
 /** Effective (persisted-override) settings shape exposed to the host UI. */
 export interface EffectiveSettings {
@@ -37,6 +38,7 @@ export interface EffectiveSettings {
   download_timeout_seconds: number;
   manifest_ttl_hours: number;
   manifest_poll_seconds: number;
+  telemetry_enabled: boolean;
 }
 
 /** File shape — a partial subset of EffectiveSettings. */
@@ -53,6 +55,7 @@ const SCHEMAS = {
   download_timeout_seconds: z.number().int().min(1).max(300),
   manifest_ttl_hours: z.number().min(0).max(168),
   manifest_poll_seconds: z.number().int().min(0).max(3600),
+  telemetry_enabled: z.boolean(),
 };
 
 const VALUES_SCHEMA = z.object(SCHEMAS).strict();
@@ -81,6 +84,12 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
     description:
       "搜索或生成计划时，以受控频率检查技能清单更新的间隔；0 表示关闭。",
   },
+  telemetry_enabled: {
+    schema: SCHEMAS.telemetry_enabled,
+    title: "匿名使用统计",
+    description:
+      "默认开启。每日仅上传技能名称和成功使用次数，不含搜索词、任务内容、文件路径或调用时间。关闭后仅停止上传，本地累计调用和已使用记录会继续保留。",
+  },
 };
 
 function loadPersisted(): PersistedSettings {
@@ -97,7 +106,7 @@ function loadPersisted(): PersistedSettings {
       const value = (data as Record<string, unknown>)[key];
       if (value === undefined) continue;
       const parsed = SCHEMAS[key].safeParse(value);
-      if (parsed.success) valid[key] = parsed.data;
+      if (parsed.success) (valid as Record<string, unknown>)[key] = parsed.data;
       else console.error(`[codex-skills-mcp] Ignoring invalid persisted setting "${key}"`);
     }
     return valid;
@@ -125,6 +134,7 @@ function defaultsFromConfig(config: Config): EffectiveSettings {
     download_timeout_seconds: config.downloadTimeout / 1000,
     manifest_ttl_hours: config.manifestTTL / 3_600_000,
     manifest_poll_seconds: config.manifestPollMs / 1000,
+    telemetry_enabled: config.telemetryEnabled ?? true,
   };
 }
 
@@ -134,6 +144,7 @@ function applyToConfig(config: Config, s: EffectiveSettings): void {
   config.downloadTimeout = s.download_timeout_seconds * 1000;
   config.manifestTTL = Math.round(s.manifest_ttl_hours * 3_600_000);
   config.manifestPollMs = s.manifest_poll_seconds * 1000;
+  config.telemetryEnabled = s.telemetry_enabled;
 }
 
 /**
@@ -148,6 +159,7 @@ function applyPersistedSelective(config: Config, s: EffectiveSettings): void {
   if (!ex.has("download_timeout_seconds")) config.downloadTimeout = s.download_timeout_seconds * 1000;
   if (!ex.has("manifest_ttl_hours")) config.manifestTTL = Math.round(s.manifest_ttl_hours * 3_600_000);
   if (!ex.has("manifest_poll_seconds")) config.manifestPollMs = s.manifest_poll_seconds * 1000;
+  if (!ex.has("telemetry_enabled")) config.telemetryEnabled = s.telemetry_enabled;
 }
 
 /** Merge persisted overrides over config defaults. */
@@ -184,7 +196,8 @@ export function registerOpenAISettings(
   server: McpServer,
   extensions: OpenAIExtensions,
   config: Config,
-  searchEngine: SkillSearchEngine
+  searchEngine: SkillSearchEngine,
+  telemetry?: UsageTelemetry
 ): void {
   extensions.settings.register({
     readTool: "settings.read",
@@ -200,6 +213,11 @@ export function registerOpenAISettings(
           { kind: "property", property: "manifest_ttl_hours" },
           { kind: "property", property: "manifest_poll_seconds" },
         ],
+      },
+      {
+        kind: "group",
+        title: "隐私",
+        items: [{ kind: "property", property: "telemetry_enabled" }],
       },
       {
         kind: "group",
@@ -224,8 +242,12 @@ export function registerOpenAISettings(
       const parsed: EffectiveSettings = VALUES_SCHEMA.parse(next);
       // Persist explicit UI changes only; unrelated CLI overrides belong to
       // this process and should not silently become defaults for future runs.
-      persist({ ...loadPersisted(), ...set });
+      persist({ ...loadPersisted(), ...(set as Partial<EffectiveSettings>) });
       applyToConfig(config, parsed);
+      if (telemetry) {
+        if (parsed.telemetry_enabled) telemetry.enable();
+        else telemetry.disable();
+      }
       logEvent("info", "settings_updated", { detail: JSON.stringify(set) });
       console.error(`[codex-skills-mcp] Settings updated: ${JSON.stringify(set)}`);
       return defaultsFromConfig(config);

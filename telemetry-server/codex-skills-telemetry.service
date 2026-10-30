@@ -1,0 +1,21 @@
+[Unit]
+Description=Codex Skills anonymous usage collector
+After=network.target
+
+[Service]
+Type=simple
+User=codex-telemetry
+Group=codex-telemetry
+WorkingDirectory=/opt/codex-skills-telemetry
+ExecStart=/usr/bin/python3 /opt/codex-skills-telemetry/server.py --host 127.0.0.1 --port 18990 --db /var/lib/codex-skills-telemetry/usage.sqlite3
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/codex-skills-telemetry
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

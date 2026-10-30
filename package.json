@@ -1,6 +1,6 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "Local-first MCP server for on-demand expert skill discovery, loading, and orchestration",
   "type": "module",
   "author": {
@@ -33,6 +33,7 @@
     "docs",
     "brand",
     "CHANGELOG.md",
+    "PRIVACY.md",
     "SECURITY.md",
     "NOTICE",
     "LICENSE.zh-CN.md"
@@ -41,6 +42,7 @@
     "build": "npm run typecheck && npm run build:app && tsc && node -e \"require('fs').copyFileSync('assets/app.html','dist/app.html')\"",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.app.json",
     "test": "npm run build && node --test test/*.test.mjs",
+    "test:telemetry-server": "python3 -m unittest discover -s telemetry-server -p 'test_*.py'",
     "test:plugin": "npm run build:plugin && node --test test/plugin-runtime.test.mjs",
     "benchmark": "node scripts/benchmark-search.mjs",
     "check:package": "node scripts/check-package.mjs",

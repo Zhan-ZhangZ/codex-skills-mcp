@@ -56,6 +56,11 @@ export interface Config {
   /** Base download timeout for skill files in milliseconds. Default: 30000 (30s). */
   downloadTimeout: number;
   /**
+   * Anonymous daily skill-usage counting. Enabled by default; users can turn
+   * it off in settings. Only daily deltas of successful skill reads are sent.
+   */
+  telemetryEnabled: boolean;
+  /**
    * Tool exposure profile. `core` registers only the 8 agent-facing tools,
    * `full` registers OpenAI extensions + MCP App tools as well, and `auto`
    * uses the client identity after initialize (Codex/unknown = core,
@@ -130,6 +135,7 @@ export function parseConfig(args: string[]): Config {
   markExplicit("--download-timeout", "download_timeout_seconds");
   markExplicit("--manifest-ttl", "manifest_ttl_hours");
   markExplicit("--manifest-poll", "manifest_poll_seconds");
+  markExplicit("--no-telemetry", "telemetry_enabled");
 
   const githubRepo = getArg("--github-repo") || "Zhan-ZhangZ/codexprojec";
   const githubBranch = getArg("--github-branch") || "main";
@@ -230,6 +236,14 @@ export function parseConfig(args: string[]): Config {
   const timeoutEnv = process.env.CODEX_SKILLS_DOWNLOAD_TIMEOUT;
   const downloadTimeoutSeconds = integerOption("--download-timeout", timeoutEnv ?? "30", 1, 300);
   const downloadTimeout = downloadTimeoutSeconds * 1000;
+  const telemetryEnv = process.env.CODEX_SKILLS_TELEMETRY;
+  if (telemetryEnv !== undefined) {
+    if (!["0", "1"].includes(telemetryEnv)) {
+      throw new Error("CODEX_SKILLS_TELEMETRY must be 0 or 1");
+    }
+    explicitCli.add("telemetry_enabled");
+  }
+  const telemetryEnabled = !args.includes("--no-telemetry") && telemetryEnv !== "0";
   const toolProfileRaw = getArg("--tool-profile") ?? process.env.CODEX_SKILLS_TOOL_PROFILE ?? "auto";
   if (!["auto", "core", "full"].includes(toolProfileRaw)) {
     throw new Error("--tool-profile must be one of: auto, core, full");
@@ -252,6 +266,7 @@ export function parseConfig(args: string[]): Config {
     manifestTTL,
     manifestPollMs,
     downloadTimeout,
+    telemetryEnabled,
     toolProfile
   };
 }

@@ -22,12 +22,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { OpenAIExtensions } from "@openai/mcp-extensions/server";
 import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 import { parseConfig, loadManifest, type ToolProfile } from "./config.js";
 import { SkillSearchEngine } from "./search/index.js";
 import { SkillLoader } from "./loader/index.js";
 import { SERVER_INSTRUCTIONS } from "./lib/protocol.js";
 import { initLogger, logEvent } from "./lib/logger.js";
+import { UsageTelemetry } from "./lib/usage-telemetry.js";
 
 import { registerSearchSkills } from "./tools/search-skills.js";
 import { registerListCategories } from "./tools/list-categories.js";
@@ -37,7 +39,11 @@ import { registerListSkillFiles } from "./tools/list-skill-files.js";
 import { registerPlanWorkflow } from "./tools/plan-workflow.js";
 import { registerSkillStatus } from "./tools/skill-status.js";
 import { registerDiagnostics } from "./tools/diagnostics.js";
-import { registerOpenAISettings, applyPersistedSettingsAtStartup } from "./openai/settings.js";
+import {
+  registerOpenAISettings,
+  applyPersistedSettingsAtStartup,
+  SETTINGS_DIR,
+} from "./openai/settings.js";
 import { registerOpenAIMentions, registerSkillResources } from "./openai/mentions.js";
 import { registerCodexSkillsApp } from "./openai/app.js";
 
@@ -93,7 +99,8 @@ function applyToolProfile(server: McpServer, profile: "core" | "full"): void {
 function createServer(
   config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
-  loader: SkillLoader
+  loader: SkillLoader,
+  telemetry: UsageTelemetry
 ): McpServer {
   const server = new McpServer(
     { name: "codex-skills", version: PKG_VERSION },
@@ -121,7 +128,7 @@ function createServer(
   // They must be registered before connect; profile filtering decides whether
   // they are visible/callable by the model.
   const openai = new OpenAIExtensions(server);
-  registerOpenAISettings(server, openai, config, searchEngine);
+  registerOpenAISettings(server, openai, config, searchEngine, telemetry);
   registerOpenAIMentions(server, openai, config, searchEngine, loader, false);
 
   // MCP App (Stage 1): sidebar entrypoints served from bundled app.html.
@@ -158,9 +165,10 @@ function createServer(
 async function startStdio(
   config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
-  loader: SkillLoader
+  loader: SkillLoader,
+  telemetry: UsageTelemetry
 ): Promise<void> {
-  const server = createServer(config, searchEngine, loader);
+  const server = createServer(config, searchEngine, loader, telemetry);
 
   console.error("[codex-skills-mcp] starting stdio server...");
 
@@ -174,6 +182,7 @@ async function startHTTP(
   config: ReturnType<typeof parseConfig>,
   searchEngine: SkillSearchEngine,
   loader: SkillLoader,
+  telemetry: UsageTelemetry,
   port: number
 ): Promise<void> {
   const { startHttpServer } = await import("./lib/http-server.js");
@@ -189,7 +198,7 @@ async function startHTTP(
   const allowedHosts = option("--allowed-hosts")?.split(",").map(v => v.trim()).filter(Boolean);
   const http = await startHttpServer({
     port, host, allowedHosts,
-    createServer: () => createServer(config, searchEngine, loader),
+    createServer: () => createServer(config, searchEngine, loader, telemetry),
     health: () => ({
       status: "ok", name: "codex-skills-mcp", version: PKG_VERSION,
       skills: searchEngine.allSkills().length,
@@ -267,8 +276,18 @@ Usage: codex-skills-mcp [options]
   const manifest = loadManifest(config.manifestPath);
   console.error(`[codex-skills-mcp] Loaded ${manifest.length} skills`);
 
+  // Capture daily deltas from the existing cumulative usage.json. Disabling
+  // uploads never disables local reads or usage.json writes.
+  const telemetry = new UsageTelemetry({
+    stateDir: SETTINGS_DIR,
+    usagePath: join(dirname(config.manifestPath), "usage.json"),
+    pluginVersion: PKG_VERSION,
+    enabled: config.telemetryEnabled,
+  });
+  telemetry.start();
+
   // Build search index
-  const searchEngine = new SkillSearchEngine(manifest, config);
+  const searchEngine = new SkillSearchEngine(manifest, config, () => telemetry.capture());
   const categories = searchEngine.getCategories();
   console.error(
     `[codex-skills-mcp] Index built: ${categories.length} categories, ` +
@@ -290,9 +309,9 @@ Usage: codex-skills-mcp [options]
       throw new Error("--port must be an integer between 0 and 65535");
     }
 
-    await startHTTP(config, searchEngine, loader, port);
+    await startHTTP(config, searchEngine, loader, telemetry, port);
   } else {
-    await startStdio(config, searchEngine, loader);
+    await startStdio(config, searchEngine, loader, telemetry);
   }
 }
 

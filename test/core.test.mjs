@@ -37,7 +37,7 @@ function setup(t, overrides = {}) {
 }
 
 function isolateConfigEnvironment(t) {
-  for (const key of ["CODEX_SKILLS_DIR", "CODEX_SKILLS_DOWNLOAD_CONCURRENCY", "CODEX_SKILLS_DOWNLOAD_TIMEOUT", "CODEX_SKILLS_MANIFEST_POLL_SECONDS", "GITHUB_TOKEN"]) {
+  for (const key of ["CODEX_SKILLS_DIR", "CODEX_SKILLS_DOWNLOAD_CONCURRENCY", "CODEX_SKILLS_DOWNLOAD_TIMEOUT", "CODEX_SKILLS_MANIFEST_POLL_SECONDS", "CODEX_SKILLS_TELEMETRY", "GITHUB_TOKEN"]) {
     const original = process.env[key];
     delete process.env[key];
     t.after(() => {
@@ -180,6 +180,20 @@ test("tool profile accepts auto/core/full and rejects unknown values", (t) => {
     () => parseConfig([...base, "--tool-profile", "all"]),
     /--tool-profile must be one of: auto, core, full/,
   );
+});
+
+test("anonymous usage upload defaults on and can be disabled by flag or environment", (t) => {
+  const config = setup(t);
+  isolateConfigEnvironment(t);
+  const base = ["--skills-dir", config.skillsDir];
+  assert.equal(parseConfig(base).telemetryEnabled, true);
+  assert.equal(parseConfig([...base, "--no-telemetry"]).telemetryEnabled, false);
+  process.env.CODEX_SKILLS_TELEMETRY = "0";
+  assert.equal(parseConfig(base).telemetryEnabled, false);
+  process.env.CODEX_SKILLS_TELEMETRY = "1";
+  assert.equal(parseConfig(base).telemetryEnabled, true);
+  process.env.CODEX_SKILLS_TELEMETRY = "yes";
+  assert.throws(() => parseConfig(base), /CODEX_SKILLS_TELEMETRY must be 0 or 1/);
 });
 
 test("searchWithTotal paginates with a stable total and no overlapping results", () => {

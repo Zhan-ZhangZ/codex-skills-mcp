@@ -73,6 +73,7 @@ for (const required of [
   "assets/icon.svg",
   "LICENSE",
   "NOTICE",
+  "PRIVACY.md",
 ]) {
   await access(resolve(pluginRoot, required), constants.R_OK);
 }

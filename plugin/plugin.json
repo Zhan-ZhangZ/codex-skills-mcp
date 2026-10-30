@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "codex-skills",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "Browse, search, and load an on-demand expert skill library in ChatGPT and Codex.",
   "author": {
     "name": "Zhan-ZhangZ"
@@ -27,7 +27,7 @@
       "interface": {
         "displayName": "Codex Skills 技能库",
         "shortDescription": "持续更新的按需专家技能库",
-        "longDescription": "在支持 MCP Apps 的 ChatGPT/Codex 桌面端中搜索、预览、缓存并把技能带入当前对话；标准 MCP 客户端仍可使用 8 个核心工具。",
+        "longDescription": "在支持 MCP Apps 的 ChatGPT/Codex 桌面端中搜索、预览、缓存并把技能带入当前对话；标准 MCP 客户端仍可使用 8 个核心工具。默认匿名统计每日技能成功使用次数，可在设置中关闭。",
         "developerName": "Zhan-ZhangZ",
         "category": "Productivity",
         "capabilities": [

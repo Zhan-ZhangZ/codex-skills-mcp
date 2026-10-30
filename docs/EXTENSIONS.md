@@ -10,6 +10,7 @@ can be ignored by clients that do not support them.
 | `settings.read` | Returns the settings schema, current values and layout |
 | `settings.update` | Applies validated increments and persists them |
 | `refresh_skills_list` | Refreshes the remote manifest immediately |
+| `telemetry_enabled` | Controls anonymous daily usage uploads; enabled by default |
 | `search_mentions` | Supplies resource links for composer `@` mentions |
 | `skill://{name}` | Resolves a skill's `SKILL.md` |
 | `skill://{name}/{+path}` | Resolves supporting files |

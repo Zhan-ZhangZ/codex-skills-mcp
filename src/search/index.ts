@@ -311,9 +311,11 @@ export class SkillSearchEngine {
   private usageFile?: string;
   private usageCount: Record<string, number | UsageRecord> = {};
   private config?: Config;
+  private readonly onUsageRecorded?: () => void;
 
-  constructor(manifest: ManifestEntry[], config?: Config) {
+  constructor(manifest: ManifestEntry[], config?: Config, onUsageRecorded?: () => void) {
     this.config = config;
+    this.onUsageRecorded = onUsageRecorded;
     if (config) {
       // Cache dir path lives next to the manifest
       this.usageFile = dirname(config.manifestPath) + "/usage.json";
@@ -360,6 +362,11 @@ export class SkillSearchEngine {
       writeFileSync(this.usageFile, JSON.stringify(this.usageCount, null, 2), "utf-8");
     } catch {
       // Ignore write errors
+    }
+    try {
+      this.onUsageRecorded?.();
+    } catch {
+      // Usage telemetry is best-effort and must not affect local counters.
     }
   }
 

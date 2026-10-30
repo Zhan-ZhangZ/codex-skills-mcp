@@ -50,9 +50,9 @@ async function session(t, register) {
   return client;
 }
 
-function settingsSession(t, sharedConfig) {
+function settingsSession(t, sharedConfig, telemetry) {
   return session(t, (server, extensions) => registerOpenAISettings(
-    server, extensions, sharedConfig, new SkillSearchEngine(manifest)
+    server, extensions, sharedConfig, new SkillSearchEngine(manifest), telemetry
   ));
 }
 
@@ -81,10 +81,12 @@ test("settings use Chinese labels and tool titles", async (t) => {
       download_timeout_seconds: "下载超时（秒）",
       manifest_ttl_hours: "缓存有效期（小时）",
       manifest_poll_seconds: "新鲜度检查间隔（秒）",
+      telemetry_enabled: "匿名使用统计",
     },
   );
-  assert.deepEqual(layout.map((group) => group.title), ["下载与缓存", "维护"]);
-  assert.deepEqual(layout[1].items, [{
+  assert.deepEqual(layout.map((group) => group.title), ["下载与缓存", "隐私", "维护"]);
+  assert.deepEqual(layout[1].items, [{ kind: "property", property: "telemetry_enabled" }]);
+  assert.deepEqual(layout[2].items, [{
     kind: "tool",
     tool: "refresh_skills_list",
     title: "刷新技能列表",
@@ -96,6 +98,27 @@ test("settings use Chinese labels and tool titles", async (t) => {
   assert.equal(refresh.title, "刷新技能列表");
   assert.match(refresh.description, /最新收录的技能/);
   assert.equal(refresh.annotations.readOnlyHint, true);
+});
+
+test("anonymous usage upload defaults on and the opt-out only disables uploads", async (t) => {
+  writeFileSync(settingsPath, "{}");
+  const shared = config();
+  const calls = [];
+  const telemetry = {
+    enable: () => calls.push("enable"),
+    disable: () => calls.push("disable"),
+  };
+  const client = await settingsSession(t, shared, telemetry);
+  assert.equal((await readSettings(client)).telemetry_enabled, true);
+
+  await updateSettings(client, { telemetry_enabled: false });
+  assert.equal(shared.telemetryEnabled, false);
+  assert.deepEqual(calls, ["disable"]);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).telemetry_enabled, false);
+
+  await updateSettings(client, { telemetry_enabled: true });
+  assert.equal(shared.telemetryEnabled, true);
+  assert.deepEqual(calls, ["disable", "enable"]);
 });
 
 test("settings reflect CLI precedence and preserve a seconds-based TTL", async (t) => {

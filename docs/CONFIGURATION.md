@@ -26,6 +26,7 @@ Persisted settings are stored at
 | `--hard-deadline-seconds <n>` | `285` | Absolute tool-call download deadline |
 | `--manifest-ttl <seconds>` | `86400` | Manifest freshness age; `0` disables age refresh |
 | `--manifest-poll <seconds>` | `300` | Throttled background freshness check |
+| `--no-telemetry` | off | Disable anonymous daily usage uploads for this run |
 | `--no-official-mirror` | off | Disable the official CN raw mirror |
 | `--no-hedge` | off | Start all download routes immediately |
 
@@ -40,7 +41,19 @@ Persisted settings are stored at
 | `CODEX_SKILLS_MANIFEST_POLL_SECONDS` | `--manifest-poll` |
 | `CODEX_SKILLS_TOOL_PROFILE` | `--tool-profile` |
 | `CODEX_SKILLS_SETTINGS_DIR` | Alternate persisted-settings directory |
+| `CODEX_SKILLS_TELEMETRY=0` | Disable anonymous daily usage uploads |
 | `GITHUB_TOKEN` | GitHub API credential |
+
+## Persisted settings
+
+Settings changed through the plugin UI are stored in
+`~/.codex-skills-mcp/settings.json`. `telemetry_enabled` defaults to `true`.
+Turning it off stops network uploads only; local cumulative usage counts and
+the "used skills" data continue to update.
+
+The upload contains public skill names, successful read counts and the UTC day.
+It does not contain search terms, task text, file paths, exact call times or an
+installation identifier. See [Privacy](../PRIVACY.md).
 
 ## Tool profiles
 

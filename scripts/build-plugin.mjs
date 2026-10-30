@@ -42,6 +42,7 @@ await build({
 await copyFile(resolve(root, "assets/app.html"), resolve(root, "plugin/dist/app.html"));
 await copyFile(resolve(root, "LICENSE"), resolve(root, "plugin/LICENSE"));
 await copyFile(resolve(root, "NOTICE"), resolve(root, "plugin/NOTICE"));
+await copyFile(resolve(root, "PRIVACY.md"), resolve(root, "plugin/PRIVACY.md"));
 if (process.platform !== "win32") {
   await chmod(resolve(pluginRoot, "dist/server.js"), 0o755);
   await chmod(resolve(pluginRoot, "scripts/launch-codex-skills-mcp"), 0o755);

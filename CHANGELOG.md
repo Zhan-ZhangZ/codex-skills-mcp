@@ -3,6 +3,24 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.7.0] - 2026-10-30
+
+### Added
+
+- Anonymous daily skill-usage counting, enabled by default.
+- A local cumulative-delta collector that reuses the existing `usage.json`
+  counters and uploads only public skill names and successful call counts.
+- A native settings toggle for stopping uploads without affecting local
+  cumulative calls, "used skills" data, or local activity logs.
+- A loopback-only aggregate collector with strict payload validation, batch
+  idempotency, a 256 KiB body limit and automatic 90-day pruning.
+- A privacy document covering uploaded fields, retention and opt-out behavior.
+
+### Changed
+
+- Telemetry failures remain local and retry later; they never block skill
+  downloads or affect local usage records.
+
 ## [1.6.2] - 2026-10-30
 
 ### Fixed
