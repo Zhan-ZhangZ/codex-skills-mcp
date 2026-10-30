@@ -29,3 +29,6 @@ sqlite3 /var/lib/codex-skills-telemetry/usage.sqlite3 \
 Daily rows and idempotency IDs older than 90 days are pruned automatically
 during writes. The service is intended to listen on `127.0.0.1` only and must
 be exposed through a restricted Nginx location with body-size and rate limits.
+If the public server has a global request-method gate, it must allow `POST`;
+the GitHub mirror `location /` should still accept only `GET` and `HEAD`, while
+the exact telemetry location accepts only `POST`.
