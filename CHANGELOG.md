@@ -3,6 +3,16 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.6.1] - 2026-10-30
+
+### Changed
+
+- The plugin settings page now uses Chinese labels for download, cache,
+  freshness and maintenance controls.
+- The refresh action now exposes a Chinese display title, description and
+  result message through the MCP tool metadata.
+- Plugin capability labels are shown in Chinese on the details page.
+
 ## [1.6.0] - 2026-10-30
 
 ### Added

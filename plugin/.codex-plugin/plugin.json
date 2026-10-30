@@ -1,6 +1,6 @@
 {
   "name": "codex-skills",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Browse, search, and load an on-demand expert skill library in ChatGPT and Codex.",
   "author": {
     "name": "Zhan-ZhangZ"
@@ -29,8 +29,8 @@
     "developerName": "Zhan-ZhangZ",
     "category": "Productivity",
     "capabilities": [
-      "Interactive",
-      "Read"
+      "交互",
+      "读取"
     ],
     "composerIcon": "./assets/icon.svg",
     "logo": "./assets/icon.svg",

@@ -64,8 +64,8 @@ Commit the rebuilt `plugin/` directory, then create a tag matching the plugin
 manifest exactly:
 
 ```bash
-git tag plugin-v1.6.0
-git push origin main plugin-v1.6.0
+git tag plugin-v1.6.1
+git push origin main plugin-v1.6.1
 ```
 
 The tag workflow validates every artifact, builds
@@ -78,7 +78,7 @@ codex plugin marketplace upgrade codex-skills-marketplace
 codex plugin add codex-skills@codex-skills-marketplace
 ```
 
-Users can pin a release with `--ref plugin-v1.6.0`. Pinned installations do not
+Users can pin a release with `--ref plugin-v1.6.1`. Pinned installations do not
 move automatically.
 
 ## Rollback

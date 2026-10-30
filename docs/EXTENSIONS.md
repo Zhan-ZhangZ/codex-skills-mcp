@@ -16,7 +16,9 @@ can be ignored by clients that do not support them.
 | `openai/settings` | Advertised through the extension capability |
 
 Persisted settings live in `~/.codex-skills-mcp/settings.json` and apply on the
-next process start. Runtime updates take effect immediately.
+next process start. Runtime updates take effect immediately. The settings
+surface uses Chinese labels for field names, descriptions, groups and the
+refresh action so it matches the desktop plugin's Chinese interface.
 
 ## MCP Apps
 

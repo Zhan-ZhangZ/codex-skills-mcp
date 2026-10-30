@@ -61,25 +61,25 @@ const VALUES_SCHEMA = z.object(SCHEMAS).strict();
 const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof EffectiveSettings]; title: string; description?: string }> = {
   download_concurrency: {
     schema: SCHEMAS.download_concurrency,
-    title: "Download concurrency",
-    description: "Parallel downloads when materializing a skill (1–64).",
+    title: "下载并发数",
+    description: "同时下载技能文件的数量（1–64）。",
   },
   download_timeout_seconds: {
     schema: SCHEMAS.download_timeout_seconds,
-    title: "Download timeout (seconds)",
-    description: "Per-request timeout for skill file downloads (1–300s).",
+    title: "下载超时（秒）",
+    description: "每个技能文件下载请求的超时时间（1–300 秒）。",
   },
   manifest_ttl_hours: {
     schema: SCHEMAS.manifest_ttl_hours,
-    title: "Cache TTL (hours)",
+    title: "缓存有效期（小时）",
     description:
-      "How long the skills manifest AND cached skill file trees stay trusted before revalidation against the remote (0 = never, max 168). Lower = upstream content changes picked up sooner.",
+      "技能清单和已缓存文件在重新校验前保持可信的时长。0 表示永不过期，最大 168 小时；数值越低，越早获取上游更新。",
   },
   manifest_poll_seconds: {
     schema: SCHEMAS.manifest_poll_seconds,
-    title: "Freshness poll interval (seconds)",
+    title: "新鲜度检查间隔（秒）",
     description:
-      "Throttled conditional-GET poll on search/plan calls to pick up newly integrated skills (0 = disabled).",
+      "搜索或生成计划时，以受控频率检查技能清单更新的间隔；0 表示关闭。",
   },
 };
 
@@ -193,7 +193,7 @@ export function registerOpenAISettings(
     layout: [
       {
         kind: "group",
-        title: "Downloads & cache",
+        title: "下载与缓存",
         items: [
           { kind: "property", property: "download_concurrency" },
           { kind: "property", property: "download_timeout_seconds" },
@@ -203,13 +203,13 @@ export function registerOpenAISettings(
       },
       {
         kind: "group",
-        title: "Maintenance",
+        title: "维护",
         items: [
           {
             kind: "tool",
             tool: "refresh_skills_list",
-            title: "Refresh skills list",
-            description: "Re-download the skills manifest from the remote source now.",
+            title: "刷新技能列表",
+            description: "立即从远程源重新下载技能清单，获取最新收录的技能。",
           },
         ],
       },
@@ -235,18 +235,22 @@ export function registerOpenAISettings(
   // Tool action rendered as a button in the ChatGPT settings panel. Regular
   // tool semantics per spec: accepts {}, ChatGPT shows the text response in
   // a tooltip after a spinner.
-  server.tool(
+  server.registerTool(
     "refresh_skills_list",
-    "Re-downloads the skills manifest from the remote source, picking up newly integrated " +
-      "skills immediately. Read-only for local skill libraries (their manifest lives on disk).",
-    { readOnlyHint: true },
+    {
+      title: "刷新技能列表",
+      description:
+        "立即从远程源重新下载技能清单，获取最新收录的技能。" +
+        "本地技能库只从磁盘读取清单，因此不会发起远程下载。",
+      annotations: { readOnlyHint: true },
+    },
     async () => {
       if (typeof searchEngine.refreshManifest !== "function") {
         return {
           content: [
             {
               type: "text" as const,
-              text: "Local mode: the manifest is read from disk. Re-run with an updated skills_manifest.json instead.",
+              text: "本地模式：技能清单直接从磁盘读取。请更新 skills_manifest.json 后重新运行。",
             },
           ],
         };
@@ -259,8 +263,8 @@ export function registerOpenAISettings(
           {
             type: "text" as const,
             text: ok
-              ? `Skills manifest refreshed: ${total} skills across ${categories.length} categories.`
-              : `Manifest refresh skipped or failed (cache still fresh or network issue). Current index: ${total} skills.`,
+              ? `技能清单已刷新：共 ${total} 个技能，${categories.length} 个分类。`
+              : `清单刷新被跳过或失败（缓存仍有效或网络异常）。当前索引：${total} 个技能。`,
           },
         ],
       };

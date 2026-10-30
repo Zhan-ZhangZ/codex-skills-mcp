@@ -68,6 +68,36 @@ const updateSettings = async (client, set) => {
   return result.structuredContent.values;
 };
 
+test("settings use Chinese labels and tool titles", async (t) => {
+  const client = await settingsSession(t, config());
+  const result = await client.callTool({ name: "settings.read", arguments: {} });
+  assert.notEqual(result.isError, true, JSON.stringify(result));
+
+  const { schema, layout } = result.structuredContent;
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(schema.properties).map(([key, field]) => [key, field.title])),
+    {
+      download_concurrency: "下载并发数",
+      download_timeout_seconds: "下载超时（秒）",
+      manifest_ttl_hours: "缓存有效期（小时）",
+      manifest_poll_seconds: "新鲜度检查间隔（秒）",
+    },
+  );
+  assert.deepEqual(layout.map((group) => group.title), ["下载与缓存", "维护"]);
+  assert.deepEqual(layout[1].items, [{
+    kind: "tool",
+    tool: "refresh_skills_list",
+    title: "刷新技能列表",
+    description: "立即从远程源重新下载技能清单，获取最新收录的技能。",
+  }]);
+
+  const refresh = (await client.listTools()).tools.find((tool) => tool.name === "refresh_skills_list");
+  assert.ok(refresh);
+  assert.equal(refresh.title, "刷新技能列表");
+  assert.match(refresh.description, /最新收录的技能/);
+  assert.equal(refresh.annotations.readOnlyHint, true);
+});
+
 test("settings reflect CLI precedence and preserve a seconds-based TTL", async (t) => {
   writeFileSync(settingsPath, JSON.stringify({ download_concurrency: 8, manifest_ttl_hours: 24 }));
   const shared = config({ downloadConcurrency: 3, manifestTTL: 90000,
