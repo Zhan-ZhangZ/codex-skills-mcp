@@ -16,6 +16,7 @@ import re
 import sqlite3
 import sys
 import uuid
+from contextlib import closing
 from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -91,29 +92,30 @@ def validate_payload(value: Any, today: date | None = None) -> dict[str, Any]:
 
 def initialize_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with sqlite3.connect(db_path, timeout=5) as connection:
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS batches (
-                batch_id TEXT PRIMARY KEY,
-                day TEXT NOT NULL,
-                plugin_version TEXT NOT NULL,
-                received_at TEXT NOT NULL
+    with closing(sqlite3.connect(db_path, timeout=5)) as connection:
+        with connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS batches (
+                    batch_id TEXT PRIMARY KEY,
+                    day TEXT NOT NULL,
+                    plugin_version TEXT NOT NULL,
+                    received_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS skill_usage (
-                day TEXT NOT NULL,
-                skill TEXT NOT NULL,
-                count INTEGER NOT NULL,
-                PRIMARY KEY (day, skill)
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS skill_usage (
+                    day TEXT NOT NULL,
+                    skill TEXT NOT NULL,
+                    count INTEGER NOT NULL,
+                    PRIMARY KEY (day, skill)
+                )
+                """
             )
-            """
-        )
     try:
         os.chmod(db_path, 0o600)
     except OSError:
@@ -123,35 +125,42 @@ def initialize_db(db_path: Path) -> None:
 def store_batch(db_path: Path, payload: dict[str, Any]) -> None:
     received_at = datetime.now(timezone.utc)
     cutoff = (received_at.date() - timedelta(days=RETENTION_DAYS)).isoformat()
-    with sqlite3.connect(db_path, timeout=5) as connection:
-        connection.execute("PRAGMA busy_timeout=5000")
-        connection.execute("BEGIN IMMEDIATE")
-        inserted = connection.execute(
-            "INSERT OR IGNORE INTO batches(batch_id, day, plugin_version, received_at) VALUES (?, ?, ?, ?)",
-            (payload["batch_id"], payload["day"], payload["plugin_version"], received_at.isoformat()),
-        )
-        if inserted.rowcount == 0:
-            connection.rollback()
-            return
-        for name, count in payload["skills"].items():
-            connection.execute(
-                """
-                INSERT INTO skill_usage(day, skill, count) VALUES (?, ?, ?)
-                ON CONFLICT(day, skill) DO UPDATE SET count = count + excluded.count
-                """,
-                (payload["day"], name, count),
+    with closing(sqlite3.connect(db_path, timeout=5)) as connection:
+        with connection:
+            connection.execute("PRAGMA busy_timeout=5000")
+            connection.execute("BEGIN IMMEDIATE")
+            inserted = connection.execute(
+                "INSERT OR IGNORE INTO batches(batch_id, day, plugin_version, received_at) VALUES (?, ?, ?, ?)",
+                (payload["batch_id"], payload["day"], payload["plugin_version"], received_at.isoformat()),
             )
-        connection.execute("DELETE FROM skill_usage WHERE day < ?", (cutoff,))
-        connection.execute("DELETE FROM batches WHERE day < ?", (cutoff,))
-        connection.commit()
+            if inserted.rowcount == 0:
+                connection.rollback()
+                return
+            for name, count in payload["skills"].items():
+                connection.execute(
+                    """
+                    INSERT INTO skill_usage(day, skill, count) VALUES (?, ?, ?)
+                    ON CONFLICT(day, skill) DO UPDATE SET count = count + excluded.count
+                    """,
+                    (payload["day"], name, count),
+                )
+            connection.execute("DELETE FROM skill_usage WHERE day < ?", (cutoff,))
+            connection.execute("DELETE FROM batches WHERE day < ?", (cutoff,))
 
 
-def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[str, Any]:
+def dashboard_data(
+    db_path: Path,
+    days: int,
+    page: int = 1,
+    page_size: int = 25,
+    today: date | None = None,
+) -> dict[str, Any]:
     if days not in (7, 30, 90):
         days = 30
     current = today or datetime.now(timezone.utc).date()
     cutoff = (current - timedelta(days=days - 1)).isoformat()
-    with sqlite3.connect(db_path, timeout=5) as connection:
+    page_size = max(1, min(page_size, 100))
+    with closing(sqlite3.connect(db_path, timeout=5)) as connection:
         total_count, used_skills, active_days, last_day = connection.execute(
             """
             SELECT COALESCE(SUM(count), 0),
@@ -182,6 +191,12 @@ def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[
             """,
             (cutoff,),
         ).fetchall()
+        total_skills = int(connection.execute(
+            "SELECT COUNT(DISTINCT skill) FROM skill_usage WHERE day >= ?",
+            (cutoff,),
+        ).fetchone()[0])
+        total_pages = max(1, (total_skills + page_size - 1) // page_size)
+        page = max(1, min(page, total_pages))
         skills = connection.execute(
             """
             SELECT skill, SUM(count) AS total,
@@ -191,8 +206,9 @@ def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[
             WHERE day >= ?
             GROUP BY skill
             ORDER BY total ASC, skill ASC
+            LIMIT ? OFFSET ?
             """,
-            (cutoff,),
+            (cutoff, page_size, (page - 1) * page_size),
         ).fetchall()
     return {
         "days": days,
@@ -203,6 +219,10 @@ def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[
         "daily": daily,
         "top": top,
         "skills": skills,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "total_skills": total_skills,
     }
 
 
@@ -215,6 +235,9 @@ def render_dashboard(data: dict[str, Any]) -> str:
     daily = data["daily"]
     top = data["top"]
     skills = data["skills"]
+    page = int(data["page"])
+    total_pages = int(data["total_pages"])
+    total_skills = int(data["total_skills"])
     max_top = max((int(row[1]) for row in top), default=1)
 
     tabs = "".join(
@@ -246,6 +269,15 @@ def render_dashboard(data: dict[str, Any]) -> str:
         "</tr>"
         for skill, count, active, last_seen in skills
     ) or '<tr><td colspan="4" class="empty">暂无统计数据</td></tr>'
+    pager_parts: list[str] = []
+    if page > 1:
+        pager_parts.append(f'<a href="?days={days}&page={page - 1}">上一页</a>')
+    pager_parts.append(
+        f"<span>第 {page} / {total_pages} 页 · 共 {total_skills} 个技能</span>"
+    )
+    if page < total_pages:
+        pager_parts.append(f'<a href="?days={days}&page={page + 1}">下一页</a>')
+    pager = '<div class="pager">' + "".join(pager_parts) + "</div>"
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -283,6 +315,9 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .skill {{ max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
     td:last-child {{ width:38%; }}
     .bar {{ display:block; height:8px; min-width:3px; border-radius:8px; background:linear-gradient(90deg,#7667e6,#b99cff); }}
+    .pager {{ display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:14px 20px; border-top:1px solid #232733; color:var(--muted); font-size:13px; }}
+    .pager a {{ color:var(--text); text-decoration:none; border:1px solid var(--line); border-radius:8px; padding:5px 10px; }}
+    .pager a:hover {{ border-color:#7163d8; background:#282342; }}
     .empty {{ text-align:center !important; color:var(--muted); padding:34px; }}
     footer {{ color:var(--muted); margin-top:22px; font-size:12px; }}
     @media(max-width:760px) {{ .cards{{grid-template-columns:1fr 1fr}} .grid{{grid-template-columns:1fr}} header{{align-items:start;flex-direction:column}} }}
@@ -303,7 +338,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     <section><h2>每日调用</h2><table><thead><tr><th>日期（UTC）</th><th>调用次数</th><th>技能数</th></tr></thead><tbody>{daily_rows}</tbody></table></section>
     <section><h2>高频技能 · 最近 {days} 天</h2><table><thead><tr><th>技能</th><th>次数</th><th>占比</th></tr></thead><tbody>{top_rows}</tbody></table></section>
   </div>
-  <section class="wide"><h2>全部技能明细 · 最近 {days} 天 · 按次数从低到高</h2><table><thead><tr><th>技能</th><th>调用次数</th><th>有使用的天数</th><th>最后使用日期</th></tr></thead><tbody>{skill_rows}</tbody></table></section>
+  <section class="wide"><h2>全部技能明细 · 最近 {days} 天 · 按次数从低到高</h2><table><thead><tr><th>技能</th><th>调用次数</th><th>有使用的天数</th><th>最后使用日期</th></tr></thead><tbody>{skill_rows}</tbody></table>{pager}</section>
   <footer>只展示匿名聚合次数；不包含用户任务、搜索词、文件路径或调用详情。页面每 5 分钟刷新。</footer>
 </main></body></html>"""
 
@@ -346,10 +381,14 @@ class TelemetryHandler(BaseHTTPRequestHandler):
         if request.path in ("/usage", "/usage/"):
             try:
                 raw_days = parse_qs(request.query).get("days", ["30"])[0]
+                raw_page = parse_qs(request.query).get("page", ["1"])[0]
                 days = int(raw_days)
                 if days not in (7, 30, 90):
                     days = 30
-                dashboard = dashboard_data(self.db_path, days)
+                page = int(raw_page)
+                if page < 1:
+                    page = 1
+                dashboard = dashboard_data(self.db_path, days, page=page)
                 self.send_html(HTTPStatus.OK, render_dashboard(dashboard))
             except (ValueError, sqlite3.Error):
                 self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "dashboard unavailable"})

@@ -86,6 +86,20 @@ class TelemetryServerTests(unittest.TestCase):
         self.assertIn("video", rendered)
         self.assertNotIn("private task", rendered)
 
+    def test_dashboard_paginates_large_skill_tables(self) -> None:
+        for index in range(30):
+            payload = self.payload()
+            payload["batch_id"] = str(uuid.uuid4())
+            payload["skills"] = [{"name": f"skill-{index:02d}", "count": index + 1}]
+            store_batch(self.db, validate_payload(payload, today=date(2026, 10, 30)))
+        data = dashboard_data(self.db, 30, page=2, today=date(2026, 10, 30))
+        self.assertEqual(data["total_skills"], 30)
+        self.assertEqual(data["total_pages"], 2)
+        self.assertEqual(data["page"], 2)
+        self.assertEqual(len(data["skills"]), 5)
+        rendered = render_dashboard(data)
+        self.assertIn("第 2 / 2 页", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
