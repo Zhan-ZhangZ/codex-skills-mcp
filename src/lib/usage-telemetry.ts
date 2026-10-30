@@ -43,6 +43,15 @@ interface TelemetryState {
   days: Record<string, PendingDay>;
 }
 
+interface BackfillRecord {
+  version: 1;
+  status: "pending" | "complete";
+  batch_id?: string;
+  day?: string;
+  counts?: Record<string, number>;
+  completed_at?: string;
+}
+
 export interface UsageTelemetryOptions {
   /** Persistent settings directory; telemetry state is stored here. */
   stateDir: string;
@@ -125,6 +134,7 @@ function sleepBriefly(): void {
 export class UsageTelemetry {
   private readonly stateDir: string;
   private readonly statePath: string;
+  private readonly backfillPath: string;
   private readonly lockPath: string;
   private readonly usagePath: string;
   private readonly pluginVersion: string;
@@ -142,6 +152,7 @@ export class UsageTelemetry {
   constructor(options: UsageTelemetryOptions) {
     this.stateDir = options.stateDir;
     this.statePath = join(options.stateDir, "skill-usage-telemetry.json");
+    this.backfillPath = join(options.stateDir, "skill-usage-backfill.json");
     this.lockPath = `${this.statePath}.lock`;
     this.usagePath = options.usagePath;
     this.pluginVersion = options.pluginVersion;
@@ -185,6 +196,46 @@ export class UsageTelemetry {
       this.withStateLock((state) => {
         const current = this.readCumulativeUsage();
         if (current === null) return state;
+
+        const backfill = this.readBackfillUnlocked();
+        if (!backfill) {
+          const counts = Object.fromEntries(
+            Object.entries(current).filter(([, count]) => count > 0)
+          );
+          if (Object.keys(counts).length > 0) {
+            this.writeBackfillUnlocked({
+              version: 1,
+              status: "pending",
+              batch_id: this.randomUUIDImpl(),
+              day: utcDay(this.now()),
+              counts,
+            });
+            // The one-time backfill already contains every pending local
+            // delta. Clear them so the same usage is never uploaded twice.
+            state.days = {};
+          } else {
+            this.writeBackfillUnlocked({
+              version: 1,
+              status: "complete",
+              completed_at: this.now().toISOString(),
+            });
+          }
+          state.initialized = true;
+          state.source = this.usagePath;
+          state.baseline = { ...current };
+          return state;
+        }
+
+        if (
+          backfill.status === "pending" &&
+          (!state.initialized || state.source !== this.usagePath)
+        ) {
+          // Reconstruct the snapshot baseline if an older process rewrote the
+          // daily state while the one-time backfill was still pending.
+          state.initialized = true;
+          state.source = this.usagePath;
+          state.baseline = { ...(backfill.counts ?? {}) };
+        }
 
         if (!state.initialized || state.source !== this.usagePath) {
           state.initialized = true;
@@ -233,6 +284,8 @@ export class UsageTelemetry {
     this.flushInFlight = (async () => {
       try {
         this.capture();
+        const backfillUploaded = await this.flushBackfill();
+        if (!backfillUploaded || !this.enabled) return;
         const today = utcDay(this.now());
         const state = this.readStateUnlocked();
         for (const day of Object.keys(state.days).sort()) {
@@ -267,6 +320,30 @@ export class UsageTelemetry {
     if (this.enabled) void this.flushPending().catch(() => {});
   }
 
+  private async flushBackfill(): Promise<boolean> {
+    const backfill = this.readBackfillUnlocked();
+    if (!backfill || backfill.status === "complete") return true;
+    if (!backfill.batch_id || !backfill.day || !backfill.counts) return false;
+    const skills = Object.entries(backfill.counts)
+      .filter(([, count]) => count > 0)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ name, count }));
+    if (skills.length === 0) {
+      this.markBackfillComplete();
+      return true;
+    }
+    const ok = await this.upload({
+      schema_version: 1,
+      batch_id: backfill.batch_id,
+      plugin_version: this.pluginVersion,
+      day: backfill.day,
+      skills,
+    });
+    if (!ok) return false;
+    this.markBackfillComplete();
+    return true;
+  }
+
   private readCumulativeUsage(): Record<string, number> | null {
     try {
       if (!existsSync(this.usagePath)) return {};
@@ -278,6 +355,65 @@ export class UsageTelemetry {
 
   private readStateUnlocked(): TelemetryState {
     return readState(this.statePath);
+  }
+
+  private readBackfillUnlocked(): BackfillRecord | null {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(this.backfillPath, "utf-8"));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const value = parsed as Record<string, unknown>;
+      if (value.version !== 1) return null;
+      if (value.status === "complete") {
+        return {
+          version: 1,
+          status: "complete",
+          ...(typeof value.completed_at === "string" ? { completed_at: value.completed_at } : {}),
+        };
+      }
+      if (
+        value.status !== "pending" ||
+        typeof value.batch_id !== "string" ||
+        typeof value.day !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value.day)
+      ) {
+        return null;
+      }
+      const counts = readCounts(value.counts);
+      if (Object.keys(counts).length === 0) return null;
+      return {
+        version: 1,
+        status: "pending",
+        batch_id: value.batch_id,
+        day: value.day,
+        counts,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private writeBackfillUnlocked(record: BackfillRecord): void {
+    const tmp = `${this.backfillPath}.${process.pid}.${this.randomUUIDImpl()}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n", {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
+      renameSync(tmp, this.backfillPath);
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+  }
+
+  private markBackfillComplete(): void {
+    this.withStateLock((state) => {
+      this.writeBackfillUnlocked({
+        version: 1,
+        status: "complete",
+        completed_at: this.now().toISOString(),
+      });
+      return state;
+    });
   }
 
   private withStateLock(fn: (state: TelemetryState) => TelemetryState): TelemetryState {

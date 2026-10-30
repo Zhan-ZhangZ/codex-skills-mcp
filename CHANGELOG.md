@@ -3,6 +3,19 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.7.1] - 2026-10-30
+
+### Added
+
+- A one-time cumulative usage backfill on the first launch after upgrading.
+  Existing per-skill counts are uploaded immediately, with a persistent
+  completion marker and idempotent batch ID to prevent duplicate backfills.
+
+### Changed
+
+- The settings description now explains that maintenance telemetry performs a
+  one-time backfill and then switches to daily incremental uploads.
+
 ## [1.7.0] - 2026-10-30
 
 ### Added

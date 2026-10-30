@@ -6,7 +6,9 @@ Codex Skills is on by default for anonymous daily usage counting. Its only
 purpose is to identify skills that are rarely used or consistently broken so
 maintenance work can be prioritized.
 
-The plugin uploads at most one aggregate batch per completed UTC day:
+Normally the plugin uploads at most one aggregate batch per completed UTC day.
+The first upgraded launch also sends one immediate cumulative backfill batch.
+Batches contain only:
 
 - skill name from the public catalog;
 - number of successful skill reads in that day;
@@ -20,8 +22,10 @@ installation IDs, device IDs, or raw activity logs. The collector does not
 store client IP addresses or unrelated request headers.
 
 The plugin derives counts locally from the existing cumulative `usage.json`
-counter. Historical usage that predates this feature is used only to establish
-the initial baseline and is never uploaded.
+counter. On the first launch after upgrading to a telemetry-enabled version,
+it uploads one one-time backfill containing the existing per-skill cumulative
+counts. Later uploads contain only new daily increments. The backfill has its
+own idempotency batch and completed marker so restarts cannot apply it twice.
 
 ## Retention
 
@@ -35,8 +39,8 @@ network uploads. Local cumulative call counts and "used skills" data remain
 available and continue to update; disabling this setting does not disable the
 plugin's local usage history.
 
-Pending daily aggregates stay local. If uploads are enabled again, completed
-days can be uploaded at the next check.
+Pending backfill and daily aggregates stay local. If uploads are enabled again,
+the backfill and completed days are uploaded at the next check.
 
 The telemetry endpoint is:
 

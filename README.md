@@ -229,9 +229,10 @@ Full flags, environment variables and persisted settings are documented in
 - Skill paths are checked for traversal and symlink escapes.
 - Downloaded files are validated before they are accepted as cache content.
 - App Markdown is sanitized, and external links open with `noopener noreferrer`.
-- Anonymous daily usage counting is enabled by default. It uploads only public
-  skill names and successful call counts, never prompts, paths or task content.
-  Users can disable uploads in plugin settings without affecting local usage.
+- Anonymous usage counting is enabled by default. On upgrade it uploads one
+  per-skill cumulative backfill, then daily successful-call increments. It
+  never uploads prompts, paths or task content. Users can disable uploads in
+  plugin settings without affecting local usage.
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and the threat model,
 and [PRIVACY.md](PRIVACY.md) for telemetry details and opt-out behavior.

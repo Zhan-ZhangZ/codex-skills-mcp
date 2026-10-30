@@ -6,7 +6,7 @@ This loopback-only service accepts the plugin's daily aggregate `POST`:
 {
   "schema_version": 1,
   "batch_id": "uuid",
-  "plugin_version": "1.7.0",
+  "plugin_version": "1.7.1",
   "day": "2026-10-30",
   "skills": [
     { "name": "ppt-master", "count": 3 }

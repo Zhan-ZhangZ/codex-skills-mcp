@@ -54,6 +54,8 @@ the "used skills" data continue to update.
 The upload contains public skill names, successful read counts and the UTC day.
 It does not contain search terms, task text, file paths, exact call times or an
 installation identifier. See [Privacy](../PRIVACY.md).
+The first launch after upgrading performs a one-time immediate backfill of
+existing cumulative per-skill counts; later uploads are daily increments.
 
 ## Tool profiles
 

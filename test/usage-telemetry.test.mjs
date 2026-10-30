@@ -12,6 +12,7 @@ function fixture(t, overrides = {}) {
   const usagePath = join(dir, "usage.json");
   let now = new Date("2026-10-30T08:00:00.000Z");
   const requests = [];
+  let nextId = 1;
   const reporter = new UsageTelemetry({
     stateDir: dir,
     usagePath,
@@ -19,7 +20,7 @@ function fixture(t, overrides = {}) {
     enabled: true,
     autoStart: false,
     now: () => now,
-    randomUUIDImpl: () => "00000000-0000-4000-8000-000000000001",
+    randomUUIDImpl: () => `00000000-0000-4000-8000-${String(nextId++).padStart(12, "0")}`,
     fetchImpl: async (url, init) => {
       requests.push({ url, body: JSON.parse(init.body) });
       return new Response(null, { status: 204 });
@@ -35,14 +36,19 @@ function fixture(t, overrides = {}) {
   };
 }
 
-test("uses cumulative usage deltas and uploads only aggregate counts", async (t) => {
+test("uploads one historical backfill immediately, then daily deltas", async (t) => {
   const f = fixture(t);
   writeFileSync(f.usagePath, JSON.stringify({
     ppt: { reads: 40, failures: 2, lastReadAt: 1 },
     video: { reads: 7, failures: 0, lastReadAt: 2 },
   }));
   f.reporter.capture();
-  assert.deepEqual(f.requests, [], "historical reads are only the baseline");
+  await f.reporter.flushPending();
+  assert.equal(f.requests.length, 1);
+  assert.deepEqual(f.requests[0].body.skills, [
+    { name: "ppt", count: 40 },
+    { name: "video", count: 7 },
+  ]);
 
   writeFileSync(f.usagePath, JSON.stringify({
     ppt: { reads: 43, failures: 2, lastReadAt: 3 },
@@ -53,11 +59,12 @@ test("uses cumulative usage deltas and uploads only aggregate counts", async (t)
   f.setNow("2026-10-31T00:15:00.000Z");
   await f.reporter.flushPending();
 
-  assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].url, "https://gh.251716.xyz/api/skill-usage/v1/batch");
-  assert.deepEqual(f.requests[0].body, {
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.requests[1].url, "https://gh.251716.xyz/api/skill-usage/v1/batch");
+  assert.match(f.requests[1].body.batch_id, /^[0-9a-f-]{36}$/);
+  const { batch_id: _ignored, ...dailyPayload } = f.requests[1].body;
+  assert.deepEqual(dailyPayload, {
     schema_version: 1,
-    batch_id: "00000000-0000-4000-8000-000000000001",
     plugin_version: "1.7.0",
     day: "2026-10-30",
     skills: [
@@ -84,8 +91,9 @@ test("disabling uploads keeps local deltas and sends them after re-enable", asyn
 
   f.reporter.enable();
   await f.reporter.flushPending();
-  assert.equal(f.requests.length, 1);
-  assert.equal(f.requests[0].body.skills[0].count, 3);
+  assert.equal(f.requests.length, 2);
+  assert.equal(f.requests[0].body.skills[0].count, 1);
+  assert.equal(f.requests[1].body.skills[0].count, 3);
 });
 
 test("failed uploads retain the same idempotency batch", async (t) => {
@@ -104,6 +112,7 @@ test("failed uploads retain the same idempotency batch", async (t) => {
   await f.reporter.flushPending();
   succeed = true;
   await f.reporter.flushPending();
-  assert.equal(f.requests.length, 2);
+  assert.equal(f.requests.length, 3);
   assert.equal(f.requests[0].body.batch_id, f.requests[1].body.batch_id);
+  assert.notEqual(f.requests[1].body.batch_id, f.requests[2].body.batch_id);
 });
