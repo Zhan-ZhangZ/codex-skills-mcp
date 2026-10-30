@@ -195,7 +195,6 @@ export class UsageTelemetry {
 
         const day = utcDay(this.now());
         let pending = state.days[day];
-        let changed = false;
         for (const [name, reads] of Object.entries(current)) {
           if (Object.keys(pending?.counts ?? {}).length >= MAX_SKILLS_PER_DAY && !pending?.counts[name]) {
             continue;
@@ -216,11 +215,10 @@ export class UsageTelemetry {
               Number.MAX_SAFE_INTEGER,
               (pending.counts[name] ?? 0) + delta
             );
-            changed = true;
           }
         }
 
-        if (changed) this.prune(state);
+        this.prune(state);
         return state;
       });
     } catch {
