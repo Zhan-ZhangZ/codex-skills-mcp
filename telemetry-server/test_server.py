@@ -81,6 +81,7 @@ class TelemetryServerTests(unittest.TestCase):
         self.assertEqual(data["total_count"], 5)
         self.assertEqual(data["used_skills"], 2)
         self.assertIn("Codex Skills 使用统计", rendered)
+        self.assertIn("全部技能明细", rendered)
         self.assertIn("ppt", rendered)
         self.assertIn("video", rendered)
         self.assertNotIn("private task", rendered)

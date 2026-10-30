@@ -182,6 +182,18 @@ def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[
             """,
             (cutoff,),
         ).fetchall()
+        skills = connection.execute(
+            """
+            SELECT skill, SUM(count) AS total,
+                   COUNT(DISTINCT day) AS active_days,
+                   MAX(day) AS last_day
+            FROM skill_usage
+            WHERE day >= ?
+            GROUP BY skill
+            ORDER BY total ASC, skill ASC
+            """,
+            (cutoff,),
+        ).fetchall()
     return {
         "days": days,
         "total_count": int(total_count),
@@ -190,6 +202,7 @@ def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[
         "last_day": last_day,
         "daily": daily,
         "top": top,
+        "skills": skills,
     }
 
 
@@ -201,6 +214,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     last_day = data["last_day"] or "暂无"
     daily = data["daily"]
     top = data["top"]
+    skills = data["skills"]
     max_top = max((int(row[1]) for row in top), default=1)
 
     tabs = "".join(
@@ -223,6 +237,15 @@ def render_dashboard(data: dict[str, Any]) -> str:
         "</tr>"
         for skill, count in top
     ) or '<tr><td colspan="3" class="empty">暂无统计数据</td></tr>'
+    skill_rows = "".join(
+        "<tr>"
+        f'<td class="skill">{html.escape(str(skill))}</td>'
+        f"<td>{int(count):,}</td>"
+        f"<td>{int(active):,}</td>"
+        f"<td>{html.escape(str(last_seen))}</td>"
+        "</tr>"
+        for skill, count, active, last_seen in skills
+    ) or '<tr><td colspan="4" class="empty">暂无统计数据</td></tr>'
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -249,6 +272,7 @@ def render_dashboard(data: dict[str, Any]) -> str:
     .card b {{ display:block; font-size:28px; margin-top:4px; letter-spacing:-.03em; }}
     .card span {{ color:var(--muted); font-size:13px; }}
     .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }}
+    .wide {{ margin-top:18px; }}
     section {{ overflow:hidden; }}
     h2 {{ margin:0; padding:17px 20px; font-size:16px; border-bottom:1px solid var(--line); }}
     table {{ width:100%; border-collapse:collapse; }}
@@ -277,8 +301,9 @@ def render_dashboard(data: dict[str, Any]) -> str:
   </div>
   <div class="grid">
     <section><h2>每日调用</h2><table><thead><tr><th>日期（UTC）</th><th>调用次数</th><th>技能数</th></tr></thead><tbody>{daily_rows}</tbody></table></section>
-    <section><h2>热门技能 · 最近 {days} 天</h2><table><thead><tr><th>技能</th><th>次数</th><th>占比</th></tr></thead><tbody>{top_rows}</tbody></table></section>
+    <section><h2>高频技能 · 最近 {days} 天</h2><table><thead><tr><th>技能</th><th>次数</th><th>占比</th></tr></thead><tbody>{top_rows}</tbody></table></section>
   </div>
+  <section class="wide"><h2>全部技能明细 · 最近 {days} 天 · 按次数从低到高</h2><table><thead><tr><th>技能</th><th>调用次数</th><th>有使用的天数</th><th>最后使用日期</th></tr></thead><tbody>{skill_rows}</tbody></table></section>
   <footer>只展示匿名聚合次数；不包含用户任务、搜索词、文件路径或调用详情。页面每 5 分钟刷新。</footer>
 </main></body></html>"""
 
