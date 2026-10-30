@@ -88,7 +88,7 @@ const FIELDS: Record<keyof EffectiveSettings, { schema: (typeof SCHEMAS)[keyof E
     schema: SCHEMAS.telemetry_enabled,
     title: "匿名使用统计",
     description:
-      "默认开启。每日仅上传技能名称和成功使用次数，不含搜索词、任务内容、文件路径或调用时间。关闭后仅停止上传，本地累计调用和已使用记录会继续保留。",
+      "用于维护技能库：默认开启，每日仅上传技能名称和成功使用次数，帮助识别低频技能。不含搜索词、任务内容、文件路径或调用时间。关闭后仅停止上传，本地累计调用和已使用记录会继续保留。",
   },
 };
 
