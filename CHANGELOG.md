@@ -3,6 +3,16 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.6.2] - 2026-10-30
+
+### Fixed
+
+- Removed the duplicate `@Codex Skills` prefix from the starter prompt. Codex
+  already displays the plugin name, and MCP starter prompts must not contain
+  server mentions.
+- Added a manifest regression check for starter-prompt mentions, line breaks
+  and length.
+
 ## [1.6.1] - 2026-10-30
 
 ### Changed

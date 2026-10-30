@@ -56,7 +56,7 @@ needed:
 npx -y codex-skills-mcp@beta
 ```
 
-The current source release is 1.6.1. The `beta` npm dist-tag remains the
+The current source release is 1.6.2. The `beta` npm dist-tag remains the
 standalone channel for the current feature line.
 
 The first run downloads the manifest, builds a local search index, and creates
@@ -173,7 +173,7 @@ Expected shape:
 {
   "status": "ok",
   "name": "codex-skills-mcp",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "skills": 298
 }
 ```

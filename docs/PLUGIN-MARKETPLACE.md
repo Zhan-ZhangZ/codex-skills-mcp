@@ -74,7 +74,7 @@ Pin a known release:
 
 ```bash
 codex plugin marketplace remove codex-skills-marketplace
-codex plugin marketplace add Zhan-ZhangZ/codex-skills-mcp --ref plugin-v1.6.1
+codex plugin marketplace add Zhan-ZhangZ/codex-skills-mcp --ref plugin-v1.6.2
 codex plugin add codex-skills@codex-skills-marketplace
 ```
 
@@ -97,8 +97,8 @@ release.
 Create releases with:
 
 ```bash
-git tag plugin-v1.6.1
-git push origin main plugin-v1.6.1
+git tag plugin-v1.6.2
+git push origin main plugin-v1.6.2
 ```
 
 ## Verification

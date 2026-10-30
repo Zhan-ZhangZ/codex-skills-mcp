@@ -1,6 +1,6 @@
 {
   "name": "codex-skills",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Browse, search, and load an on-demand expert skill library in ChatGPT and Codex.",
   "author": {
     "name": "Zhan-ZhangZ"
@@ -35,7 +35,7 @@
     "composerIcon": "./assets/icon.svg",
     "logo": "./assets/icon.svg",
     "defaultPrompt": [
-      "@Codex Skills 搜索技能关键词，如 PPT、视频翻译、小红书"
+      "搜索适合当前任务的技能，例如 PPT、视频翻译或小红书。"
     ]
   }
 }

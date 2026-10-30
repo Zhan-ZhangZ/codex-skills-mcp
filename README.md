@@ -16,7 +16,7 @@
   <img alt="Standalone Node.js 22+" src="https://img.shields.io/badge/standalone_Node.js-22%2B-339933?logo=node.js&logoColor=white">
   <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-4f46e5">
   <img alt="Source available" src="https://img.shields.io/badge/license-source--available-0ea5e9">
-  <img alt="Release 1.6.1" src="https://img.shields.io/badge/release-1.6.1-0f766e">
+  <img alt="Release 1.6.2" src="https://img.shields.io/badge/release-1.6.2-0f766e">
 </p>
 
 Codex Skills MCP is a production-oriented Model Context Protocol server and an
@@ -72,7 +72,7 @@ Standalone stdio and self-hosted deployments require Node.js 22 or newer:
 npx -y codex-skills-mcp@beta
 ```
 
-The current source release is **1.6.1**. The `beta` npm dist-tag remains the
+The current source release is **1.6.2**. The `beta` npm dist-tag remains the
 standalone channel for the current feature line.
 
 #### Codex CLI

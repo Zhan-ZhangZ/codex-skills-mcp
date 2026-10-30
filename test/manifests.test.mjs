@@ -25,6 +25,20 @@ test("the bundled local plugin is explicitly marked desktop-only", () => {
   assert.equal(compatibility.requires_local_executor, true);
 });
 
+test("plugin starter prompts do not duplicate the automatic plugin mention", () => {
+  const portable = readJson("plugin/plugin.json");
+  const compatibility = readJson("plugin/.codex-plugin/plugin.json");
+  const portablePrompts = portable.extensions["com.openai"].interface.defaultPrompt;
+  const compatibilityPrompts = compatibility.interface.defaultPrompt;
+
+  assert.deepEqual(compatibilityPrompts, portablePrompts);
+  for (const prompt of portablePrompts) {
+    assert.ok(prompt.length <= 128);
+    assert.doesNotMatch(prompt, /\n/);
+    assert.doesNotMatch(prompt, /@[^\s]+/, "starter prompts must not contain an MCP @mention");
+  }
+});
+
 test("user documentation distinguishes MCP Apps UI from standard MCP clients", () => {
   const readme = readFileSync("README.md", "utf8");
   const installation = readFileSync("docs/INSTALLATION.md", "utf8");
