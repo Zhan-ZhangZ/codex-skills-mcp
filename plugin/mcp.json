@@ -3,9 +3,20 @@
   "mcpServers": {
     "codex-skills": {
       "type": "stdio",
-      "command": "node",
-      "args": ["./dist/server.js"],
-      "cwd": "./"
+      "command": "./scripts/launch-codex-skills-mcp",
+      "args": ["${PLUGIN_ROOT}/dist/server.js"],
+      "cwd": "${PLUGIN_ROOT}",
+      "env": {
+        "CODEX_MCP_NODE_PATH": "${CODEX_MCP_NODE_PATH}",
+        "CODEX_BROWSER_USE_NODE_PATH": "${CODEX_BROWSER_USE_NODE_PATH}",
+        "CODEX_ELECTRON_RESOURCES_PATH": "${CODEX_ELECTRON_RESOURCES_PATH}",
+        "CODEX_CLI_PATH": "${CODEX_CLI_PATH}",
+        "XDG_CACHE_HOME": "${XDG_CACHE_HOME}",
+        "HOME": "${HOME}",
+        "USERPROFILE": "${USERPROFILE}",
+        "LOCALAPPDATA": "${LOCALAPPDATA}",
+        "PATH": "${PATH}"
+      }
     }
   }
 }

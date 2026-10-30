@@ -1,8 +1,10 @@
 {
   "name": "codex-skills",
-  "version": "0.7.4",
+  "version": "1.6.0",
   "description": "Browse, search, and load an on-demand expert skill library in ChatGPT and Codex.",
-  "author": { "name": "Zhan-ZhangZ" },
+  "author": {
+    "name": "Zhan-ZhangZ"
+  },
   "homepage": "https://github.com/Zhan-ZhangZ/codex-skills-mcp#readme",
   "repository": "https://github.com/Zhan-ZhangZ/codex-skills-mcp",
   "license": "SEE LICENSE IN LICENSE",
@@ -26,9 +28,14 @@
     "longDescription": "在支持 MCP Apps 的 ChatGPT/Codex 桌面端中搜索、预览、缓存并把技能带入当前对话；标准 MCP 客户端仍可使用 8 个核心工具。",
     "developerName": "Zhan-ZhangZ",
     "category": "Productivity",
-    "capabilities": ["Interactive", "Read"],
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
     "composerIcon": "./assets/icon.svg",
     "logo": "./assets/icon.svg",
-    "defaultPrompt": ["@Codex Skills 搜索技能关键词，如 PPT、视频翻译、小红书"]
+    "defaultPrompt": [
+      "@Codex Skills 搜索技能关键词，如 PPT、视频翻译、小红书"
+    ]
   }
 }

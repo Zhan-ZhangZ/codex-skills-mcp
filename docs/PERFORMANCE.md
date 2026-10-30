@@ -40,8 +40,9 @@ The release gate is:
 ```bash
 npm test
 npm run build:plugin
+npm run check:plugin
 npm run check:package
 ```
 
-This verifies correctness, package contents, the npm artifact and the plugin
-bundle independently of publication.
+This verifies correctness, package contents, marketplace metadata, the npm
+artifact and the plugin bundle independently of publication.

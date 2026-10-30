@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white">
+  <img alt="Standalone Node.js 22+" src="https://img.shields.io/badge/standalone_Node.js-22%2B-339933?logo=node.js&logoColor=white">
   <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-4f46e5">
   <img alt="Source available" src="https://img.shields.io/badge/license-source--available-0ea5e9">
-  <img alt="Release beta.17" src="https://img.shields.io/badge/release-1.5.0--beta.17-0f766e">
+  <img alt="Release 1.6.0" src="https://img.shields.io/badge/release-1.6.0-0f766e">
 </p>
 
 Codex Skills MCP is a production-oriented Model Context Protocol server and an
@@ -25,8 +25,8 @@ library. It indexes a lightweight catalog, searches locally, downloads selected
 skills on demand, verifies every file, and keeps the working set auditable on
 disk.
 
-**Available as:** ChatGPT/Codex desktop plugin · standalone stdio MCP server ·
-self-hosted Streamable HTTP MCP server.
+**Available as:** GitHub-distributed Codex desktop plugin · standalone stdio MCP
+server · self-hosted Streamable HTTP MCP server.
 
 ![Codex Skills desktop interface](docs/assets/ui-home.png)
 
@@ -43,17 +43,39 @@ self-hosted Streamable HTTP MCP server.
 
 ## Quick Start
 
-Requirements: Node.js 22 or newer.
+### Codex desktop plugin
+
+Add this repository as a Codex marketplace once:
+
+```bash
+codex plugin marketplace add Zhan-ZhangZ/codex-skills-mcp --ref main
+```
+
+Then install it from the Codex Plugins directory, or from the CLI:
+
+```bash
+codex plugin add codex-skills@codex-skills-marketplace
+```
+
+Plugin users do **not** need Node.js, npm or npx. The plugin launcher starts the
+bundled MCP server with the runtime supplied by the Codex desktop app. Start a
+new chat after installation.
+
+See [GitHub plugin marketplace](docs/PLUGIN-MARKETPLACE.md) for updates,
+version pinning, runtime selection and troubleshooting.
+
+### Standalone MCP server
+
+Standalone stdio and self-hosted deployments require Node.js 22 or newer:
 
 ```bash
 npx -y codex-skills-mcp@beta
 ```
 
-The current `main` line is **1.5.0-beta.17**. Use the `beta` dist-tag to test
-the features described here. The `latest` tag still points to stable 1.4.2 and
-may lag behind the current MCP Apps and host-detection work.
+The current source release is **1.6.0**. The `beta` npm dist-tag remains the
+standalone channel for the current feature line.
 
-### Codex
+#### Codex CLI
 
 ```bash
 codex mcp add codex-skills -- npx -y codex-skills-mcp@beta
@@ -67,7 +89,7 @@ command = "npx"
 args = ["-y", "codex-skills-mcp@beta"]
 ```
 
-### Claude Desktop
+#### Claude Desktop
 
 ```json
 {
@@ -80,7 +102,7 @@ args = ["-y", "codex-skills-mcp@beta"]
 }
 ```
 
-### Cursor
+#### Cursor
 
 Create `.cursor/mcp.json` in the project:
 
@@ -115,6 +137,10 @@ The server never downloads the entire library at startup. It loads a compact
 manifest, builds a keyword/task index locally, then materializes complete skill
 directories only after selection. See [Architecture](docs/ARCHITECTURE.md) and
 [Agent protocol](docs/AGENT-PROTOCOL.md).
+
+The Codex plugin uses the same stdio MCP implementation. Only installation and
+runtime discovery change: Codex launches a compact cross-platform launcher
+instead of resolving `npx` and a user-installed Node.js binary.
 
 > The screenshot uses the deterministic preview host. Live skill, domain and
 > usage counts come from the current manifest and local usage history.
@@ -229,6 +255,7 @@ This is a source-available license, not a standard OSI-approved license.
 | Document | Contents |
 |---|---|
 | [Installation](docs/INSTALLATION.md) | Client setup, local mode, HTTP deployment |
+| [GitHub plugin marketplace](docs/PLUGIN-MARKETPLACE.md) | Codex-only install, update, runtime and rollback |
 | [Configuration](docs/CONFIGURATION.md) | CLI, environment and persisted settings |
 | [Architecture](docs/ARCHITECTURE.md) | Runtime components, cache and network design |
 | [Tools](docs/TOOLS.md) | Core, app and extension tool surface |
@@ -244,12 +271,13 @@ This is a source-available license, not a standard OSI-approved license.
 npm ci
 npm test
 npm run build:plugin
+npm run check:plugin
 npm run check:package
 ```
 
 The default suite is offline and covers search, cache validation, hedging,
 HTTP safety, MCP Apps, extension registration and real stdio flows. CI runs on
-Node.js 22 and 24.
+Node.js 22 and 24 and exercises the plugin launcher on macOS, Windows and Linux.
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening
 a pull request. Use [Support](SUPPORT.md) for operational questions.
@@ -261,6 +289,7 @@ src/         MCP server, search, loader, transport and tools
 app-src/     MCP App frontend source
 assets/      Built app asset
 plugin/      Codex plugin distribution
+.agents/     GitHub marketplace catalog
 brand/       Official logo and commercial attribution kit
 docs/        User and maintainer documentation
 examples/    Ready-to-copy MCP client configurations

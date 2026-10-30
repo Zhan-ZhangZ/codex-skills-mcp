@@ -5,6 +5,7 @@ Start with the guide that matches your task.
 | I want to… | Read |
 |---|---|
 | Install in Codex, Claude, Cursor or another MCP client | [Installation](INSTALLATION.md) |
+| Install the Codex plugin from GitHub without npm or npx | [GitHub plugin marketplace](PLUGIN-MARKETPLACE.md) |
 | Change cache, download or transport behavior | [Configuration](CONFIGURATION.md) |
 | Understand the request and caching model | [Architecture](ARCHITECTURE.md) |
 | Learn the tools and resource contracts | [Tools](TOOLS.md) |

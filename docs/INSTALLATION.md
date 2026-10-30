@@ -1,6 +1,8 @@
 # Installation
 
-Codex Skills MCP supports Node.js 22 or newer and two transport modes:
+The Codex desktop plugin needs no separate Node.js, npm or npx installation.
+Standalone MCP deployments use Node.js 22 or newer and support two transport
+modes:
 
 - **stdio** for local desktop and CLI clients;
 - **Streamable HTTP** for remote clients and controlled self-hosting.
@@ -21,24 +23,46 @@ Codex Skills MCP supports Node.js 22 or newer and two transport modes:
 ChatGPT 本地插件只应在本地执行线程中使用，`@` 提及不会出现在云端线程。
 
 The visual skill tray is **not** a standard MCP feature. The bundled local
-plugin is desktop-only and is installed from the ChatGPT desktop app. Standard
-MCP clients use the 8 core tools and `skill://` resources without a custom UI.
+plugin is desktop-only. Standard MCP clients use the 8 core tools and
+`skill://` resources without a custom UI.
 
-## stdio with `npx`
+## Codex desktop plugin
 
-The simplest installation requires no global package:
+Add the GitHub marketplace once:
+
+```bash
+codex plugin marketplace add Zhan-ZhangZ/codex-skills-mcp --ref main
+```
+
+Install **Codex Skills** from the Plugins directory, or run:
+
+```bash
+codex plugin add codex-skills@codex-skills-marketplace
+```
+
+Start a new Codex chat after installation. The plugin launcher resolves the
+runtime supplied by the Codex desktop app, so plugin users do not need Node.js
+or npm on `PATH`.
+
+See [GitHub plugin marketplace](PLUGIN-MARKETPLACE.md) for clean installation,
+updates, pinned versions and compatibility details.
+
+## Standalone stdio with `npx`
+
+Standalone MCP clients require Node.js 22 or newer. A global package is not
+needed:
 
 ```bash
 npx -y codex-skills-mcp@beta
 ```
 
-`main` currently tracks the 1.5.0 beta line. The `beta` dist-tag matches these
-features; `latest` remains on stable 1.4.2 until the 1.5 line is promoted.
+The current source release is 1.6.0. The `beta` npm dist-tag remains the
+standalone channel for the current feature line.
 
 The first run downloads the manifest, builds a local search index, and creates
 the cache directory at `~/.codex-skills-cache`.
 
-## Codex
+## Standalone Codex CLI
 
 Codex CLI exposes the standard core tool surface. The fullscreen library and
 conversation-side skill tray appear in the Codex desktop app, not in the CLI.
@@ -149,7 +173,7 @@ Expected shape:
 {
   "status": "ok",
   "name": "codex-skills-mcp",
-  "version": "1.5.0-beta.17",
+  "version": "1.6.0",
   "skills": 298
 }
 ```
@@ -166,6 +190,7 @@ Skill and category counts change as the source catalog updates.
 | A skill read is interrupted | Retry it; verified files resume from the local cache |
 | HTTP request is rejected | Add the public hostname to `--allowed-hosts` |
 | Local mode cannot find skills | Pass `--skills-dir` or set `CODEX_SKILLS_DIR` |
+| Codex plugin cannot find a runtime | Update Codex, reinstall the plugin and restart the app |
 
 Run the `diagnostics` tool for recent tool calls, download errors and cache
 health.

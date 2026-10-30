@@ -6,6 +6,7 @@ Describe the user-visible result and why it is needed.
 
 - [ ] `npm test`
 - [ ] `npm run build:plugin`
+- [ ] `npm run check:plugin`
 - [ ] `npm run check:package`
 - [ ] Documentation updated when behavior or configuration changed
 

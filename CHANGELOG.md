@@ -3,6 +3,33 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.6.0] - 2026-10-30
+
+### Added
+
+- GitHub-backed Codex plugin marketplace entry for the desktop skill library.
+- POSIX and Windows launchers that start the bundled MCP server with the Codex
+  desktop runtime, cached Codex runtime or a developer-only PATH fallback.
+- Marketplace installation tests that deliberately use a minimal PATH and
+  verify MCP initialization, tool discovery and skill search.
+- A tagged plugin release workflow that validates the package and attaches an
+  installable archive to GitHub Releases.
+
+### Changed
+
+- Codex desktop users install from the plugin marketplace and no longer need a
+  separate Node.js, npm or npx installation.
+- The plugin build now synchronizes its version with the root package and
+  validates that the distributed server bundle has no external npm runtime
+  dependency.
+- Plugin manifests now use `${PLUGIN_ROOT}` paths and forward the Codex runtime
+  discovery variables from Codex into the stdio launcher.
+
+### Preserved
+
+- Standalone stdio, Claude Desktop, Cursor and self-hosted HTTP setups continue
+  to support the existing Node.js 22+ installation path.
+
 ## [1.5.0-beta.17] - 2026-10-20
 
 ### Fixed

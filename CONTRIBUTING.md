@@ -24,6 +24,7 @@ MCP App preview workflow.
 ```bash
 npm test
 npm run build:plugin
+npm run check:plugin
 npm run check:package
 ```
 

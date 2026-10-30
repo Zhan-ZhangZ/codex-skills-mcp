@@ -1,2 +1,4 @@
 # Preserve whitespace inside upstream template literals in generated bundles.
 plugin/dist/server.js -diff whitespace=-blank-at-eol
+plugin/scripts/launch-codex-skills-mcp text eol=lf
+*.cmd text eol=crlf
