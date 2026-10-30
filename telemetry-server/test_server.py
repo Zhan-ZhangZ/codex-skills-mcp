@@ -5,7 +5,14 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from server import ValidationError, initialize_db, store_batch, validate_payload
+from server import (
+    ValidationError,
+    dashboard_data,
+    initialize_db,
+    render_dashboard,
+    store_batch,
+    validate_payload,
+)
 
 
 class TelemetryServerTests(unittest.TestCase):
@@ -65,6 +72,18 @@ class TelemetryServerTests(unittest.TestCase):
         with sqlite3.connect(self.db) as connection:
             columns = [row[1] for row in connection.execute("PRAGMA table_info(skill_usage)")]
         self.assertEqual(columns, ["day", "skill", "count"])
+
+    def test_dashboard_renders_aggregate_counts_only(self) -> None:
+        payload = validate_payload(self.payload(), today=date(2026, 10, 30))
+        store_batch(self.db, payload)
+        data = dashboard_data(self.db, 30, today=date(2026, 10, 30))
+        rendered = render_dashboard(data)
+        self.assertEqual(data["total_count"], 5)
+        self.assertEqual(data["used_skills"], 2)
+        self.assertIn("Codex Skills 使用统计", rendered)
+        self.assertIn("ppt", rendered)
+        self.assertIn("video", rendered)
+        self.assertNotIn("private task", rendered)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ stored. A batch ID makes retries idempotent.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -20,6 +21,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 MAX_BODY_BYTES = 256 * 1024
 MAX_SKILLS = 2_000
@@ -144,6 +146,143 @@ def store_batch(db_path: Path, payload: dict[str, Any]) -> None:
         connection.commit()
 
 
+def dashboard_data(db_path: Path, days: int, today: date | None = None) -> dict[str, Any]:
+    if days not in (7, 30, 90):
+        days = 30
+    current = today or datetime.now(timezone.utc).date()
+    cutoff = (current - timedelta(days=days - 1)).isoformat()
+    with sqlite3.connect(db_path, timeout=5) as connection:
+        total_count, used_skills, active_days, last_day = connection.execute(
+            """
+            SELECT COALESCE(SUM(count), 0),
+                   COUNT(DISTINCT skill),
+                   COUNT(DISTINCT day),
+                   MAX(day)
+            FROM skill_usage
+            """
+        ).fetchone()
+        daily = connection.execute(
+            """
+            SELECT day, SUM(count), COUNT(DISTINCT skill)
+            FROM skill_usage
+            WHERE day >= ?
+            GROUP BY day
+            ORDER BY day DESC
+            """,
+            (cutoff,),
+        ).fetchall()
+        top = connection.execute(
+            """
+            SELECT skill, SUM(count) AS total
+            FROM skill_usage
+            WHERE day >= ?
+            GROUP BY skill
+            ORDER BY total DESC, skill ASC
+            LIMIT 25
+            """,
+            (cutoff,),
+        ).fetchall()
+    return {
+        "days": days,
+        "total_count": int(total_count),
+        "used_skills": int(used_skills),
+        "active_days": int(active_days),
+        "last_day": last_day,
+        "daily": daily,
+        "top": top,
+    }
+
+
+def render_dashboard(data: dict[str, Any]) -> str:
+    days = int(data["days"])
+    total_count = int(data["total_count"])
+    used_skills = int(data["used_skills"])
+    active_days = int(data["active_days"])
+    last_day = data["last_day"] or "暂无"
+    daily = data["daily"]
+    top = data["top"]
+    max_top = max((int(row[1]) for row in top), default=1)
+
+    tabs = "".join(
+        f'<a class="tab{" active" if days == value else ""}" href="?days={value}">{value} 天</a>'
+        for value in (7, 30, 90)
+    )
+    daily_rows = "".join(
+        "<tr>"
+        f"<td>{html.escape(str(day))}</td>"
+        f"<td>{int(count):,}</td>"
+        f"<td>{int(skill_count):,}</td>"
+        "</tr>"
+        for day, count, skill_count in daily
+    ) or '<tr><td colspan="3" class="empty">暂无统计数据</td></tr>'
+    top_rows = "".join(
+        "<tr>"
+        f'<td class="skill">{html.escape(str(skill))}</td>'
+        f"<td>{int(count):,}</td>"
+        f'<td><span class="bar" style="width:{max(2, round(int(count) / max_top * 100))}%"></span></td>'
+        "</tr>"
+        for skill, count in top
+    ) or '<tr><td colspan="3" class="empty">暂无统计数据</td></tr>'
+
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta http-equiv="refresh" content="300">
+  <title>Codex Skills 使用统计</title>
+  <style>
+    :root {{ color-scheme: dark; --bg:#0e1015; --card:#171a22; --line:#2b303d; --text:#f3f5f9; --muted:#9ca5b7; --accent:#9b8cff; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; background:radial-gradient(circle at 15% 0%,#242047 0,transparent 34%),var(--bg); color:var(--text); font:15px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+    main {{ width:min(1120px,calc(100% - 32px)); margin:0 auto; padding:48px 0 64px; }}
+    header {{ display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:28px; }}
+    h1 {{ margin:0 0 6px; font-size:30px; letter-spacing:-.03em; }}
+    .sub {{ color:var(--muted); }}
+    .tabs {{ display:flex; gap:8px; }}
+    .tab {{ color:var(--muted); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:7px 12px; }}
+    .tab.active {{ color:white; border-color:#7163d8; background:#6355c8; }}
+    .cards {{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; }}
+    .card, section {{ background:rgba(23,26,34,.93); border:1px solid var(--line); border-radius:16px; }}
+    .card {{ padding:18px 20px; }}
+    .card b {{ display:block; font-size:28px; margin-top:4px; letter-spacing:-.03em; }}
+    .card span {{ color:var(--muted); font-size:13px; }}
+    .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }}
+    section {{ overflow:hidden; }}
+    h2 {{ margin:0; padding:17px 20px; font-size:16px; border-bottom:1px solid var(--line); }}
+    table {{ width:100%; border-collapse:collapse; }}
+    th,td {{ text-align:left; padding:11px 20px; border-bottom:1px solid #232733; }}
+    th {{ color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; }}
+    tr:last-child td {{ border-bottom:0; }}
+    td:nth-child(n+2), th:nth-child(n+2) {{ text-align:right; }}
+    .skill {{ max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+    td:last-child {{ width:38%; }}
+    .bar {{ display:block; height:8px; min-width:3px; border-radius:8px; background:linear-gradient(90deg,#7667e6,#b99cff); }}
+    .empty {{ text-align:center !important; color:var(--muted); padding:34px; }}
+    footer {{ color:var(--muted); margin-top:22px; font-size:12px; }}
+    @media(max-width:760px) {{ .cards{{grid-template-columns:1fr 1fr}} .grid{{grid-template-columns:1fr}} header{{align-items:start;flex-direction:column}} }}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div><h1>Codex Skills 使用统计</h1><div class="sub">匿名每日聚合 · 最近更新日期 {html.escape(str(last_day))}</div></div>
+    <nav class="tabs">{tabs}</nav>
+  </header>
+  <div class="cards">
+    <div class="card"><span>累计成功调用</span><b>{total_count:,}</b></div>
+    <div class="card"><span>使用过的技能</span><b>{used_skills:,}</b></div>
+    <div class="card"><span>有数据的日期</span><b>{active_days:,}</b></div>
+    <div class="card"><span>最后上报日期</span><b style="font-size:20px">{html.escape(str(last_day))}</b></div>
+  </div>
+  <div class="grid">
+    <section><h2>每日调用</h2><table><thead><tr><th>日期（UTC）</th><th>调用次数</th><th>技能数</th></tr></thead><tbody>{daily_rows}</tbody></table></section>
+    <section><h2>热门技能 · 最近 {days} 天</h2><table><thead><tr><th>技能</th><th>次数</th><th>占比</th></tr></thead><tbody>{top_rows}</tbody></table></section>
+  </div>
+  <footer>只展示匿名聚合次数；不包含用户任务、搜索词、文件路径或调用详情。页面每 5 分钟刷新。</footer>
+</main></body></html>"""
+
+
 class TelemetryHandler(BaseHTTPRequestHandler):
     server_version = "codex-skills-telemetry/1"
     sys_version = ""
@@ -161,9 +300,34 @@ class TelemetryHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def send_html(self, status: HTTPStatus, body: str) -> None:
+        encoded = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        )
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/healthz":
+        request = urlsplit(self.path)
+        if request.path == "/healthz":
             self.send_json(HTTPStatus.OK, {"status": "ok"})
+            return
+        if request.path in ("/usage", "/usage/"):
+            try:
+                raw_days = parse_qs(request.query).get("days", ["30"])[0]
+                days = int(raw_days)
+                if days not in (7, 30, 90):
+                    days = 30
+                dashboard = dashboard_data(self.db_path, days)
+                self.send_html(HTTPStatus.OK, render_dashboard(dashboard))
+            except (ValueError, sqlite3.Error):
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "dashboard unavailable"})
             return
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 

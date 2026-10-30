@@ -19,6 +19,13 @@ short-lived batch ID used to make retries idempotent. It does not read or store
 the client IP, request headers beyond validation fields, task text, search
 queries or file paths.
 
+## Read-only dashboard
+
+The service renders an aggregate dashboard at `/usage/`. It is intended to be
+exposed through the same public HTTPS site with Nginx Basic Authentication and
+shows 7, 30 or 90 day totals, daily activity and the most-used skills. It never
+returns raw batches, IP addresses, prompts or file paths.
+
 ## Query daily totals
 
 ```sh
