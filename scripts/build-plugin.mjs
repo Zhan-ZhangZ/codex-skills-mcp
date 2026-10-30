@@ -21,7 +21,11 @@ await Promise.all([
   syncVersion(resolve(root, "plugin/.codex-plugin/plugin.json")),
 ]);
 
-execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], { cwd: root, stdio: "inherit" });
+execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], {
+  cwd: root,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
 await build({
   absWorkingDir: root,
   entryPoints: ["dist/index.js"],
