@@ -6,9 +6,25 @@ __pycache__/
 *.d.ts.map
 .DS_Store
 .codex-skills-cache/
+.env
+.env.*
+*.log
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.pem
+*.key
+*.crt
+*.tgz
+.package-check-*/
+/release/
 
 # Personal project-local skills are not part of this repository.
 /.agents/skills/
+
+# Private Feishu tutorial source and screenshots.
+/docs/FEISHU-USER-GUIDE*.md
+/docs/feishu-media/
 
 # Local working copies and generated rendering artifacts.
 /work/
