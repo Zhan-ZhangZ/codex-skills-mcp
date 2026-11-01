@@ -18,6 +18,7 @@ __pycache__/
 *.tgz
 .package-check-*/
 /release/
+/exports/
 
 # Personal project-local skills are not part of this repository.
 /.agents/skills/
