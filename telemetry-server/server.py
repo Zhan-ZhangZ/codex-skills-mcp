@@ -9,6 +9,9 @@ stored. A batch ID makes retries idempotent.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import hmac
 import html
 import json
 import os
@@ -29,10 +32,56 @@ MAX_SKILLS = 2_000
 MAX_COUNT = 1_000_000_000
 RETENTION_DAYS = 90
 PLUGIN_VERSION_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$")
+AUTH_ITERATIONS_MIN = 100_000
+AUTH_ITERATIONS_MAX = 2_000_000
 
 
 class ValidationError(ValueError):
     pass
+
+
+def load_dashboard_auth(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("dashboard auth must be an object")
+    if not isinstance(value.get("username"), str) or not value["username"]:
+        raise ValueError("dashboard auth username is required")
+    iterations = value.get("iterations")
+    if not isinstance(iterations, int) or not AUTH_ITERATIONS_MIN <= iterations <= AUTH_ITERATIONS_MAX:
+        raise ValueError("dashboard auth iterations are invalid")
+    salt = value.get("salt")
+    digest = value.get("digest")
+    if not isinstance(salt, str) or not isinstance(digest, str):
+        raise ValueError("dashboard auth salt and digest are required")
+    base64.b64decode(salt, validate=True)
+    base64.b64decode(digest, validate=True)
+    return {
+        "username": value["username"],
+        "iterations": iterations,
+        "salt": salt,
+        "digest": digest,
+    }
+
+
+def verify_basic_authorization(header: str | None, auth: dict[str, Any] | None) -> bool:
+    if auth is None:
+        return True
+    if not header or not header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(header[6:], validate=True).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    if not hmac.compare_digest(username, auth["username"]):
+        return False
+    computed = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        base64.b64decode(auth["salt"]),
+        int(auth["iterations"]),
+    )
+    return hmac.compare_digest(computed, base64.b64decode(auth["digest"]))
 
 
 def validate_payload(value: Any, today: date | None = None) -> dict[str, Any]:
@@ -351,6 +400,10 @@ class TelemetryHandler(BaseHTTPRequestHandler):
     def db_path(self) -> Path:
         return self.server.db_path  # type: ignore[attr-defined]
 
+    @property
+    def dashboard_auth(self) -> dict[str, Any] | None:
+        return self.server.dashboard_auth  # type: ignore[attr-defined]
+
     def send_json(self, status: HTTPStatus, body: dict[str, Any]) -> None:
         encoded = json.dumps(body, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
@@ -379,6 +432,12 @@ class TelemetryHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {"status": "ok"})
             return
         if request.path in ("/usage", "/usage/"):
+            if not verify_basic_authorization(self.headers.get("Authorization"), self.dashboard_auth):
+                self.send_response(HTTPStatus.UNAUTHORIZED)
+                self.send_header("WWW-Authenticate", 'Basic realm="Codex Skills Usage", charset="UTF-8"')
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                return
             try:
                 raw_days = parse_qs(request.query).get("days", ["30"])[0]
                 raw_page = parse_qs(request.query).get("page", ["1"])[0]
@@ -396,7 +455,7 @@ class TelemetryHandler(BaseHTTPRequestHandler):
         self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/v1/skill-usage":
+        if urlsplit(self.path).path not in ("/v1/skill-usage", "/api/skill-usage/v1/batch"):
             self.send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
         if self.headers.get("X-Codex-Skills-Telemetry") != "1":
@@ -436,9 +495,17 @@ class TelemetryServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], db_path: Path):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        db_path: Path,
+        dashboard_auth_path: Path | None = None,
+    ):
         super().__init__(address, TelemetryHandler)
         self.db_path = db_path
+        self.dashboard_auth = (
+            load_dashboard_auth(dashboard_auth_path) if dashboard_auth_path is not None else None
+        )
         initialize_db(db_path)
 
 
@@ -447,8 +514,13 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18990)
     parser.add_argument("--db", default="/var/lib/codex-skills-telemetry/usage.sqlite3")
+    parser.add_argument("--dashboard-auth-file")
     args = parser.parse_args()
-    server = TelemetryServer((args.host, args.port), Path(args.db))
+    server = TelemetryServer(
+        (args.host, args.port),
+        Path(args.db),
+        Path(args.dashboard_auth_file) if args.dashboard_auth_file else None,
+    )
     sys.stderr.write(f"codex-skills telemetry listening on {args.host}:{args.port}\n")
     try:
         server.serve_forever()

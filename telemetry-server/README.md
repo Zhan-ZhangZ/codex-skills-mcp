@@ -6,7 +6,7 @@ This loopback-only service accepts the plugin's daily aggregate `POST`:
 {
   "schema_version": 1,
   "batch_id": "uuid",
-  "plugin_version": "1.7.1",
+  "plugin_version": "1.7.2",
   "day": "2026-10-30",
   "skills": [
     { "name": "ppt-master", "count": 3 }
@@ -25,6 +25,19 @@ The service renders an aggregate dashboard at `/usage/`. It is intended to be
 exposed through the same public HTTPS site with Nginx Basic Authentication and
 shows 7, 30 or 90 day totals, daily activity and the most-used skills. It never
 returns raw batches, IP addresses, prompts or file paths.
+
+The current deployment runs the collector on the operator's Mac behind the
+existing Cloudflare Tunnel:
+
+```text
+https://vault.251716.xyz/api/skill-usage/v1/batch
+https://vault.251716.xyz/usage/
+```
+
+Only those paths are routed to the collector; all other `vault.251716.xyz`
+traffic continues to the existing local Vault application. When no
+authenticating reverse proxy is in front of the dashboard, start the service
+with `--dashboard-auth-file` so `/usage/` requires HTTP Basic Authentication.
 
 ## Query daily totals
 

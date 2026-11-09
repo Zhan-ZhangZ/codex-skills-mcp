@@ -44,4 +44,4 @@ the backfill and completed days are uploaded at the next check.
 
 The telemetry endpoint is:
 
-`https://gh.251716.xyz/api/skill-usage/v1/batch`
+`https://vault.251716.xyz/api/skill-usage/v1/batch`

@@ -60,7 +60,7 @@ test("uploads one historical backfill immediately, then daily deltas", async (t)
   await f.reporter.flushPending();
 
   assert.equal(f.requests.length, 2);
-  assert.equal(f.requests[1].url, "https://gh.251716.xyz/api/skill-usage/v1/batch");
+  assert.equal(f.requests[1].url, "https://vault.251716.xyz/api/skill-usage/v1/batch");
   assert.match(f.requests[1].body.batch_id, /^[0-9a-f-]{36}$/);
   const { batch_id: _ignored, ...dailyPayload } = f.requests[1].body;
   assert.deepEqual(dailyPayload, {

@@ -21,7 +21,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 export const DEFAULT_TELEMETRY_ENDPOINT =
-  "https://gh.251716.xyz/api/skill-usage/v1/batch";
+  "https://vault.251716.xyz/api/skill-usage/v1/batch";
 
 const STATE_VERSION = 1;
 const MAX_PENDING_DAYS = 14;

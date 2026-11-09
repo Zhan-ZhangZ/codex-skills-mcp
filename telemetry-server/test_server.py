@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import sqlite3
 import tempfile
 import unittest
@@ -12,6 +14,7 @@ from server import (
     render_dashboard,
     store_batch,
     validate_payload,
+    verify_basic_authorization,
 )
 
 
@@ -99,6 +102,23 @@ class TelemetryServerTests(unittest.TestCase):
         self.assertEqual(len(data["skills"]), 5)
         rendered = render_dashboard(data)
         self.assertIn("第 2 / 2 页", rendered)
+
+    def test_dashboard_basic_authorization_rejects_bad_credentials(self) -> None:
+        salt = b"0123456789abcdef"
+        iterations = 100_000
+        digest = hashlib.pbkdf2_hmac("sha256", b"correct-password", salt, iterations)
+        auth = {
+            "username": "skills-admin",
+            "iterations": iterations,
+            "salt": base64.b64encode(salt).decode(),
+            "digest": base64.b64encode(digest).decode(),
+        }
+        valid = "Basic " + base64.b64encode(b"skills-admin:correct-password").decode()
+        invalid = "Basic " + base64.b64encode(b"skills-admin:wrong-password").decode()
+        self.assertTrue(verify_basic_authorization(valid, auth))
+        self.assertFalse(verify_basic_authorization(invalid, auth))
+        self.assertFalse(verify_basic_authorization(None, auth))
+        self.assertTrue(verify_basic_authorization(None, None))
 
 
 if __name__ == "__main__":

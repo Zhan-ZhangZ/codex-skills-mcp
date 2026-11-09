@@ -3,6 +3,18 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.7.2] - 2026-11-09
+
+### Changed
+
+- Moved the anonymous usage collector from the shared acceleration server to
+  the operator's local machine, published through Cloudflare Tunnel at
+  `vault.251716.xyz`.
+- Preserved the existing Vault web application by routing only the telemetry
+  API and dashboard paths to the local collector.
+- Added optional PBKDF2 dashboard authentication for deployments that do not
+  have a separate authenticating reverse proxy.
+
 ## [1.7.1] - 2026-10-30
 
 ### Added
