@@ -9,6 +9,7 @@ from pathlib import Path
 
 from server import (
     ValidationError,
+    canonical_dashboard_path,
     dashboard_data,
     initialize_db,
     render_dashboard,
@@ -119,6 +120,14 @@ class TelemetryServerTests(unittest.TestCase):
         self.assertFalse(verify_basic_authorization(invalid, auth))
         self.assertFalse(verify_basic_authorization(None, auth))
         self.assertTrue(verify_basic_authorization(None, None))
+
+    def test_dashboard_paths_with_accidental_suffix_are_canonicalized(self) -> None:
+        self.assertEqual(canonical_dashboard_path("/usage"), "/usage/")
+        self.assertEqual(
+            canonical_dashboard_path("/usage/%60", "days=7"),
+            "/usage/?days=7",
+        )
+        self.assertIsNone(canonical_dashboard_path("/usage/"))
 
 
 if __name__ == "__main__":

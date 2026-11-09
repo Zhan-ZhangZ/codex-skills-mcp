@@ -84,6 +84,14 @@ def verify_basic_authorization(header: str | None, auth: dict[str, Any] | None) 
     return hmac.compare_digest(computed, base64.b64decode(auth["digest"]))
 
 
+def canonical_dashboard_path(path: str, query: str = "") -> str | None:
+    if path == "/usage":
+        return "/usage/" + (f"?{query}" if query else "")
+    if path.startswith("/usage/") and path != "/usage/":
+        return "/usage/" + (f"?{query}" if query else "")
+    return None
+
+
 def validate_payload(value: Any, today: date | None = None) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValidationError("body must be an object")
@@ -430,6 +438,14 @@ class TelemetryHandler(BaseHTTPRequestHandler):
         request = urlsplit(self.path)
         if request.path == "/healthz":
             self.send_json(HTTPStatus.OK, {"status": "ok"})
+            return
+        redirect_to = canonical_dashboard_path(request.path, request.query)
+        if redirect_to:
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", redirect_to)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
         if request.path in ("/usage", "/usage/"):
             if not verify_basic_authorization(self.headers.get("Authorization"), self.dashboard_auth):
