@@ -3,7 +3,7 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
-## [1.8.1] - 2026-11-23
+## [1.8.2] - 2026-11-23
 
 ### Added
 

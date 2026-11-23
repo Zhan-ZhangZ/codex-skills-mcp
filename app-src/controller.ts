@@ -265,7 +265,9 @@ function localizedMatchReason(reason: string): string {
   return reason
     .replace(/^交付物「(.*)」$/, "Deliverable: “$1”")
     .replace(/^组合「(.*)」$/, "Combined query: “$1”")
+    .replace(/^原文包含「(.*)」$/, "Text contains “$1”")
     .replace(/^关键词「(.*)」$/, "Keyword: “$1”")
+    .replace(/^技能名匹配$/, "Skill name match")
     .replace(/^完整任务描述$/, "Full task description")
     .replace(/^与交付物直接相关$/, "Directly related to the deliverable")
     .replace(/^推荐词匹配$/, "Recommended term match");

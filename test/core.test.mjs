@@ -205,6 +205,7 @@ test("search tool uses English manifest copy for English queries", async (t) => 
   assert.match(text, /Academic manuscript writing and journal submission workflow/);
   assert.match(text, /\[Academic Research\]/);
   assert.match(text, /Why:/);
+  assert.doesNotMatch(text, /[\u3400-\u9fff]/);
   assert.doesNotMatch(text, /学术论文写作与期刊投稿/);
 });
 

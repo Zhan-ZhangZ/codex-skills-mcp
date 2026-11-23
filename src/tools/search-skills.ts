@@ -5,6 +5,19 @@ import type { SkillLoader } from "../loader/index.js";
 import { FOOTER_SEARCH, CACHED_BADGE } from "../lib/protocol.js";
 import { withToolLogging } from "../lib/logger.js";
 
+function localizedReason(reason: string, english: boolean): string {
+  if (!english) return reason;
+  return reason
+    .replace(/^交付物「(.*)」$/, "Deliverable: “$1”")
+    .replace(/^组合「(.*)」$/, "Combined query: “$1”")
+    .replace(/^原文包含「(.*)」$/, "Text contains “$1”")
+    .replace(/^关键词「(.*)」$/, "Keyword: “$1”")
+    .replace(/^技能名匹配$/, "Skill name match")
+    .replace(/^完整任务描述$/, "Full task description")
+    .replace(/^与交付物直接相关$/, "Directly related to the deliverable")
+    .replace(/^推荐词匹配$/, "Recommended term match");
+}
+
 export function registerSearchSkills(
   server: McpServer,
   searchEngine: SkillSearchEngine,
@@ -58,7 +71,10 @@ export function registerSearchSkills(
               ? ` · ${(r.size_bytes / (1024 * 1024)).toFixed(r.size_bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`
               : "";
             const why = Array.isArray(r.match_reasons)
-              ? r.match_reasons.slice(0, 3).join("、")
+              ? r.match_reasons
+                .slice(0, 3)
+                .map((reason) => localizedReason(reason, wantsEnglish))
+                .join(wantsEnglish ? ", " : "、")
               : "";
             const category = wantsEnglish ? r.category_en ?? r.category : r.category;
             const description = wantsEnglish ? r.description_en ?? r.description : r.description;
