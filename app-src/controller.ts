@@ -273,6 +273,8 @@ function localizedMatchReason(reason: string): string {
     .replace(/^推荐词匹配$/, "Recommended term match");
 }
 
+const HAN_TEXT = /[\u3400-\u9fff]/;
+
 const numberLocale = () => uiLanguage === "en" ? "en-US" : "zh-CN";
 
 const setText = (id: string, value: string) => { $(id).textContent = value; };
@@ -1468,7 +1470,10 @@ function card(skill: SkillCard): HTMLButtonElement {
     ? (() => {
         const chip = document.createElement("span");
         chip.className = "meta-chip match";
-        const reasons = skill.match_reasons.map(localizedMatchReason);
+        const reasons = skill.match_reasons
+          .map(localizedMatchReason)
+          .filter((reason) => uiLanguage !== "en" || !HAN_TEXT.test(reason));
+        if (reasons.length === 0) return undefined;
         chip.textContent = tr(
           `匹配：${reasons.slice(0, 2).join("、")}`,
           `Match: ${reasons.slice(0, 2).join(", ")}`,

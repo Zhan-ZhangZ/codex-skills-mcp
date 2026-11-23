@@ -1,6 +1,6 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "Local-first MCP server for on-demand expert skill discovery, loading, and orchestration",
   "type": "module",
   "author": {

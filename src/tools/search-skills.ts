@@ -5,6 +5,8 @@ import type { SkillLoader } from "../loader/index.js";
 import { FOOTER_SEARCH, CACHED_BADGE } from "../lib/protocol.js";
 import { withToolLogging } from "../lib/logger.js";
 
+const HAN_TEXT = /[\u3400-\u9fff]/;
+
 function localizedReason(reason: string, english: boolean): string {
   if (!english) return reason;
   return reason
@@ -74,6 +76,7 @@ export function registerSearchSkills(
               ? r.match_reasons
                 .slice(0, 3)
                 .map((reason) => localizedReason(reason, wantsEnglish))
+                .filter((reason) => !wantsEnglish || !HAN_TEXT.test(reason))
                 .join(wantsEnglish ? ", " : "、")
               : "";
             const category = wantsEnglish ? r.category_en ?? r.category : r.category;
