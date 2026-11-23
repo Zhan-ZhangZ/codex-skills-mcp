@@ -36,6 +36,11 @@ The App bridge registers two host entrypoints:
 The app can browse categories, search, inspect detail and files, track download
 progress, attach complete skill instructions to the next message, remove an
 attachment, clear one skill cache and reuse shared search history.
+The interface provides a persisted Chinese/English switch and follows the host
+locale by default. English mode prefers an explicit English README variant and
+falls back to the neutral `README.md`. Catalog entries can also publish
+`description_en` and `category_en`; the App, search index and category listing
+consume those fields when present while retaining a source-checked fallback.
 
 App-only tools are marked with host visibility metadata so standard models do
 not see UI controls as callable tools.

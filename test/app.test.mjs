@@ -6,6 +6,7 @@ import { build } from "esbuild";
 
 const root = new URL("../", import.meta.url);
 const template = await readFile(new URL("app-src/index.html", root), "utf8");
+const englishCatalog = JSON.parse(await readFile(new URL("app-src/catalog-en.json", root), "utf8"));
 const bundle = await build({
   entryPoints: [new URL("app-src/controller.ts", root).pathname],
   bundle: true, platform: "browser", format: "iife", write: false,
@@ -218,6 +219,88 @@ test("app initializes before fetching and applies the host theme", async () => {
   assert.equal(app.node("stat-total").textContent, "2");
   assert.match(app.node("hero-kicker").textContent, /2 个顶层技能/);
   assert.equal(app.node("content").attributes["aria-busy"], "false");
+  await app.dispose();
+});
+
+test("skill tray follows the host language and exposes a persistent language switch", async () => {
+  const storage = new Map();
+  const app = harness([], {
+    hostContext: { theme: "dark", locale: "en-US" },
+    localStorage: storage,
+  });
+  await app.ready();
+  assert.equal(app.document.documentElement.lang, "en");
+  assert.equal(app.node("heading").textContent, "Codex Skills Library");
+  assert.equal(app.node("lang-en").attributes["aria-pressed"], "true");
+  assert.equal(app.node("lang-zh").attributes["aria-pressed"], "false");
+  assert.equal(app.node("count").textContent, "2 top-level skills");
+  assert.equal(app.node("cards").children[0].children[2].children[0].textContent, "On demand");
+  assert.match(app.node("search").placeholder, /Search by skill name or keyword/);
+
+  app.node("lang-zh").onclick();
+  assert.equal(app.document.documentElement.lang, "zh-CN");
+  assert.equal(app.node("heading").textContent, "Codex Skills 技能库");
+  assert.equal(storage.get("codex-skills.language.v1"), "zh-CN");
+  app.node("lang-en").onclick();
+  assert.equal(storage.get("codex-skills.language.v1"), "en");
+  await app.dispose();
+
+  const reopened = harness([], {
+    hostContext: { theme: "dark", locale: "zh-CN" },
+    localStorage: storage,
+  });
+  await reopened.ready();
+  assert.equal(reopened.document.documentElement.lang, "en");
+  assert.equal(reopened.node("lang-en").attributes["aria-pressed"], "true");
+  assert.equal(reopened.node("heading").textContent, "Codex Skills Library");
+  await reopened.dispose();
+});
+
+test("English mode localizes catalog categories, summaries and match labels", async () => {
+  const source = englishCatalog.skills.officecli;
+  const category = "04_内容创作与文档处理";
+  const localizedCategory = englishCatalog.categories[category];
+  const app = harness([], { hostContext: { theme: "dark", locale: "en-US" } });
+  await app.ready({
+    totalSkills: 1,
+    categories: [{ name: category, skill_count: 1 }],
+    top: [{
+      name: "officecli",
+      description: source.source,
+      description_en: source.description,
+      category,
+      category_en: localizedCategory,
+      cached: true,
+      match_reasons: ["关键词「PPT」", "交付物「PPT」"],
+      reads: 0,
+      failures: 0,
+      last_used_at: null,
+    }],
+  });
+
+  const card = app.node("cards").children[0];
+  assert.equal(card.children[1].textContent, source.description);
+  assert.doesNotMatch(card.children[1].textContent, /[\u3400-\u9fff]/);
+  assert.equal(card.children[2].children[1].textContent, localizedCategory);
+  assert.match(card.children[2].children.at(-1).textContent, /Keyword:.*Deliverable:/);
+  assert.equal(app.node("cats").children[0].children[1].children[0].textContent, localizedCategory);
+
+  app.node("cats").children[0].onclick();
+  await app.flush();
+  await app.reply(app.latestTool("skills.browse"), { structuredContent: {
+    view: "category",
+    category,
+    category_en: localizedCategory,
+    skills: [{
+      name: "officecli",
+      description: source.source,
+      description_en: source.description,
+      category,
+      category_en: localizedCategory,
+      cached: true,
+    }],
+  } });
+  assert.equal(app.node("heading").textContent, localizedCategory);
   await app.dispose();
 });
 
@@ -536,6 +619,49 @@ test("skill tray finds a Chinese README in the references directory", async () =
   assert.equal(app.node("doc-source").textContent, "references/README.zh-CN.md");
   assert.match(app.node("d-md").textContent, /浏览器技能说明/);
   assert.doesNotMatch(app.node("d-md").textContent, /Agent SKILL/);
+  await app.dispose();
+});
+
+test("switching to English reloads the current skill with its English README", async () => {
+  const storage = new Map();
+  const app = harness([], {
+    localStorage: storage,
+    readmeNames: {
+      beta: ["README.md", "README_EN.md", "README.zh-CN.md"],
+    },
+    readmesByPath: {
+      beta: {
+        "README_EN.md": "# English guide\n\nThis skill is documented in English.",
+        "README.zh-CN.md": "# 中文说明\n\n这个技能用于中文内容生产。",
+      },
+    },
+  });
+  await app.ready();
+  app.node("cards").children[1].onclick(); await app.flush();
+  await app.reply(app.latest("resources/read"), { contents: [{ text: "# Agent SKILL" }] });
+  const chineseRequest = app.sent.findLast((message) =>
+    message.method === "resources/read" && /\/README\.zh-CN\.md$/.test(message.params?.uri ?? ""));
+  assert.ok(chineseRequest);
+  await app.reply(chineseRequest, { contents: [{
+    text: "# 中文说明\n\n这个技能用于中文内容生产。",
+    _meta: { "codex-skills/readme-path": "README.zh-CN.md" },
+  }] });
+  assert.equal(app.node("doc-source").textContent, "README.zh-CN.md");
+
+  app.node("lang-en").onclick();
+  await app.flush();
+  const englishRequest = app.sent.findLast((message) =>
+    message.method === "resources/read" && /\/README_EN\.md$/.test(message.params?.uri ?? ""));
+  assert.ok(englishRequest);
+  assert.equal(englishRequest.params._meta["codex-skills/preferred-language"], "en");
+  assert.equal(app.node("detail-flow").textContent.includes("Review the skill guide (README)"), true);
+  await app.reply(englishRequest, { contents: [{
+    text: "# English guide\n\nThis skill is documented in English.",
+    _meta: { "codex-skills/readme-path": "README_EN.md" },
+  }] });
+  assert.equal(app.node("doc-source").textContent, "README_EN.md");
+  assert.match(app.node("d-md").textContent, /English guide/);
+  assert.equal(storage.get("codex-skills.language.v1"), "en");
   await app.dispose();
 });
 

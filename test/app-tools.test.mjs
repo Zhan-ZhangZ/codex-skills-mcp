@@ -13,10 +13,16 @@ const { registerCodexSkillsApp } = await import("../dist/openai/app.js");
 function fixtures() {
   const tools = new Map();
   const resources = new Map();
-  const skills = [{ name: "alpha", description: "Alpha", category: "tools" }];
+  const skills = [{
+    name: "alpha",
+    description: "阿尔法技能",
+    description_en: "Alpha skill",
+    category: "tools",
+    category_en: "Tools",
+  }];
   const butler = { name: "00_codex_skills", description: "Library router", category: "routing" };
   const engine = {
-    getCategories: () => [{ name: "tools", skill_count: 1 }],
+    getCategories: () => [{ name: "tools", name_en: "Tools", skill_count: 1 }],
     getButlerEntry: () => butler,
     defaultSuggestions: () => skills,
     popularSkills: () => [{ entry: skills[0], reads: 7, failures: 1, last_read_at: 1_700_000_000_000 }],
@@ -117,12 +123,19 @@ test("app browsing and searching return immediately while freshness check is pen
   assert.equal(homepage.structuredContent.totalSkills, 1);
   assert.equal(homepage.structuredContent.top[0].cached, true);
   assert.equal(homepage.structuredContent.top[0].reads, 7);
+  assert.equal(homepage.structuredContent.top[0].description_en, "Alpha skill");
+  assert.equal(homepage.structuredContent.top[0].category_en, "Tools");
+  assert.equal(homepage.structuredContent.categories[0].name_en, "Tools");
   assert.equal(homepage.structuredContent.cache_mode, "remote");
   assert.equal(homepage.structuredContent.butler, "00_codex_skills");
   const category = await tools.get("skills.browse").handler({ category: "tools" });
   assert.equal(category.structuredContent.skills[0].name, "alpha");
+  assert.equal(category.structuredContent.category_en, "Tools");
+  assert.equal(category.structuredContent.skills[0].description_en, "Alpha skill");
   const search = await tools.get("skills.query").handler({ query: "alpha" });
   assert.equal(search.structuredContent.results[0].cached, true);
+  assert.equal(search.structuredContent.results[0].description_en, "Alpha skill");
+  assert.equal(search.structuredContent.results[0].category_en, "Tools");
   assert.equal(search.structuredContent.total, 1);
   assert.equal(search.structuredContent.has_more, false);
   const resource = await resources.get("codex-skills-app").handler();
@@ -133,15 +146,17 @@ test("app browsing and searching return immediately while freshness check is pen
 test("home totals follow the current catalog instead of a fixed count", async () => {
   const { tools, engine } = fixtures();
   engine.getCategories = () => [
-    { name: "tools", skill_count: 4 },
-    { name: "research", skill_count: 7 },
+    { name: "tools", name_en: "Tools", skill_count: 4 },
+    { name: "research", name_en: "Research", skill_count: 7 },
   ];
   const first = await tools.get("skills.browse").handler({});
   assert.equal(first.structuredContent.totalSkills, 11);
-  engine.getCategories = () => [{ name: "tools", skill_count: 2 }];
+  engine.getCategories = () => [{ name: "tools", name_en: "Tools", skill_count: 2 }];
   const updated = await tools.get("skills.browse").handler({});
   assert.equal(updated.structuredContent.totalSkills, 2);
-  assert.deepEqual(updated.structuredContent.categories, [{ name: "tools", skill_count: 2 }]);
+  assert.deepEqual(updated.structuredContent.categories, [
+    { name: "tools", name_en: "Tools", skill_count: 2 },
+  ]);
 });
 
 test("app cache clearing preserves usage and reports removed files", async () => {

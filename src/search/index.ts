@@ -14,7 +14,9 @@ export interface SearchOptions {
 export interface SearchResult {
   name: string;
   description: string;
+  description_en?: string;
   category: string;
+  category_en?: string;
   has_sub_skills: boolean;
   score: number;
   /** Human-readable match provenance, e.g. ["论文(exact)", "paper(fuzzy)"] */
@@ -46,7 +48,9 @@ type FieldName =
   | "name"
   | "leading"
   | "description"
+  | "description_en"
   | "category"
+  | "category_en"
   | "folder"
   | "aliases"
   | "tags";
@@ -268,7 +272,9 @@ const FIELD_NAMES: FieldName[] = [
   "name",
   "leading",
   "description",
+  "description_en",
   "category",
+  "category_en",
   "folder",
   "aliases",
   "tags",
@@ -277,7 +283,9 @@ const FIELD_WEIGHTS: Record<FieldName, number> = {
   name: 4.0,
   leading: 2.0,
   description: 1.0,
+  description_en: 1.0,
   category: 0.4,
+  category_en: 0.4,
   folder: 0.3,
   aliases: 2.0,
   tags: 1.5,
@@ -288,13 +296,15 @@ const NON_WORD_RE = /[^\w\u4e00-\u9fff\s]/g;
 export class SkillSearchEngine {
   private index: IndexEntry[] = [];
   private butlerEntry?: ManifestEntry;
-  private categories: Map<string, number> = new Map();
+  private categories: Map<string, { skill_count: number; name_en?: string }> = new Map();
   private docFrequencies: Map<string, number> = new Map();
   private avgFieldLen: Record<FieldName, number> = {
     name: 1,
     leading: 1,
     description: 1,
+    description_en: 1,
     category: 1,
+    category_en: 1,
     folder: 1,
     aliases: 1,
     tags: 1,
@@ -410,12 +420,14 @@ export class SkillSearchEngine {
     this.docFrequencies.clear();
     this.entriesByName.clear();
     this.butlerEntry = undefined;
-    const categoryCounts = new Map<string, number>();
+    const categoryCounts = new Map<string, { skill_count: number; name_en?: string }>();
     const fieldTotals: Record<FieldName, number> = {
       name: 0,
       leading: 0,
       description: 0,
+      description_en: 0,
       category: 0,
+      category_en: 0,
       folder: 0,
       aliases: 0,
       tags: 0,
@@ -424,7 +436,9 @@ export class SkillSearchEngine {
       name: 0,
       leading: 0,
       description: 0,
+      description_en: 0,
       category: 0,
+      category_en: 0,
       folder: 0,
       aliases: 0,
       tags: 0,
@@ -439,21 +453,27 @@ export class SkillSearchEngine {
         continue;
       }
 
-      let leadingWords = this.extractLeadingWords(entry.description);
+      let leadingWords = [
+        ...this.extractLeadingWords(entry.description),
+        ...this.extractLeadingWords(entry.description_en ?? ""),
+      ];
       // Fallback pseudo-leading words if the description has none
       if (leadingWords.length === 0) {
         leadingWords = [
           entry.name.toLowerCase(),
           entry.category.toLowerCase(),
+          entry.category_en?.toLowerCase() ?? "",
           ...(entry.tags || []).map((t) => t.toLowerCase()),
-        ];
+        ].filter(Boolean);
       }
 
       const fieldText: Record<FieldName, string> = {
         name: entry.name,
         leading: leadingWords.join(" "),
         description: entry.description.replace(/Leading\s*Words?\s*[:：].*$/i, ""),
+        description_en: (entry.description_en ?? "").replace(/Leading\s*Words?\s*[:：].*$/i, ""),
         category: entry.category,
+        category_en: entry.category_en ?? "",
         folder: entry.folder,
         aliases: (entry.aliases || []).join(" "),
         tags: (entry.tags || []).join(" "),
@@ -488,7 +508,13 @@ export class SkillSearchEngine {
       const nameLower = entry.name.toLowerCase();
       this.entriesByName.set(nameLower, entry);
       this.index.push({ entry, nameLower, aliasTargets: [nameLower, ...(entry.aliases || []).map(a => a.toLowerCase())], leadingWords, isSubSkill, fields });
-      categoryCounts.set(entry.category, (categoryCounts.get(entry.category) || 0) + 1);
+      const category = categoryCounts.get(entry.category);
+      categoryCounts.set(entry.category, {
+        skill_count: (category?.skill_count || 0) + 1,
+        ...(category?.name_en || entry.category_en
+          ? { name_en: category?.name_en ?? entry.category_en }
+          : {}),
+      });
     }
 
     this.categories = categoryCounts;
@@ -760,7 +786,9 @@ export class SkillSearchEngine {
         results.push({
           name: item.entry.name,
           description: item.entry.description,
+          ...(item.entry.description_en ? { description_en: item.entry.description_en } : {}),
           category: item.entry.category,
+          ...(item.entry.category_en ? { category_en: item.entry.category_en } : {}),
           has_sub_skills: false,
           score: Math.round(finalScore * 100) / 100,
           matched_terms: matchedTerms.slice(0, 6).map((m) => `${m.token}(${m.kind})`),
@@ -813,7 +841,8 @@ export class SkillSearchEngine {
         const key = result.name.toLocaleLowerCase();
         const phraseMatch = current.text.length >= 2 && (
           result.name.toLocaleLowerCase().includes(current.text.toLocaleLowerCase()) ||
-          result.description.toLocaleLowerCase().includes(current.text.toLocaleLowerCase())
+          result.description.toLocaleLowerCase().includes(current.text.toLocaleLowerCase()) ||
+          result.description_en?.toLocaleLowerCase().includes(current.text.toLocaleLowerCase())
         );
         const isCombinationQuery = current.label.startsWith("组合");
         const effectiveWeight = isCombinationQuery && !phraseMatch ? current.weight * 0.2 : current.weight;
@@ -892,9 +921,9 @@ export class SkillSearchEngine {
     };
   }
 
-  getCategories(): { name: string; skill_count: number }[] {
+  getCategories(): { name: string; name_en?: string; skill_count: number }[] {
     return Array.from(this.categories.entries())
-      .map(([name, skill_count]) => ({ name, skill_count }))
+      .map(([name, value]) => ({ name, ...value }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 

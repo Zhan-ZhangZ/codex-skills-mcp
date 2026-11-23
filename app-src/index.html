@@ -120,6 +120,24 @@
       background: rgba(130, 174, 255, .08); border-radius: 999px; padding: 6px 11px;
       font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap;
     }
+    .header-controls { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+    .language-switch {
+      display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+      border: 1px solid rgba(156, 191, 255, .2); border-radius: 10px;
+      background: rgba(7, 18, 35, .68);
+    }
+    .language-switch button {
+      min-width: 34px; padding: 4px 8px; border: 0; border-radius: 7px;
+      color: var(--app-faint); background: transparent; font-size: 10.5px;
+      font-weight: 650; line-height: 1.35; box-shadow: none;
+    }
+    .language-switch button:hover:not(:disabled) {
+      color: #e4f2ff; background: rgba(103, 145, 219, .13); box-shadow: none;
+    }
+    .language-switch button[aria-pressed="true"] {
+      color: #f1f8ff; border: 0; background: rgba(92, 146, 225, .28);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    }
     #count:empty { display: none; }
     .muted { color: var(--app-muted); font-size: 12px; }
     button, input {
@@ -554,7 +572,10 @@
     }
     @media (max-width: 620px) {
       body { padding: 20px 13px 28px; }
-      header { margin-bottom: 20px; gap: 9px; }
+      header { flex-wrap: wrap; margin-bottom: 20px; gap: 8px 9px; }
+      .identity { flex: 1 1 250px; }
+      .header-controls { flex: 1 1 100%; justify-content: flex-end; gap: 6px; }
+      .language-switch button { min-width: 30px; padding: 4px 6px; }
       .partner-logo { height: 27px; max-width: 88px; }
       .brand-divider { height: 25px; }
       h1 .title-note { display: none; }
@@ -592,18 +613,24 @@
     <header>
       <button id="back" hidden>← 返回</button>
       <div class="identity">
-        <img class="partner-logo" src="__APP_LOGO_DATA__" alt="合塑研工 HESUYANGONG" />
+        <img class="partner-logo" id="brand-logo" src="__APP_LOGO_DATA__" alt="合塑研工 HESUYANGONG" />
         <span class="brand-divider" aria-hidden="true"></span>
         <div class="identity-copy">
           <span class="eyebrow" id="eyebrow">Skill atlas · on demand</span>
           <h1 id="heading" tabindex="-1">Codex Skills <span class="title-note">技能库</span></h1>
         </div>
       </div>
-      <span class="count-pill" id="count"></span>
+      <div class="header-controls">
+        <div class="language-switch" id="language-switch" role="group" aria-label="界面语言">
+          <button id="lang-zh" type="button" aria-pressed="true">中文</button>
+          <button id="lang-en" type="button" aria-pressed="false">EN</button>
+        </div>
+        <span class="count-pill" id="count"></span>
+      </div>
     </header>
 
     <div class="search-shell" id="search-shell">
-      <label for="search" class="sr-only">搜索技能</label>
+      <label for="search" class="sr-only" id="search-label">搜索技能</label>
       <div class="search-zone" id="search-zone">
         <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle cx="10.8" cy="10.8" r="6.6" stroke="currentColor" stroke-width="1.7"/>
@@ -615,7 +642,7 @@
       <p class="search-hint" id="search-hint">先按<strong>关键词</strong>找到技能，打开详情确认说明，再带入当前对话。</p>
       <div class="search-history" id="search-history" hidden>
         <div class="search-history-head">
-          <span class="search-history-title">最近搜索 <span class="search-history-count" id="search-history-count">0</span></span>
+          <span class="search-history-title"><span id="search-history-title">最近搜索</span> <span class="search-history-count" id="search-history-count">0</span></span>
           <div class="search-history-actions">
             <button type="button" class="search-history-more" id="search-history-more" hidden>更多</button>
             <button type="button" class="search-history-clear" id="search-history-clear" aria-label="清除搜索历史" title="清除搜索历史">
@@ -631,7 +658,7 @@
 
     <section id="attached-bar" class="attached-bar" aria-label="已带入当前对话的技能" hidden>
       <div class="attached-head">
-        <span class="attached-title">已带入当前对话</span>
+        <span class="attached-title" id="attached-title">已带入当前对话</span>
         <span class="attached-summary" id="attached-summary"></span>
         <button type="button" class="attached-clear" id="attached-clear">清空全部</button>
       </div>
@@ -642,19 +669,19 @@
       <div class="hero">
         <div class="hero-copy">
           <span class="hero-kicker" id="hero-kicker">实时技能索引 · 按需加载</span>
-          <h2>站在<span>巨人的肩膀上</span></h2>
-          <p class="hero-lead">把复杂任务，交给正确的技能。一个本地优先、可搜索、可审计的 Agent 能力库；找到合适的技能，查看完整说明，再把它带进当前对话。</p>
-          <div class="hero-stats" aria-label="技能库概览">
-            <div class="hero-stat"><b id="stat-total">—</b><span>顶层技能</span></div>
-            <div class="hero-stat"><b id="stat-categories">—</b><span>领域</span></div>
-            <div class="hero-stat"><b id="stat-usage">—</b><span>累计调用</span></div>
-            <div class="hero-stat"><b id="stat-explored">—</b><span>已使用</span></div>
+          <h2 id="hero-title">站在<span>巨人的肩膀上</span></h2>
+          <p class="hero-lead" id="hero-lead">把复杂任务，交给正确的技能。一个本地优先、可搜索、可审计的 Agent 能力库；找到合适的技能，查看完整说明，再把它带进当前对话。</p>
+          <div class="hero-stats" id="hero-stats" aria-label="技能库概览">
+            <div class="hero-stat"><b id="stat-total">—</b><span id="stat-total-label">顶层技能</span></div>
+            <div class="hero-stat"><b id="stat-categories">—</b><span id="stat-categories-label">领域</span></div>
+            <div class="hero-stat"><b id="stat-usage">—</b><span id="stat-usage-label">累计调用</span></div>
+            <div class="hero-stat"><b id="stat-explored">—</b><span id="stat-explored-label">已使用</span></div>
           </div>
         </div>
       </div>
       <div class="section-heading">
         <div>
-          <span class="section-kicker">Most used · 真实频次</span>
+          <span class="section-kicker" id="section-kicker">Most used · 真实频次</span>
           <h3 id="section-title">常用技能</h3>
           <span class="muted" id="section-caption">按本地读取频率排序；首次使用时，展示近期和维护活跃的技能。</span>
         </div>
@@ -664,8 +691,8 @@
       <div class="section-heading">
         <div>
           <span class="section-kicker">Browse by domain</span>
-          <h3>探索全部领域</h3>
-          <span class="muted">从代码、内容、科研到硬件与商业工作流。</span>
+          <h3 id="domains-title">探索全部领域</h3>
+          <span class="muted" id="domains-caption">从代码、内容、科研到硬件与商业工作流。</span>
         </div>
       </div>
       <div id="cats"></div>
@@ -687,7 +714,7 @@
       <div id="d-progress" class="download-progress indeterminate" role="progressbar"
         aria-label="技能缓存进度" aria-valuemin="0" aria-valuemax="100" hidden>
         <div class="download-progress-head">
-          <strong>正在缓存完整技能</strong>
+          <strong id="d-progress-title">正在缓存完整技能</strong>
           <span id="d-progress-percent">准备中</span>
         </div>
         <div class="download-track"><div id="d-progress-fill"></div></div>
@@ -695,7 +722,7 @@
       </div>
       <p id="detail-flow" class="detail-flow">① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务</p>
       <p id="d-attach-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
-      <div class="detail-tabs" role="tablist" aria-label="技能详情">
+      <div class="detail-tabs" id="detail-tabs" role="tablist" aria-label="技能详情">
         <button id="tab-instructions" role="tab" aria-selected="true" aria-controls="instructions-pane">技能说明</button>
         <button id="tab-files" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">文件</button>
         <button id="tab-sub-skills" role="tab" aria-selected="false" aria-controls="explorer-pane" tabindex="-1">子技能</button>
@@ -704,7 +731,7 @@
         <p id="d-revision-note" class="detail-summary" role="note" hidden></p>
         <div class="doc-toolbar">
           <span id="doc-source" class="doc-source">加载中</span>
-          <span class="muted">Markdown 安全渲染</span>
+          <span class="muted" id="doc-safe-label">Markdown 安全渲染</span>
           <button id="doc-toggle">查看原文</button>
         </div>
         <div id="d-md-rendered" class="markdown" tabindex="0" aria-label="技能 README 或简介预览">正在读取技能简介与 README…</div>
@@ -748,16 +775,16 @@
     </footer>
     <div class="site-footer">
       <div>
-        <div class="footer-brandline"><strong>合塑研工</strong><span>HESUYANGONG</span></div>
-        <div>Codex Skills 由合塑研工设计整理出品。</div>
+        <div class="footer-brandline"><strong id="footer-brand-name">合塑研工</strong><span>HESUYANGONG</span></div>
+        <div id="footer-made-by">Codex Skills 由合塑研工设计整理出品。</div>
         <button id="suggest-skill" class="suggest-link" aria-haspopup="dialog" aria-controls="suggest-modal">＋ 补充技能告知</button>
       </div>
       <div class="footer-note">
-        <p>Skill 与技能内容来源于公开开源技能市场、原作者仓库及本地自研整理。技能版权归各原作者所有，使用前请核对对应项目的许可证与使用条件。</p>
+        <p id="footer-note">Skill 与技能内容来源于公开开源技能市场、原作者仓库及本地自研整理。技能版权归各原作者所有，使用前请核对对应项目的许可证与使用条件。</p>
         <div class="footer-links">
-          <span>© 2026 合塑研工 · Local-first</span>
-          <a href="https://github.com/Zhan-ZhangZ/codex-skills-mcp" target="_blank" rel="noreferrer">MCP 项目</a>
-          <a href="https://github.com/Zhan-ZhangZ/codexprojec" target="_blank" rel="noreferrer">技能源仓库</a>
+          <span id="footer-copyright">© 2026 合塑研工 · Local-first</span>
+          <a id="mcp-project-link" href="https://github.com/Zhan-ZhangZ/codex-skills-mcp" target="_blank" rel="noreferrer">MCP 项目</a>
+          <a id="skill-source-link" href="https://github.com/Zhan-ZhangZ/codexprojec" target="_blank" rel="noreferrer">技能源仓库</a>
         </div>
       </div>
     </div>

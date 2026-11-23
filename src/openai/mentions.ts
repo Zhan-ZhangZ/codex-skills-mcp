@@ -30,7 +30,10 @@ import type { Config } from "../config.js";
 import type { SkillSearchEngine } from "../search/index.js";
 import type { SkillLoader } from "../loader/index.js";
 import { withToolLogging } from "../lib/logger.js";
-import { preferredReadmePath } from "../lib/readme.js";
+import {
+  normalizeReadmeLanguage,
+  preferredReadmePath,
+} from "../lib/readme.js";
 import { fileNavigationRows } from "../lib/navigation.js";
 import { finishSkillDownloadProgress, reportSkillDownloadProgress } from "../remote/skill-progress.js";
 
@@ -245,6 +248,9 @@ export function registerSkillResources(
         }
         const displayReadme = extra?._meta?.["codex-skills/display"] === "readme";
         const preferredReadme = displayReadme && path.toLowerCase() === "readme.md";
+        const preferredLanguage = normalizeReadmeLanguage(
+          extra?._meta?.["codex-skills/preferred-language"],
+        );
         let selectedPath = path;
         if (preferredReadme) {
           const files = await loader.listSkillFiles(entry, "", 2);
@@ -252,6 +258,7 @@ export function registerSkillResources(
             fileNavigationRows(files)
               .filter((file) => file.type === "file")
               .map((file) => file.path),
+            preferredLanguage,
           ) ?? "README.md";
         }
         // loadSkillFile handles remote fetch, path-traversal security and

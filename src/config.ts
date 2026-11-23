@@ -283,7 +283,11 @@ export interface ManifestFileIndex {
 export interface ManifestEntry {
   name: string;
   description: string;
+  /** Optional English discovery copy supplied by the skill source. */
+  description_en?: string;
   category: string;
+  /** Optional English display name for the category. */
+  category_en?: string;
   folder: string;
   relative_path: string;
   // Metadata Extensions
@@ -334,6 +338,17 @@ export function parseManifest(value: unknown): ManifestEntry[] {
     for (const field of ["aliases", "tags", "dependencies"]) {
       if (entry[field] !== undefined && (!Array.isArray(entry[field]) || !entry[field].every((v: unknown) => typeof v === "string"))) {
         throw new Error(`Manifest entry ${index}: ${field} must be a string array`);
+      }
+    }
+    const localizedFields = ["description_en", "category_en"].filter(
+      (field) => entry[field] !== undefined,
+    );
+    if (localizedFields.length > 0 && localizedFields.length !== 2) {
+      throw new Error(`Manifest entry ${index}: description_en and category_en must be provided together`);
+    }
+    for (const field of localizedFields) {
+      if (typeof entry[field] !== "string" || !entry[field].trim()) {
+        throw new Error(`Manifest entry ${index}: ${field} must be a nonblank string`);
       }
     }
   }

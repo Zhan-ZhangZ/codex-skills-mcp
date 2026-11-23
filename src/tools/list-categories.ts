@@ -16,7 +16,7 @@ export function registerListCategories(
         const categories = searchEngine.getCategories();
 
         const formatted = categories
-          .map((c) => `- **${c.name}**: ${c.skill_count} skills`)
+          .map((c) => `- **${c.name}**${c.name_en ? ` / ${c.name_en}` : ""}: ${c.skill_count} skills`)
           .join("\n");
 
         const total = categories.reduce((sum, c) => sum + c.skill_count, 0);

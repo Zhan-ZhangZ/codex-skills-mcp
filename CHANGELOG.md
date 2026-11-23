@@ -3,6 +3,20 @@
 All notable public changes are recorded here. Format follows Keep a Changelog,
 and versions follow SemVer.
 
+## [1.8.1] - 2026-11-23
+
+### Added
+
+- The skill library and conversation-side tray now provide a persisted
+  Chinese/English switch, follow the host locale by default, and translate the
+  full browsing, detail, file-preview and handoff interface.
+- English mode automatically prefers an explicit English README variant, then
+  the neutral `README.md`, while Chinese mode keeps Simplified Chinese first.
+- The skill manifest now carries source-owned `description_en` and
+  `category_en` fields for every entry. English queries search this copy, while
+  the app and core tools return both languages; a checked-in fallback catalog
+  keeps existing installations translated until the remote manifest refreshes.
+
 ## [1.7.2] - 2026-11-09
 
 ### Changed

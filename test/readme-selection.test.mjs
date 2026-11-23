@@ -57,3 +57,19 @@ test("preferred README ranks any Chinese documentation above a root English file
     "references/README_EN.md",
   ]), "references/README.md");
 });
+
+test("English mode prefers an explicit English README before neutral and Chinese files", () => {
+  assert.equal(preferredReadmePath([
+    "README.md",
+    "README.zh-CN.md",
+    "README_EN.md",
+  ], "en"), "README_EN.md");
+  assert.equal(preferredReadmePath([
+    "README.md",
+    "README.zh-CN.md",
+  ], "en"), "README.md");
+  assert.equal(preferredReadmePath([
+    "docs/README.en-US.md",
+    "README.md",
+  ], "en"), "docs/README.en-US.md");
+});

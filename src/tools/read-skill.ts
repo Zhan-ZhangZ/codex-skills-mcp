@@ -157,7 +157,8 @@ export function registerReadSkill(
                 type: "text" as const,
                 text: [
                   `# Skill: ${entry.name}`,
-                  `**Category**: ${entry.category}`,
+                  `**Category**: ${entry.category}${entry.category_en ? ` · ${entry.category_en}` : ""}`,
+                  ...(entry.description_en ? [`**English summary**: ${entry.description_en}`] : []),
                   `**Dependencies**: ${depsStr}`,
                   "",
                   "## Instructions",

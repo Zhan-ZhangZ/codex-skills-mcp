@@ -249,6 +249,37 @@ test("preferred skill README selects a Chinese variant before English", async (t
   assert.equal(result.contents[0]._meta["codex-skills/readme-path"], "README.zh-CN.md");
 });
 
+test("English README metadata selects the English variant", async (t) => {
+  const requested = [];
+  const loader = {
+    listSkillFiles: async () => [
+      { name: "README.md", type: "file", size_bytes: 10 },
+      { name: "README_EN.md", type: "file", size_bytes: 12 },
+      { name: "README.zh-CN.md", type: "file", size_bytes: 16 },
+    ],
+    loadSkillFile: async (_entry, path) => {
+      requested.push(path);
+      return {
+        content: "# English guide", size_bytes: 15, offset: 0, bytes_returned: 15,
+        has_more: false, binary: false,
+      };
+    },
+  };
+  const client = await session(t, (server, extensions) => registerOpenAIMentions(
+    server, extensions, config(), new SkillSearchEngine(manifest), loader
+  ));
+  const result = await client.readResource({
+    uri: `skill://${encodeURIComponent(names[0])}/README.md`,
+    _meta: {
+      "codex-skills/display": "readme",
+      "codex-skills/preferred-language": "en",
+    },
+  });
+  assert.deepEqual(requested, ["README_EN.md"]);
+  assert.equal(result.contents[0].text, "# English guide");
+  assert.equal(result.contents[0]._meta["codex-skills/readme-path"], "README_EN.md");
+});
+
 test("an explicit Chinese README resource is rendered without a file wrapper", async (t) => {
   const requested = [];
   const loader = {

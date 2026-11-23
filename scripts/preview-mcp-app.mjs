@@ -10,21 +10,24 @@ import { fileURLToPath } from "node:url";
 
 const { values } = parseArgs({ options: {
   state: { type: "string", default: "files" },
+  locale: { type: "string", default: "zh-CN" },
+  audit: { type: "boolean", default: false },
   output: { type: "string", default: "docs/assets/app-preview.png" },
   width: { type: "string", default: "430" },
   height: { type: "string", default: "900" },
 } });
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const [appHtml, previewImageBase64] = await Promise.all([
+const [appHtml, previewImageBase64, englishCatalog] = await Promise.all([
   readFile(resolve(root, "assets/app.html"), "utf8"),
   readFile(resolve(root, "app-src/brand-logo.png")).then((bytes) => bytes.toString("base64")),
+  readFile(resolve(root, "app-src/catalog-en.json"), "utf8").then(JSON.parse),
 ]);
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const skills = [
-  { name: "awesome-journal-skills", description: "期刊选择、研究设计、投稿与审稿流程。", cached: true,
+  { name: "Awesome-Journal-Skills", description: "期刊选择、研究设计、投稿与审稿流程。", cached: true,
     category: "12_学术论文与科研图表", size_bytes: 18 * 1024 * 1024,
-    match_reasons: ["关键词「论文」", "推荐词匹配"],
+    match_reasons: ["关键词「journal」", "推荐词匹配"],
     reads: 18, failures: 0, last_used_at: Date.now() - 12 * 60_000 },
   { name: "officecli", description: "创建和分析 Office 文档、表格与演示文稿。", cached: false,
     category: "04_内容创作与文档处理", size_bytes: 93 * 1024 * 1024,
@@ -32,7 +35,7 @@ const skills = [
     reads: 11, failures: 1, last_used_at: Date.now() - 2 * 3_600_000 },
   { name: "webapp-testing", description: "使用 Playwright 验证本地 Web 应用。", cached: true,
     category: "01_代码工程与架构", size_bytes: 6 * 1024 * 1024,
-    match_reasons: ["关键词「测试」"],
+    match_reasons: ["关键词「test」"],
     reads: 7, failures: 0, last_used_at: Date.now() - 26 * 3_600_000 },
   { name: "codex-ppt-skill", description: "把文章与研究报告组织成统一视觉风格的演示文稿。", cached: false,
     category: "05_多媒体与设计资产", size_bytes: 43 * 1024 * 1024,
@@ -40,7 +43,7 @@ const skills = [
     reads: 5, failures: 0, last_used_at: Date.now() - 3 * 86_400_000 },
   { name: "humanizer", description: "清理模板化表达，同时保留事实、语气与作者声音。", cached: true,
     category: "04_内容创作与文档处理", size_bytes: 2 * 1024 * 1024,
-    match_reasons: ["关键词「改写」"],
+    match_reasons: ["关键词「rewrite」"],
     reads: 3, failures: 0, last_used_at: Date.now() - 8 * 86_400_000 },
   { name: "blender-mcp", description: "通过 MCP 控制 Blender，完成场景、材质与镜头搭建。", cached: false,
     category: "05_多媒体与设计资产", size_bytes: 14 * 1024 * 1024,
@@ -48,22 +51,30 @@ const skills = [
     reads: 2, failures: 0, last_used_at: Date.now() - 16 * 86_400_000 },
 ];
 const categories = [
-  { name: "代码工程与架构", skill_count: 20 },
-  { name: "DevOps 与自动化", skill_count: 12 },
-  { name: "效率工具与协同管理", skill_count: 33 },
-  { name: "内容创作与文档处理", skill_count: 35 },
-  { name: "多媒体与设计资产", skill_count: 57 },
-  { name: "商业与专业领域", skill_count: 49 },
-  { name: "智能体框架与协同", skill_count: 28 },
-  { name: "MCP 服务开发与评估", skill_count: 7 },
-  { name: "Composio 集成服务", skill_count: 2 },
-  { name: "Skill 开发脚手架与安装器", skill_count: 11 },
-  { name: "API 与第三方应用集成", skill_count: 18 },
-  { name: "学术论文与科研图表", skill_count: 15 },
-  { name: "社科研究与实证工具", skill_count: 6 },
-  { name: "财务发票提取与归档", skill_count: 4 },
-  { name: "优质 GitHub 项目清单", skill_count: 1 },
+  { name: "01_代码工程与架构", skill_count: 20 },
+  { name: "02_DevOps与自动化", skill_count: 12 },
+  { name: "03_效率工具与协同管理", skill_count: 33 },
+  { name: "04_内容创作与文档处理", skill_count: 35 },
+  { name: "05_多媒体与设计资产", skill_count: 57 },
+  { name: "06_商业与专业领域", skill_count: 49 },
+  { name: "07_智能体框架与协同", skill_count: 28 },
+  { name: "08_MCP服务开发与评估", skill_count: 7 },
+  { name: "09_Composio集成服务", skill_count: 2 },
+  { name: "10_Skill开发脚手架与安装器", skill_count: 11 },
+  { name: "11_API与第三方应用集成", skill_count: 18 },
+  { name: "12_学术论文与科研图表", skill_count: 15 },
+  { name: "13_社科研究与实证工具", skill_count: 6 },
+  { name: "14_股票币圈财经专项", skill_count: 4 },
+  { name: "15_优质GitHub项目清单", skill_count: 1 },
 ];
+for (const skill of skills) {
+  const localized = englishCatalog.skills?.[skill.name];
+  if (localized) skill.description_en = localized.description;
+  if (skill.category) skill.category_en = englishCatalog.categories?.[skill.category];
+}
+for (const category of categories) {
+  category.name_en = englishCatalog.categories?.[category.name];
+}
 const totalSkills = categories.reduce((total, category) => total + category.skill_count, 0);
 const historySeed = [
   { query: "把这张产品照片反推成可直接使用的生图中英双语提示词，重点还原灯光、材质和镜头层次", at: Date.now() - 3_600_000 },
@@ -85,7 +96,7 @@ function navigationArguments(args) {
       { name: "Review response", path: "writing/review-response", type: "sub_skill", description: "逐条回应审稿意见并维护修改记录。", text: "", excerpted: false },
     ].filter((entry) => !args.query || `${entry.name} ${entry.description}`.toLowerCase().includes(args.query.toLowerCase()));
     return {
-      skill_name: "awesome-journal-skills", view: "sub_skills", path: "", query: args.query ?? "",
+      skill_name: "Awesome-Journal-Skills", view: "sub_skills", path: "", query: args.query ?? "",
       total: 4166, matched: entries.length, offset: 0, returned: entries.length,
       next_cursor: entries.length > 2 ? "mock-next" : null, descriptions_excerpted: false, entries,
     };
@@ -108,7 +119,7 @@ function navigationArguments(args) {
     { name: "dataset.jsonl", path: "dataset.jsonl", type: "file", size_bytes: 58720256, text: "", excerpted: false },
   ];
   return {
-    skill_name: "awesome-journal-skills", view: "files", path: args.path ?? "", query: args.query ?? "",
+    skill_name: "Awesome-Journal-Skills", view: "files", path: args.path ?? "", query: args.query ?? "",
     total: 2281, matched: entries.length, offset: 0, returned: entries.length,
     next_cursor: "mock-next", descriptions_excerpted: false, entries,
   };
@@ -123,11 +134,14 @@ const skills = ${JSON.stringify(skills)};
 const categories = ${JSON.stringify(categories)};
 const totalSkills = ${JSON.stringify(totalSkills)};
 const previewImageBase64 = ${JSON.stringify(previewImageBase64)};
+const hostLocale = ${JSON.stringify(/^en(?:[-_]|$)/i.test(values.locale) ? "en-US" : "zh-CN")};
 const navigationArguments = ${navigationArguments.toString()};
 let history = ${JSON.stringify(historySeed)};
 window.__rpcLog = [];
 const instructions = "# Awesome Journal Skills\\n\\n## Agent workflow\\n\\nRead the selected sub-skill before execution.";
-const readme = "# Awesome Journal Skills\\n\\n## 技能用途\\n\\n帮助研究者完成期刊选择、研究设计、投稿准备和审稿回复。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
+const readmeZh = "# Awesome Journal Skills\\n\\n## 技能用途\\n\\n帮助研究者完成期刊选择、研究设计、投稿准备和审稿回复。\\n\\n[本包 README.md](./README.md)\\n\\n[大管家 SKILL.md](../../../SKILL.md)\\n\\n1. 设计阶段：明确变量、样本和识别策略。\\n2. 选刊阶段：核对范围、周期、开放获取与审稿偏好。\\n3. 写作阶段：按目标期刊结构组织论证。\\n4. 投稿阶段：逐项检查匿名性、附件和格式。\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
+const readmeEn = "# Awesome Journal Skills\\n\\n## Purpose\\n\\nHelps researchers with journal selection, research design, submission preparation and reviewer responses.\\n\\n[Package README.md](./README.md)\\n\\n[Library router SKILL.md](../../../SKILL.md)\\n\\n1. Design: define variables, samples and identification strategy.\\n2. Journal selection: verify scope, timeline, open access and review preferences.\\n3. Writing: structure the argument for the target journal.\\n4. Submission: check anonymization, attachments and formatting.\\n\\n\\x3cscript>document.body.dataset.xss='1'\\x3c/script>\\n\\n<a href=\\"javascript:alert(1)\\">unsafe link</a>";
+const readme = hostLocale === "en-US" ? readmeEn : readmeZh;
 function reply(id, result) { frame.contentWindow.postMessage({ jsonrpc: "2.0", id, result }, "*"); }
 addEventListener("message", (event) => {
   if (event.source !== frame.contentWindow) return;
@@ -135,7 +149,7 @@ addEventListener("message", (event) => {
   if (!message || message.jsonrpc !== "2.0" || !message.id) return;
   window.__rpcLog.push({ method: message.method, name: message.params?.name, uri: message.params?.uri, args: message.params?.arguments });
   if (message.method === "ui/initialize") return reply(message.id, {
-    protocolVersion: "2026-01-26", hostContext: { theme: "dark" },
+    protocolVersion: "2026-01-26", hostContext: { theme: "dark", locale: hostLocale },
     hostCapabilities: { updateModelContext: { text: {}, resource: {}, resourceLink: {} } },
   });
   if (message.method === "tools/call") {
@@ -176,8 +190,8 @@ addEventListener("message", (event) => {
           files_total: 1, files_missing_count: 0, size_bytes: 0, completed_at: null }],
       } });
       return reply(message.id, { structuredContent: { requested: 1, complete_count: state === "progress" ? 0 : 1, truncated: false,
-        skills: [{ name: "awesome-journal-skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
-          local_path: "/cache/awesome-journal-skills",
+        skills: [{ name: "Awesome-Journal-Skills", found: true, cached: state !== "progress", complete: state !== "progress", catalog_current: true,
+          local_path: "/cache/Awesome-Journal-Skills",
           files_total: 2281, files_missing_count: state === "progress" ? 1036 : 0, size_bytes: 48234496, completed_at: new Date().toISOString() }] } });
     }
     if (name === "list_skill_files") return reply(message.id, { structuredContent: navigationArguments(args) });
@@ -207,14 +221,14 @@ addEventListener("message", (event) => {
     }
   }
   if (message.method === "resources/read") {
-    const skill = message.params.uri === "skill://awesome-journal-skills";
-    const readmeMatch = String(message.params.uri).match(/^skill:\/\/awesome-journal-skills\/(README[^/]*\.md)$/);
+    const skill = message.params.uri === "skill://Awesome-Journal-Skills";
+    const readmeMatch = String(message.params.uri).match(/^skill:\\/\\/Awesome-Journal-Skills\\/(README[^/]*\\.md)$/);
     const readmeFile = Boolean(readmeMatch);
     const file = !skill && !readmeFile;
     if (skill && state === "progress") {
       frame.contentWindow.postMessage({ jsonrpc: "2.0", method: "notifications/progress", params: {
         progressToken: message.params._meta?.progressToken, progress: 1245, total: 2281,
-        message: "Fetching 1245/2281 files for awesome-journal-skills",
+        message: "Fetching 1245/2281 files for Awesome-Journal-Skills",
       } }, "*");
       return;
     }
@@ -349,7 +363,16 @@ try {
   const runtimeErrors = [];
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(String(event.data));
-    if (message.method === "Runtime.exceptionThrown") runtimeErrors.push(message.params?.exceptionDetails?.text);
+    if (message.method === "Runtime.exceptionThrown") {
+      const details = message.params?.exceptionDetails;
+      const location = details?.url
+        ? `${details.url}:${Number(details.lineNumber ?? 0) + 1}:${Number(details.columnNumber ?? 0) + 1}`
+        : "";
+      runtimeErrors.push([
+        details?.exception?.description ?? details?.text ?? "Unknown runtime exception",
+        location,
+      ].filter(Boolean).join(" @ "));
+    }
     if (message.id == null) return;
     const pending = pendingCommands.get(message.id);
     if (!pending) return;
@@ -411,6 +434,34 @@ try {
   // Let the entry animation settle before capturing; otherwise the whole home
   // view is photographed at partial opacity and every colour reads too dark.
   await new Promise((wait) => setTimeout(wait, 650));
+  if (values.audit) {
+    const audit = await command("Runtime.evaluate", {
+      expression: `(() => {
+        const doc = document.querySelector("#app")?.contentDocument;
+        if (!doc) return [];
+        const walker = doc.createTreeWalker(doc.body, doc.defaultView.NodeFilter.SHOW_TEXT);
+        const rows = [];
+        let node;
+        while ((node = walker.nextNode()) && rows.length < 200) {
+          const text = node.textContent?.replace(/\\s+/g, " ").trim();
+          if (!text || !/[\\u3400-\\u9fff]/.test(text)) continue;
+          const element = node.parentElement;
+          if (!element || element.closest("[hidden]")) continue;
+          const style = doc.defaultView.getComputedStyle(element);
+          if (style.display === "none" || style.visibility === "hidden") continue;
+          rows.push({
+            text,
+            tag: element.tagName.toLowerCase(),
+            id: element.id || null,
+            className: typeof element.className === "string" ? element.className : null,
+          });
+        }
+        return rows;
+      })()`,
+      returnByValue: true,
+    });
+    console.log(JSON.stringify(audit.result?.value ?? [], null, 2));
+  }
   const unsafe = await command("Runtime.evaluate", {
     expression: `(() => { const doc = document.querySelector("#app")?.contentDocument; return Boolean(doc?.body?.dataset.xss || doc?.querySelector("#d-md-rendered script") || [...(doc?.querySelectorAll("#d-md-rendered a") || [])].some(a => a.getAttribute("href")?.startsWith("javascript:"))); })()`,
     returnByValue: true,

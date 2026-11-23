@@ -91,6 +91,25 @@ test("case-insensitive exact lookup and two-edit fuzzy search remain compatible"
   assert.equal(engine.search("论文")[0]?.name, "research");
 });
 
+test("English manifest copy expands discovery and is returned to localized clients", () => {
+  const bilingual = [
+    entry("research", "学术论文写作与期刊投稿", {
+      description_en: "Academic manuscript writing and journal submission workflow",
+      category_en: "Academic Research",
+    }),
+  ];
+  const engine = new SkillSearchEngine(bilingual);
+  const result = engine.search("manuscript submission")[0];
+  assert.equal(result?.name, "research");
+  assert.equal(result.description_en, "Academic manuscript writing and journal submission workflow");
+  assert.equal(result.category_en, "Academic Research");
+  assert.deepEqual(engine.getCategories(), [{
+    name: "test",
+    name_en: "Academic Research",
+    skill_count: 1,
+  }]);
+});
+
 test("explicit refresh bypasses a fresh never-expiring manifest and rebuilds from remote bytes", async (t) => {
   const config = setup(t, { isRemote: true, manifestTTL: 0 });
   writeFileSync(join(config.skillsDir, ".codex-skills.source.json"), JSON.stringify({ repo: config.githubRepo, branch: config.githubBranch, path: config.githubPath }));
@@ -168,6 +187,25 @@ test("search tool explains task candidates without forcing materialization", asy
   assert.match(text, /为什么:/);
   assert.match(text, /NEXT \(optional\)/);
   assert.doesNotMatch(text, /MANDATORY|PROTOCOL STEP 3 \(required\)/);
+});
+
+test("search tool uses English manifest copy for English queries", async (t) => {
+  const fixture = [
+    entry("research", "学术论文写作与期刊投稿", {
+      description_en: "Academic manuscript writing and journal submission workflow",
+      category_en: "Academic Research",
+    }),
+  ];
+  const client = await searchClient(t, new SkillSearchEngine(fixture));
+  const result = await client.callTool({
+    name: "search_skills",
+    arguments: { query: "manuscript submission", limit: 2 },
+  });
+  const text = result.content[0].text;
+  assert.match(text, /Academic manuscript writing and journal submission workflow/);
+  assert.match(text, /\[Academic Research\]/);
+  assert.match(text, /Why:/);
+  assert.doesNotMatch(text, /学术论文写作与期刊投稿/);
 });
 
 test("tool profile accepts auto/core/full and rejects unknown values", (t) => {
@@ -293,9 +331,16 @@ test("manifest boundary validates shape, duplicate names, metadata and path cont
   assert.deepEqual(loadManifest(config.manifestPath), manifest);
   assert.deepEqual(parseManifest([]), []);
   assert.deepEqual(parseManifest([entry("00_codex_skills", "Butler", { relative_path: "./" })]).length, 1);
+  assert.deepEqual(parseManifest([entry("english", "技能", {
+    description_en: "English description",
+    category_en: "English category",
+  })]).length, 1);
   for (const value of [null, {}, "manifest", [null], [[]], [{ ...manifest[0], name: " " }],
     [{ ...manifest[0], description: 12 }], [{ ...manifest[0], aliases: "alias" }],
     [{ ...manifest[0], tags: [42] }], [{ ...manifest[0], dependencies: [null] }],
+    [{ ...manifest[0], description_en: "English only" }],
+    [{ ...manifest[0], category_en: "Category only" }],
+    [{ ...manifest[0], description_en: 42, category_en: "Category" }],
     [manifest[0], { ...manifest[0], name: "RESEARCH" }]]) {
     assert.throws(() => parseManifest(value), /Manifest|manifest/);
   }

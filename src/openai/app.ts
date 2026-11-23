@@ -195,8 +195,10 @@ export function registerCodexSkillsApp(
             top: popular.map(({ entry, reads, failures, last_read_at }) => ({
               name: entry.name,
               description: entry.description,
+              ...(entry.description_en ? { description_en: entry.description_en } : {}),
               cached: loader.isCached(entry),
               category: entry.category,
+              ...(entry.category_en ? { category_en: entry.category_en } : {}),
               ...(entry.file_index?.total_bytes !== undefined
                 ? { size_bytes: entry.file_index.total_bytes }
                 : {}),
@@ -214,11 +216,14 @@ export function registerCodexSkillsApp(
         structuredContent: {
           view: "category",
           category,
+          ...(all[0]?.category_en ? { category_en: all[0].category_en } : {}),
           skills: all.map((e) => ({
             name: e.name,
             description: e.description,
+            ...(e.description_en ? { description_en: e.description_en } : {}),
             cached: loader.isCached(e),
             category: e.category,
+            ...(e.category_en ? { category_en: e.category_en } : {}),
             ...(e.file_index?.total_bytes !== undefined
               ? { size_bytes: e.file_index.total_bytes }
               : {}),
@@ -266,7 +271,9 @@ export function registerCodexSkillsApp(
             return {
               name: r.name,
               description: r.description,
+              ...(r.description_en ? { description_en: r.description_en } : {}),
               category: r.category,
+              ...(r.category_en ? { category_en: r.category_en } : {}),
               score: r.score,
               confidence: r.confidence,
               confidence_label: r.confidence_label,

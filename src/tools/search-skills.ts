@@ -46,6 +46,7 @@ export function registerSearchSkills(
           };
         }
 
+        const wantsEnglish = !/[\u3400-\u9fff]/.test(query);
         const formatted = results
           .map((r, i) => {
             const entry = searchEngine.findByName(r.name);
@@ -59,7 +60,9 @@ export function registerSearchSkills(
             const why = Array.isArray(r.match_reasons)
               ? r.match_reasons.slice(0, 3).join("、")
               : "";
-            return `${i + 1}. **${r.name}**${badge} [${r.category}]${confidence}${size}\n   ${r.description.substring(0, 140)}${r.description.length > 140 ? "..." : ""}${why ? `\n   为什么: ${why}` : ""}`;
+            const category = wantsEnglish ? r.category_en ?? r.category : r.category;
+            const description = wantsEnglish ? r.description_en ?? r.description : r.description;
+            return `${i + 1}. **${r.name}**${badge} [${category}]${confidence}${size}\n   ${description.substring(0, 140)}${description.length > 140 ? "..." : ""}${why ? `\n   ${wantsEnglish ? "Why" : "为什么"}: ${why}` : ""}`;
           })
           .join("\n\n");
 

@@ -4,12 +4,15 @@
 import { createAppTransport } from "@openai/mcp-extensions/app/transport";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
+import englishCatalog from "./catalog-en.json";
 
 type SkillCard = {
   name: string;
   description: string;
+  description_en?: string;
   cached: boolean;
   category?: string;
+  category_en?: string;
   size_bytes?: number;
   updated_at?: string;
   confidence?: number;
@@ -21,11 +24,12 @@ type SkillCard = {
   failures?: number;
   last_used_at?: number | null;
 };
-type Category = { name: string; skill_count: number };
+type Category = { name: string; name_en?: string; skill_count: number };
 type Listing = { view: "home" } | { view: "category"; category: string } | { view: "search"; query: string };
 type View = Listing | { view: "detail"; skill: SkillCard; from: Listing };
 type BrowseResult = {
-  categories?: Category[]; totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[];
+  categories?: Category[]; category?: string; category_en?: string;
+  totalSkills?: number; top?: SkillCard[]; skills?: SkillCard[];
   results?: SkillCard[]; total?: number; offset?: number; has_more?: boolean;
   butler?: string | null;
   cache_mode?: "remote" | "local";
@@ -38,6 +42,7 @@ type HostModelContext = {
 };
 type HostContext = {
   theme?: string;
+  locale?: string;
   styles?: { variables?: Record<string, string> };
   "openai/modelContext"?: HostModelContext | null;
 };
@@ -156,6 +161,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   return element as T;
 };
 const transport = createAppTransport();
+const languageZh = $<HTMLButtonElement>("lang-zh");
+const languageEn = $<HTMLButtonElement>("lang-en");
 const search = $<HTMLInputElement>("search");
 const searchHistoryPanel = $<HTMLDivElement>("search-history");
 const searchHistoryList = $<HTMLDivElement>("search-history-list");
@@ -190,6 +197,7 @@ const documentSource = $<HTMLElement>("doc-source");
 const previewCopyButton = $<HTMLButtonElement>("preview-copy");
 const PROTOCOL_VERSION = "2026-01-26";
 const LEGACY_SEARCH_HISTORY_KEY = "codex-skills.search-history.v1";
+const LANGUAGE_STORAGE_KEY = "codex-skills.language.v1";
 const SEARCH_HISTORY_LIMIT = 8;
 const SEARCH_HISTORY_VISIBLE_LIMIT = 6;
 const SEARCH_HISTORY_LABEL_MAX = 56;
@@ -198,8 +206,320 @@ const DETAIL_PREVIEW_LIMIT = 200_000;
 const EXPLORER_LIMIT = 50;
 const FILE_PREVIEW_BYTES = 128 * 1024;
 const FILE_PREVIEW_CHARS = 1_000_000;
+type UiLanguage = "zh-CN" | "en";
+type EnglishCatalog = {
+  categories: Record<string, string>;
+  skills: Record<string, { source: string; description: string }>;
+};
+
+const ENGLISH_CATALOG = englishCatalog as EnglishCatalog;
+
+function normalizeUiLanguage(value?: string | null): UiLanguage {
+  return typeof value === "string" && /^en(?:[-_]|$)/i.test(value.trim())
+    ? "en"
+    : "zh-CN";
+}
+
+function readStoredLanguage(): UiLanguage | undefined {
+  try {
+    const value = window.localStorage?.getItem(LANGUAGE_STORAGE_KEY);
+    return value === "zh-CN" || value === "en" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const storedLanguage = readStoredLanguage();
+let manualLanguagePreference = storedLanguage !== undefined;
+let uiLanguage: UiLanguage = storedLanguage ??
+  normalizeUiLanguage(typeof globalThis.navigator?.language === "string"
+    ? globalThis.navigator.language
+    : undefined);
+
+function tr(chinese: string, english: string): string {
+  return uiLanguage === "en" ? english : chinese;
+}
+
+function localizedCategory(category: string, categoryEn?: string): string {
+  return uiLanguage === "en"
+    ? categoryEn ?? categoryEnglishNames.get(category) ??
+      ENGLISH_CATALOG.categories[category] ?? category
+    : category;
+}
+
+function localizedDescription(
+  name: string,
+  description: string,
+  descriptionEn?: string,
+): string {
+  if (uiLanguage !== "en") return description;
+  if (descriptionEn?.trim()) return descriptionEn;
+  const localized = ENGLISH_CATALOG.skills[name];
+  return localized?.source.trim() === description.trim()
+    ? localized.description
+    : description;
+}
+
+function localizedMatchReason(reason: string): string {
+  if (uiLanguage !== "en") return reason;
+  return reason
+    .replace(/^交付物「(.*)」$/, "Deliverable: “$1”")
+    .replace(/^组合「(.*)」$/, "Combined query: “$1”")
+    .replace(/^关键词「(.*)」$/, "Keyword: “$1”")
+    .replace(/^完整任务描述$/, "Full task description")
+    .replace(/^与交付物直接相关$/, "Directly related to the deliverable")
+    .replace(/^推荐词匹配$/, "Recommended term match");
+}
+
+const numberLocale = () => uiLanguage === "en" ? "en-US" : "zh-CN";
+
+const setText = (id: string, value: string) => { $(id).textContent = value; };
+const setAria = (id: string, value: string) => $(id).setAttribute("aria-label", value);
+
+function applyStaticLanguage(): void {
+  document.documentElement.lang = uiLanguage;
+  document.title = tr("Codex Skills 技能库", "Codex Skills Library");
+  setAria("language-switch", tr("界面语言", "Interface language"));
+  languageZh.setAttribute("aria-pressed", String(uiLanguage === "zh-CN"));
+  languageEn.setAttribute("aria-pressed", String(uiLanguage === "en"));
+  languageZh.title = tr("切换到中文界面", "Switch to Chinese");
+  languageEn.title = tr("切换到英文界面", "Switch to English");
+
+  setText("back", tr("← 返回", "← Back"));
+  setText("eyebrow", tr("Skill atlas · on demand", "Skill atlas · on demand"));
+  setText("heading", tr("Codex Skills 技能库", "Codex Skills Library"));
+  setText("search-label", tr("搜索技能", "Search skills"));
+  search.placeholder = tr(
+    "搜索技能名或关键词，如 PPT、视频翻译、小红书…",
+    "Search by skill name or keyword, e.g. PPT, video translation, Xiaohongshu…"
+  );
+  $("search-hint").innerHTML = tr(
+    "先按<strong>关键词</strong>找到技能，打开详情确认说明，再带入当前对话。",
+    "Start with a <strong>keyword</strong>, open the details to confirm the guide, then bring the skill into this chat."
+  );
+  setText("search-history-title", tr("最近搜索", "Recent searches"));
+  setAria("search-history-list", tr("最近搜索", "Recent searches"));
+  setAria("search-history-clear", tr("清除搜索历史", "Clear search history"));
+  $("search-history-clear").title = tr("清除搜索历史", "Clear search history");
+  setAria("attached-bar", tr("已带入当前对话的技能", "Skills attached to this chat"));
+  setText("attached-title", tr("已带入当前对话", "Attached to this chat"));
+  setText("attached-clear", tr("清空全部", "Clear all"));
+  setText("hero-kicker", tr("实时技能索引 · 按需加载", "Live skill index · load on demand"));
+  $("hero-title").innerHTML = tr(
+    "站在<span>巨人的肩膀上</span>",
+    "Standing on the shoulders of <span>giants</span>"
+  );
+  setText("hero-lead", tr(
+    "把复杂任务，交给正确的技能。一个本地优先、可搜索、可审计的 Agent 能力库；找到合适的技能，查看完整说明，再把它带进当前对话。",
+    "Give complex work to the right skill. A local-first, searchable, auditable capability library: find the right skill, review its guide, then attach it to this chat."
+  ));
+  setAria("hero-stats", tr("技能库概览", "Library overview"));
+  setText("stat-total-label", tr("顶层技能", "Top-level skills"));
+  setText("stat-categories-label", tr("领域", "Domains"));
+  setText("stat-usage-label", tr("累计调用", "Total reads"));
+  setText("stat-explored-label", tr("已使用", "Skills used"));
+  setText("section-kicker", tr("Most used · 真实频次", "Most used · measured frequency"));
+  setText("section-title", tr("常用技能", "Common skills"));
+  setText("section-caption", tr(
+    "按本地读取频率排序；首次使用时，展示近期和维护活跃的技能。",
+    "Ranked by local reads. Before usage data accumulates, recently updated and active skills are shown."
+  ));
+  setText("domains-title", tr("探索全部领域", "Explore all domains"));
+  setText("domains-caption", tr(
+    "从代码、内容、科研到硬件与商业工作流。",
+    "From code, content and research to hardware and business workflows."
+  ));
+  setText("search-more", tr("加载更多搜索结果", "Load more search results"));
+
+  setText("d-clear-cache", tr("清除缓存", "Clear cache"));
+  setText("d-attach", tr("带入当前对话", "Add to chat"));
+  setAria("d-progress", tr("技能缓存进度", "Skill cache progress"));
+  setText("d-progress-title", tr(
+    "正在缓存完整技能",
+    "Caching the complete skill"
+  ));
+  setText("d-progress-percent", tr("准备中", "Preparing"));
+  setText("d-progress-meta", tr("正在读取文件清单…", "Reading the file list…"));
+  setText("detail-flow", tr(
+    "① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务",
+    "① Review the skill guide (README) → ② Add it to this chat → ③ Describe the task in your next message"
+  ));
+  setAria("detail-tabs", tr("技能详情", "Skill details"));
+  setText("tab-instructions", tr("技能说明", "Guide"));
+  setText("tab-files", tr("文件", "Files"));
+  setText("tab-sub-skills", tr("子技能", "Sub-skills"));
+  setText("doc-safe-label", tr("Markdown 安全渲染", "Safe Markdown rendering"));
+  setText("doc-toggle", tr("查看原文", "View source"));
+  setAria("d-md-rendered", tr("技能 README 或简介预览", "Skill README or overview preview"));
+  setAria("d-md", tr("技能 README 或简介原文", "Skill README or overview source"));
+  setText("nav-search-label", tr("在当前技能中搜索", "Search within this skill"));
+  navSearch.placeholder = tr("搜索文件或子技能…", "Search files or sub-skills…");
+  setAria("breadcrumb", tr("当前位置", "Current location"));
+  setAria("file-preview", tr("文件内容预览", "File content preview"));
+  setText("preview-more", tr("加载更多", "Load more"));
+  setText("preview-open-host", tr("在 Codex 中打开", "Open in Codex"));
+  setText("preview-copy", tr("复制路径", "Copy path"));
+  setText("preview-close", tr("关闭", "Close"));
+  setText("nav-prev", tr("上一页", "Previous"));
+  setText("nav-next", tr("下一页", "Next"));
+
+  setText("retry", tr("重试", "Retry"));
+  setText("footer-made-by", tr(
+    "Codex Skills 由合塑研工设计整理出品。",
+    "Codex Skills is designed and curated by HESUYANGONG."
+  ));
+  $<HTMLImageElement>("brand-logo").alt = tr(
+    "合塑研工 HESUYANGONG",
+    "HESUYANGONG",
+  );
+  setText("footer-brand-name", tr("合塑研工", "HESUYANGONG"));
+  setText("footer-copyright", tr(
+    "© 2026 合塑研工 · Local-first",
+    "© 2026 HESUYANGONG · Local-first",
+  ));
+  setText("suggest-skill", tr("＋ 补充技能告知", "＋ Suggest a skill"));
+  setText("footer-note", tr(
+    "Skill 与技能内容来源于公开开源技能市场、原作者仓库及本地自研整理。技能版权归各原作者所有，使用前请核对对应项目的许可证与使用条件。",
+    "Skills and their content come from public open-source skill markets, original author repositories, and locally curated work. Copyright remains with the original authors; verify each project's license and terms before use."
+  ));
+  setText("mcp-project-link", tr("MCP 项目", "MCP project"));
+  setText("skill-source-link", tr("技能源仓库", "Skill source repos"));
+  setAria("suggest-close", tr("关闭补充技能说明", "Close skill suggestion dialog"));
+  setText("suggest-title", tr("补充技能告知", "Suggest a skill"));
+  setText("suggest-description", tr(
+    "请将您需要增加补充的技能（有名字最好）功能描述完整发送到开发者邮箱。",
+    "Send the skill name (if known) and a complete description of what it should do to the developer email below."
+  ));
+  setText("suggest-copy", tr("复制邮箱", "Copy email"));
+}
+
+function saveLanguage(language: UiLanguage): void {
+  try {
+    window.localStorage?.setItem(LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    // Sandboxed hosts may disable storage; the live selection still applies.
+  }
+}
+
+function applyLanguage(
+  next: UiLanguage,
+  options: { persist?: boolean; reloadReadme?: boolean } = {},
+): void {
+  const changed = uiLanguage !== next;
+  uiLanguage = next;
+  if (options.persist) {
+    manualLanguagePreference = true;
+    saveLanguage(next);
+  }
+  applyStaticLanguage();
+  renderSearchHistory();
+  renderAttachedBar();
+  updateAttachButton();
+  renderViewChrome(view);
+  updateExplorerChrome();
+  updateSearchMore();
+  setInstructionMode(instructionMode);
+  if (view.view === "home" && currentHome) {
+    $("count").textContent = tr(
+      `${formatCount(currentHome.totalSkills ?? 0)} 顶层技能`,
+      `${formatCount(currentHome.totalSkills ?? 0)} top-level skills`,
+    );
+    renderHomeMeta(currentHome);
+    renderCards($("cards"), currentHome.top ?? []);
+    renderCategories(currentHome.categories ?? []);
+    if ($("retry").hidden) {
+      status(currentHome.totalSkills
+        ? tr(
+            "输入技能关键词，或从常用技能与领域开始",
+            "Enter a skill keyword, or start with a common skill or domain",
+          )
+        : tr(
+            "技能库为空，请检查服务端技能源配置",
+            "The skill library is empty; check the server's skill source configuration",
+          ));
+    }
+  } else if ((view.view === "category" || view.view === "search") && currentListing) {
+    const skills = (view.view === "search" ? currentListing.results : currentListing.skills) ?? [];
+    $("count").textContent = view.view === "search"
+      ? tr(
+          `${skills.length}/${currentListing.total ?? skills.length} 结果`,
+          `${skills.length}/${currentListing.total ?? skills.length} results`,
+        )
+      : tr(`${skills.length} 个`, `${skills.length} ${skills.length === 1 ? "skill" : "skills"}`);
+    renderCards($("cards-list"), skills);
+    $("empty").hidden = skills.length !== 0;
+    $("empty").textContent = view.view === "search"
+      ? tr(
+          "没有找到匹配技能，试试更短的关键词，例如 PPT、视频翻译、小红书。",
+          "No matching skills. Try a shorter keyword such as PPT, video translation or Xiaohongshu.",
+        )
+      : tr("该分类暂无技能。", "This category has no skills yet.");
+    if ($("retry").hidden) {
+      status(skills.length
+        ? tr("选择技能查看详情", "Select a skill to see details")
+        : tr("没有匹配结果", "No matching results"));
+    }
+  } else if (view.view === "detail") {
+    cacheBadge(lastCacheState);
+    renderBreadcrumb(explorerStates[explorerView]);
+    if (explorerStates[explorerView].pages.length) {
+      renderExplorerState(explorerStates[explorerView]);
+    }
+    if (!detailInstructions.trim() && $("retry").hidden) {
+      status(tr("加载中…", "Loading…"));
+    }
+  }
+  if (changed && options.reloadReadme !== false && view.view === "detail") {
+    void reloadCurrentReadme();
+  }
+}
+
+async function reloadCurrentReadme(): Promise<void> {
+  if (view.view !== "detail" || !detailInstructions.trim()) return;
+  const selected = view;
+  const token = ++readmeRevision;
+  const navigationRevision = revision;
+  const language = uiLanguage;
+  status(tr("正在切换技能说明…", "Switching skill guide…"));
+  try {
+    const readmeResult = await readSkillReadme(selected.skill.name);
+    if (disposed || revision !== navigationRevision || readmeRevision !== token ||
+        uiLanguage !== language || view !== selected) return;
+    renderDocument(
+      readmeResult.text.trim()
+        ? readmeResult.text
+        : fallbackSkillOverview(
+            selected.skill,
+            tr("技能包中的 README.md 为空。", "The skill package README.md is empty."),
+          ),
+      readmeResult.text.trim() ? readmeResult.path : tr("技能简介", "Skill overview"),
+    );
+    status(readmeResult.text.trim()
+      ? ""
+      : tr("README.md 为空，当前显示技能简介", "README.md is empty; showing the skill overview"));
+  } catch (error) {
+    if (disposed || revision !== navigationRevision || readmeRevision !== token ||
+        uiLanguage !== language || view !== selected) return;
+    renderDocument(
+      fallbackSkillOverview(
+        selected.skill,
+        tr(
+          "该技能没有返回可显示的 README.md（可能未提供或暂时无法读取）。",
+          "This skill did not return a displayable README.md (it may be missing or temporarily unavailable).",
+        ),
+      ),
+      tr("技能简介", "Skill overview"),
+    );
+    status(tr(
+      `README 不可用，已显示技能简介：${errorMessage(error)}`,
+      `README unavailable; showing the skill overview: ${errorMessage(error)}`,
+    ));
+  }
+}
+
 let view: View = { view: "home" };
 let revision = 0;
+let readmeRevision = 0;
 let disposed = false;
 let connected = false;
 let connecting = false;
@@ -233,6 +553,9 @@ let clearCacheArmed = false;
 let clearCacheTimer: ReturnType<typeof setTimeout> | undefined;
 let detailMaterializing = false;
 let lastCacheState: CacheSkill | undefined;
+let currentHome: BrowseResult | undefined;
+let currentListing: BrowseResult | undefined;
+const categoryEnglishNames = new Map<string, string>();
 let butlerName = "00_codex_skills";
 let suggestReturnFocus: HTMLElement | null = null;
 let hostCapabilities: HostCapabilities | undefined;
@@ -391,7 +714,10 @@ function renderSearchHistory(): void {
     chip.className = "history-chip";
     chip.textContent = searchHistoryLabel(entry.query);
     chip.title = entry.query;
-    chip.setAttribute("aria-label", `再次搜索：${entry.query}`);
+    chip.setAttribute("aria-label", tr(
+      `再次搜索：${entry.query}`,
+      `Search again: ${entry.query}`,
+    ));
     chip.style.animationDelay = `${Math.min(index, 5) * 28}ms`;
     chip.addEventListener("click", () => {
       search.value = entry.query;
@@ -402,7 +728,9 @@ function renderSearchHistory(): void {
   searchHistoryCount.textContent = String(searchHistory.length);
   const hiddenCount = Math.max(0, searchHistory.length - SEARCH_HISTORY_VISIBLE_LIMIT);
   searchHistoryMore.hidden = hiddenCount === 0;
-  searchHistoryMore.textContent = searchHistoryExpanded ? "收起" : `更多 ${hiddenCount}`;
+  searchHistoryMore.textContent = searchHistoryExpanded
+    ? tr("收起", "Show less")
+    : tr(`更多 ${hiddenCount}`, `More (${hiddenCount})`);
   searchHistoryMore.setAttribute("aria-expanded", String(searchHistoryExpanded));
   syncSearchHistoryVisibility();
 }
@@ -426,7 +754,7 @@ function clearSearchHistory(): void {
   searchHistory = [];
   searchHistoryExpanded = false;
   renderSearchHistory();
-  status("已清除搜索历史");
+  status(tr("已清除搜索历史", "Search history cleared"));
   void queueHistoryRequest(() => call<SearchHistoryResult>("skills.clearSearchHistory", {}));
 }
 
@@ -486,15 +814,20 @@ function handoffBlockSkill(block: Record<string, unknown>): string | undefined {
   }
   if (block.type === "text" && typeof block.text === "string") {
     const firstLine = block.text.split("\n", 1)[0];
-    const prefix = "## 已选择技能：";
-    return firstLine.startsWith(prefix) ? firstLine.slice(prefix.length).trim() : undefined;
+    for (const prefix of ["## 已选择技能：", "## Selected skill: "]) {
+      if (firstLine.startsWith(prefix)) return firstLine.slice(prefix.length).trim();
+    }
+    return undefined;
   }
   return undefined;
 }
 function renderAttachedBar(attached = attachedSkills()): void {
   attachedBar.hidden = attached.length === 0;
   attachedSummary.textContent = attached.length > 0
-    ? `${attached.length} 个技能 · 输入框不显示，下一条消息可用`
+    ? tr(
+        `${attached.length} 个技能 · 输入框不显示，下一条消息可用`,
+        `${attached.length} ${attached.length === 1 ? "skill" : "skills"} · hidden from the composer; available in the next message`,
+      )
     : "";
   attachedClear.disabled = attaching || attached.length === 0;
   attachedList.replaceChildren(...attached.map((skill) => {
@@ -505,8 +838,11 @@ function renderAttachedBar(attached = attachedSkills()): void {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "×";
-    remove.title = `从当前对话移除 ${skill.name}`;
-    remove.setAttribute("aria-label", `从当前对话移除 ${skill.name}`);
+    remove.title = tr(
+      `从当前对话移除 ${skill.name}`,
+      `Remove ${skill.name} from this chat`,
+    );
+    remove.setAttribute("aria-label", remove.title);
     remove.disabled = attaching;
     remove.onclick = () => void removeAttachedSkills([skill.name]);
     chip.append(name, remove);
@@ -551,17 +887,26 @@ async function removeAttachedSkills(names: string[], clearAll = false): Promise<
       content,
       structuredContent,
     }, 15_000);
-    if (result?.isError) throw new Error("宿主未接受移除请求");
+    if (result?.isError) throw new Error(tr(
+      "宿主未接受移除请求",
+      "The host rejected the removal request",
+    ));
     hostModelContext = {
       content,
       structuredContent,
       updateId: result?._meta?.["openai/modelContext"]?.updateId,
     };
     attachmentNotice(clearAll
-      ? "已清空带入技能；下一条消息不再附带这些技能。"
-      : `已从当前对话移除「${names.join("、")}」；下一条消息不再附带该技能。`);
+      ? tr(
+          "已清空带入技能；下一条消息不再附带这些技能。",
+          "All attached skills were cleared; the next message will no longer include them.",
+        )
+      : tr(
+          `已从当前对话移除「${names.join("、")}」；下一条消息不再附带该技能。`,
+          `Removed ${names.join(", ")} from this chat; the next message will no longer include this skill.`,
+        ));
   } catch (error) {
-    attachmentNotice(`移除失败：${errorMessage(error)}`);
+    attachmentNotice(tr(`移除失败：${errorMessage(error)}`, `Removal failed: ${errorMessage(error)}`));
   } finally {
     attaching = false;
     updateAttachButton();
@@ -575,27 +920,51 @@ function updateAttachButton() {
   const alreadyAttached = !!selected &&
     attached.some((item) => item.name.toLocaleLowerCase() === selected.skill.name.toLocaleLowerCase());
   attach.textContent = alreadyAttached
-    ? "更新已带入技能"
+    ? tr("更新已带入技能", "Update attached skill")
     : attached.length > 0
-      ? "再带入此技能"
-      : "带入当前对话";
+      ? tr("再带入此技能", "Add this skill too")
+      : tr("带入当前对话", "Add to chat");
   attach.disabled = attaching || !ready;
   attach.title = !connected
-    ? "技能库尚未连接"
+    ? tr("技能库尚未连接", "Library is not connected")
     : detailMaterializing
-      ? "技能正在下载并校验；完成前不会提交任何技能内容"
+      ? tr(
+          "技能正在下载并校验；完成前不会提交任何技能内容",
+          "The skill is downloading and being verified; no content will be submitted until complete",
+        )
       : !detailInstructions.trim()
-        ? "完整说明尚未加载；完成前不会提交任何技能内容"
+        ? tr(
+            "完整说明尚未加载；完成前不会提交任何技能内容",
+            "The complete guide is not loaded yet; no content will be submitted until it is ready",
+          )
         : alreadyAttached
-          ? `「${selected!.skill.name}」已在当前对话中；输入框不会显示技能，再次点击可刷新`
+          ? tr(
+              `「${selected!.skill.name}」已在当前对话中；输入框不会显示技能，再次点击可刷新`,
+              `${selected!.skill.name} is already attached; the composer stays hidden, and clicking again refreshes it`,
+            )
           : attached.length > 0
-            ? `当前已带入 ${attached.length} 个技能；输入框不会显示，点击会合并此技能`
-            : "点击后带入当前对话；输入框不会显示技能，下一条消息可直接使用";
+            ? tr(
+                `当前已带入 ${attached.length} 个技能；输入框不会显示，点击会合并此技能`,
+                `${attached.length} ${attached.length === 1 ? "skill is" : "skills are"} attached; clicking adds this skill without showing it in the composer`,
+              )
+            : tr(
+                "点击后带入当前对话；输入框不会显示技能，下一条消息可直接使用",
+                "Click to add this skill to the chat; it stays hidden in the composer and is available in your next message",
+              );
   detailFlow.textContent = attached.length > 0
-    ? `已带入 ${attached.length} 个技能；下一条消息直接描述任务即可。`
+    ? tr(
+        `已带入 ${attached.length} 个技能；下一条消息直接描述任务即可。`,
+        `${attached.length} ${attached.length === 1 ? "skill is" : "skills are"} attached; describe your task in the next message.`,
+      )
     : detailMaterializing
-      ? "正在准备完整技能；完成后点击“带入当前对话”。"
-      : "① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务";
+      ? tr(
+          "正在准备完整技能；完成后点击“带入当前对话”。",
+          "Preparing the complete skill; click “Add to chat” when it is ready.",
+        )
+      : tr(
+          "① 查看技能说明（README） → ② 带入当前对话 → ③ 在下一条消息里直接描述任务",
+          "① Review the skill guide (README) → ② Add it to this chat → ③ Describe your task in the next message",
+        );
   detailFlow.className = "detail-flow" + (attached.length > 0 ? " ready" : "");
   renderAttachedBar(attached);
 }
@@ -610,6 +979,7 @@ function cancelNavigation() {
   // Transport requests cannot be aborted. Invalidate their UI effects immediately,
   // including during the debounce interval, and reuse any in-flight fetch later.
   revision++;
+  readmeRevision++;
   explorerRequestRevision++;
   previewRevision++;
 }
@@ -625,10 +995,10 @@ function showDownloadProgress(done?: number, total?: number) {
   if (done === undefined || total === undefined || total <= 0) {
     detailProgress.className = "download-progress indeterminate";
     progressFill.style.width = "";
-    progressPercent.textContent = "准备中";
-    progressMeta.textContent = "正在读取文件清单…";
+    progressPercent.textContent = tr("准备中", "Preparing");
+    progressMeta.textContent = tr("正在读取文件清单…", "Reading the file list…");
     detailProgress.setAttribute("aria-valuenow", "0");
-    detailProgress.setAttribute("aria-valuetext", "正在准备缓存");
+    detailProgress.setAttribute("aria-valuetext", tr("正在准备缓存", "Preparing the cache"));
     return;
   }
   const safeTotal = Math.max(1, total);
@@ -637,9 +1007,15 @@ function showDownloadProgress(done?: number, total?: number) {
   detailProgress.className = "download-progress";
   progressFill.style.width = `${percent}%`;
   progressPercent.textContent = `${percent}%`;
-  progressMeta.textContent = `${safeDone.toLocaleString("zh-CN")} / ${safeTotal.toLocaleString("zh-CN")} 个文件`;
+  progressMeta.textContent = tr(
+    `${safeDone.toLocaleString(numberLocale())} / ${safeTotal.toLocaleString(numberLocale())} 个文件`,
+    `${safeDone.toLocaleString(numberLocale())} / ${safeTotal.toLocaleString(numberLocale())} files`,
+  );
   detailProgress.setAttribute("aria-valuenow", String(percent));
-  detailProgress.setAttribute("aria-valuetext", `正在缓存 ${safeDone} / ${safeTotal} 个文件`);
+  detailProgress.setAttribute("aria-valuetext", tr(
+    `正在缓存 ${safeDone} / ${safeTotal} 个文件`,
+    `Caching ${safeDone} of ${safeTotal} files`,
+  ));
 }
 function startProgressPolling(name: string, token: number) {
   stopProgressPolling();
@@ -656,7 +1032,10 @@ function startProgressPolling(name: string, token: number) {
       const progress = result.progress;
       if (!progress) return;
       showDownloadProgress(progress.done, progress.total);
-      $("d-cache-detail").textContent = "正在从源仓库下载并校验文件";
+      $("d-cache-detail").textContent = tr(
+        "正在从源仓库下载并校验文件",
+        "Downloading and verifying files from the source repository",
+      );
     } catch {
       // The resource request remains authoritative; a diagnostics-only poll
       // failure should not interrupt the download.
@@ -674,38 +1053,41 @@ const formatBytes = (bytes = 0) => {
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${bytes} B`;
 };
-const formatCount = (value = 0) => Math.max(0, value).toLocaleString("zh-CN");
+const formatCount = (value = 0) => Math.max(0, value).toLocaleString(numberLocale());
 const relativeTime = (value?: number | null) => {
-  if (!value || !Number.isFinite(value)) return "最近未使用";
+  if (!value || !Number.isFinite(value)) return tr("最近未使用", "Not used recently");
   const elapsed = Math.max(0, Date.now() - value);
   const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return "刚刚使用";
-  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 1) return tr("刚刚使用", "Used just now");
+  if (minutes < 60) return tr(`${minutes} 分钟前`, `${minutes} min ago`);
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
+  if (hours < 24) return tr(`${hours} 小时前`, `${hours} hr ago`);
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} 天前`;
+  if (days < 30) return tr(`${days} 天前`, `${days} ${days === 1 ? "day" : "days"} ago`);
   const months = Math.floor(days / 30);
-  return months < 12 ? `${months} 个月前` : `${Math.floor(months / 12)} 年前`;
+  return months < 12
+    ? tr(`${months} 个月前`, `${months} ${months === 1 ? "month" : "months"} ago`)
+    : tr(`${Math.floor(months / 12)} 年前`, `${Math.floor(months / 12)} yr ago`);
 };
 const fileTypeLabel = (mime?: string) => {
-  const labels: Record<string, string> = {
-    "application/pdf": "PDF 文档",
-    "application/msword": "Word 文档（旧版）",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word 文档",
-    "application/vnd.ms-excel": "Excel 工作簿（旧版）",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel 工作簿",
-    "application/vnd.ms-excel.sheet.macroEnabled.12": "Excel 启用宏工作簿",
-    "application/vnd.ms-powerpoint": "PowerPoint 演示文稿（旧版）",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint 演示文稿",
-    "application/vnd.openxmlformats-officedocument.presentationml.slideshow": "PowerPoint 放映文件",
-    "application/zip": "ZIP 压缩包",
-    "application/x-7z-compressed": "7z 压缩包",
-    "application/vnd.rar": "RAR 压缩包",
-    "application/x-tar": "TAR 归档",
-    "application/gzip": "Gzip 压缩文件",
+  const labels: Record<string, [string, string]> = {
+    "application/pdf": ["PDF 文档", "PDF document"],
+    "application/msword": ["Word 文档（旧版）", "Word document (legacy)"],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["Word 文档", "Word document"],
+    "application/vnd.ms-excel": ["Excel 工作簿（旧版）", "Excel workbook (legacy)"],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["Excel 工作簿", "Excel workbook"],
+    "application/vnd.ms-excel.sheet.macroEnabled.12": ["Excel 启用宏工作簿", "Macro-enabled Excel workbook"],
+    "application/vnd.ms-powerpoint": ["PowerPoint 演示文稿（旧版）", "PowerPoint presentation (legacy)"],
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ["PowerPoint 演示文稿", "PowerPoint presentation"],
+    "application/vnd.openxmlformats-officedocument.presentationml.slideshow": ["PowerPoint 放映文件", "PowerPoint slideshow"],
+    "application/zip": ["ZIP 压缩包", "ZIP archive"],
+    "application/x-7z-compressed": ["7z 压缩包", "7z archive"],
+    "application/vnd.rar": ["RAR 压缩包", "RAR archive"],
+    "application/x-tar": ["TAR 归档", "TAR archive"],
+    "application/gzip": ["Gzip 压缩文件", "Gzip archive"],
   };
-  return (mime && labels[mime]) || mime || "未知类型";
+  const label = mime ? labels[mime] : undefined;
+  return label ? tr(label[0], label[1]) : mime || tr("未知类型", "Unknown type");
 };
 const skillUri = (name: string) => `skill://${encodeURIComponent(name)}`;
 const skillFileUri = (name: string, path: string) =>
@@ -718,14 +1100,19 @@ function setInstructionMode(mode: "rendered" | "raw") {
   instructionMode = mode;
   renderedInstructions.hidden = mode !== "rendered";
   instructionRaw.hidden = mode !== "raw";
-  instructionToggle.textContent = mode === "rendered" ? "查看原文" : "返回渲染";
+  instructionToggle.textContent = mode === "rendered"
+    ? tr("查看原文", "View source")
+    : tr("返回渲染", "Rendered view");
   instructionToggle.setAttribute("aria-pressed", String(mode === "raw"));
 }
 
 function renderDocument(text: string, source: string) {
   documentSource.textContent = source;
   const previewText = text.length > DETAIL_PREVIEW_LIMIT
-    ? text.slice(0, DETAIL_PREVIEW_LIMIT) + "\n…（界面预览已截断；带入技能时会发送完整 SKILL.md）"
+    ? text.slice(0, DETAIL_PREVIEW_LIMIT) + tr(
+        "\n…（界面预览已截断；带入技能时会发送完整 SKILL.md）",
+        "\n…(preview truncated; the complete SKILL.md is sent when the skill is attached)",
+      )
     : text;
   instructionRaw.textContent = previewText;
   const displayText = previewText.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "");
@@ -755,13 +1142,16 @@ function fallbackSkillOverview(skill: SkillCard, note: string): string {
   return [
     `# ${skill.name}`,
     "",
-    skill.description,
+    localizedDescription(skill.name, skill.description, skill.description_en),
     "",
-    ...(skill.category ? [`**分类：** ${skill.category}`] : []),
+    ...(skill.category ? [tr(`**分类：** ${skill.category}`, `**Category:** ${skill.category}`)] : []),
     "",
     "> " + note,
     "",
-    "可在“文件”页查看该技能的 `SKILL.md`、脚本、参考资料和其他资源。",
+    tr(
+      "可在“文件”页查看该技能的 `SKILL.md`、脚本、参考资料和其他资源。",
+      "Use the Files tab to browse this skill's `SKILL.md`, scripts, references and other resources.",
+    ),
   ].join("\n");
 }
 
@@ -804,12 +1194,15 @@ function resolveRelativeMarkdownTarget(href: string): RelativeMarkdownTarget | n
 function openMarkdownLink(href: string) {
   if (/^(?:https?:|mailto:)/i.test(href)) {
     const opened = window.open(href, "_blank", "noopener,noreferrer");
-    if (!opened) status(`浏览器阻止了外部链接，可复制地址访问：${href}`);
+    if (!opened) status(tr(
+      `浏览器阻止了外部链接，可复制地址访问：${href}`,
+      `The browser blocked the external link. Copy this address to open it: ${href}`,
+    ));
     return;
   }
   const target = resolveRelativeMarkdownTarget(href);
   if (!target) {
-    status("已阻止不支持的链接");
+    status(tr("已阻止不支持的链接", "Blocked an unsupported link"));
     return;
   }
   if (target.fragment && !target.path) {
@@ -818,7 +1211,10 @@ function openMarkdownLink(href: string) {
     })();
     const element = document.getElementById(decoded);
     element?.scrollIntoView?.({ block: "start", behavior: "smooth" });
-    if (!element) status("当前说明中没有找到这个段落锚点");
+    if (!element) status(tr(
+      "当前说明中没有找到这个段落锚点",
+      "This section anchor was not found in the current guide",
+    ));
     return;
   }
   if (target.outside > 0) {
@@ -826,12 +1222,19 @@ function openMarkdownLink(href: string) {
       const destination = view.view === "detail" ? view.from : { view: "home" as const };
       void navigate({
         view: "detail",
-        skill: { name: butlerName, description: "技能库全局路由入口", cached: false },
+        skill: {
+          name: butlerName,
+          description: tr("技能库全局路由入口", "Global skill-library router"),
+          cached: false,
+        },
         from: destination,
       });
       return;
     }
-    status("该链接指向当前技能包之外，已阻止界面跳转");
+    status(tr(
+      "该链接指向当前技能包之外，已阻止界面跳转",
+      "This link points outside the current skill package, so navigation was blocked",
+    ));
     return;
   }
   setDetailTab("files");
@@ -849,9 +1252,13 @@ renderedInstructions.addEventListener("click", (event) => {
 async function call<T>(name: string, args: Record<string, unknown>): Promise<T> {
   const result = await transport.request<ToolResult<T>>("tools/call", { name, arguments: args }, 60_000);
   if (result?.isError) {
-    throw new Error(result.content?.find((item) => item.type === "text")?.text || `工具 ${name} 调用失败`);
+    throw new Error(result.content?.find((item) => item.type === "text")?.text ||
+      tr(`工具 ${name} 调用失败`, `Tool ${name} failed`));
   }
-  if (!result?.structuredContent) throw new Error("服务未返回结构化数据");
+  if (!result?.structuredContent) throw new Error(tr(
+    "服务未返回结构化数据",
+    "The service returned no structured data",
+  ));
   return result.structuredContent;
 }
 
@@ -871,7 +1278,10 @@ async function readResource(
     ...(Object.keys(resourceMeta).length ? { _meta: resourceMeta } : {}),
   }, 90_000);
   const item = result?.contents?.find((entry) => typeof entry.text === "string");
-  if (typeof item?.text !== "string") throw new Error("服务未返回文件文本");
+  if (typeof item?.text !== "string") throw new Error(tr(
+    "服务未返回文件文本",
+    "The service returned no file text",
+  ));
   return { text: item.text, meta: item._meta ?? {} };
 }
 
@@ -895,23 +1305,40 @@ const CHINESE_README_PATTERNS: readonly RegExp[] = [
   /^readme中文\.md$/i,
 ];
 
-const ENGLISH_README_PATTERNS: readonly RegExp[] = [
-  /^readme\.md$/i,
-  /^readme[._-]en\.md$/i,
+const EXPLICIT_ENGLISH_README_PATTERNS: readonly RegExp[] = [
+  /^readme[._-]en(?:[._-](?:us|gb))?\.md$/i,
+  /^readme[._-]english\.md$/i,
+  /^readme[._-]英文\.md$/i,
 ];
 
-function preferredReadmePath(paths: readonly string[]): string | undefined {
+const NEUTRAL_README_PATTERNS: readonly RegExp[] = [/^readme\.md$/i];
+
+function preferredReadmePath(
+  paths: readonly string[],
+  language: UiLanguage,
+): string | undefined {
   const candidates = [];
+  const groups = language === "en"
+    ? [
+        { patterns: EXPLICIT_ENGLISH_README_PATTERNS, priority: 0 },
+        { patterns: NEUTRAL_README_PATTERNS, priority: 1 },
+        { patterns: CHINESE_README_PATTERNS, priority: 2 },
+      ]
+    : [
+        { patterns: CHINESE_README_PATTERNS, priority: 0 },
+        { patterns: NEUTRAL_README_PATTERNS, priority: 1 },
+        { patterns: EXPLICIT_ENGLISH_README_PATTERNS, priority: 2 },
+      ];
   for (const rawPath of paths) {
     const path = rawPath.replace(/\\/g, "/").replace(/^\.?\//, "").replace(/\/+$/, "");
     if (!path) continue;
     const name = path.slice(path.lastIndexOf("/") + 1);
-    for (const [language, patterns] of [CHINESE_README_PATTERNS, ENGLISH_README_PATTERNS].entries()) {
+    for (const { patterns, priority } of groups) {
       const variant = patterns.findIndex((pattern) => pattern.test(name));
       if (variant < 0) continue;
       candidates.push({
         path,
-        language,
+        priority,
         variant,
         depth: path.split("/").length - 1,
       });
@@ -919,7 +1346,7 @@ function preferredReadmePath(paths: readonly string[]): string | undefined {
     }
   }
   candidates.sort((a, b) =>
-    a.language - b.language ||
+    a.priority - b.priority ||
     a.depth - b.depth ||
     a.variant - b.variant ||
     a.path.localeCompare(b.path, "en", { sensitivity: "base" })
@@ -947,7 +1374,7 @@ async function preferredSkillReadmePath(skillName: string): Promise<string> {
       if (!result.next_cursor) break;
       cursor = result.next_cursor;
     }
-    return preferredReadmePath(paths) ?? "README.md";
+    return preferredReadmePath(paths, uiLanguage) ?? "README.md";
   } catch {
     return "README.md";
   }
@@ -967,7 +1394,7 @@ async function readSkillReadme(skillName: string): Promise<{
   const selectedPath = await preferredSkillReadmePath(skillName);
   const meta = {
     "codex-skills/display": "readme",
-    "codex-skills/preferred-language": "zh-CN",
+    "codex-skills/preferred-language": uiLanguage,
   };
   let result: ResourceReadResult;
   let requestedPath = selectedPath;
@@ -988,28 +1415,50 @@ function card(skill: SkillCard): HTMLButtonElement {
   const button = document.createElement("button");
   button.className = "card";
   const title = document.createElement("b"); title.textContent = skill.name;
-  const description = document.createElement("p"); description.textContent = skill.description;
+  const description = document.createElement("p");
+  description.textContent = localizedDescription(
+    skill.name,
+    skill.description,
+    skill.description_en,
+  );
   const meta = document.createElement("div"); meta.className = "card-meta";
   const badge = document.createElement("span");
   badge.className = "badge" + (skill.cached ? " on" : "");
-  badge.textContent = skill.cached ? "已缓存" : "按需下载";
+  badge.textContent = skill.cached
+    ? tr("已缓存", "Cached")
+    : tr("按需下载", "On demand");
   const usage = document.createElement("span");
   usage.className = "usage-chip" + ((skill.reads ?? 0) >= 3 ? " hot" : "");
   usage.textContent = (skill.reads ?? 0) > 0
-    ? `调用 ${formatCount(skill.reads)} 次 · ${relativeTime(skill.last_used_at)}`
-    : "尚未调用";
+    ? tr(
+        `调用 ${formatCount(skill.reads)} 次 · ${relativeTime(skill.last_used_at)}`,
+        `${formatCount(skill.reads)} ${skill.reads === 1 ? "read" : "reads"} · ${relativeTime(skill.last_used_at)}`,
+      )
+    : tr("尚未调用", "Not used yet");
   usage.title = (skill.reads ?? 0) > 0
-    ? `累计调用 ${skill.reads} 次${skill.failures ? `，失败 ${skill.failures} 次` : ""}`
-    : "这张卡来自近期更新或推荐排序";
+    ? tr(
+        `累计调用 ${skill.reads} 次${skill.failures ? `，失败 ${skill.failures} 次` : ""}`,
+        `${skill.reads} total ${skill.reads === 1 ? "read" : "reads"}${skill.failures ? `, ${skill.failures} ${skill.failures === 1 ? "failure" : "failures"}` : ""}`,
+      )
+    : tr("这张卡来自近期更新或推荐排序", "This card comes from recent updates or recommendation ranking");
   const category = skill.category
-    ? (() => { const chip = document.createElement("span"); chip.className = "meta-chip"; chip.textContent = skill.category; return chip; })()
+    ? (() => {
+        const chip = document.createElement("span");
+        chip.className = "meta-chip";
+        chip.textContent = localizedCategory(skill.category, skill.category_en);
+        return chip;
+      })()
     : undefined;
   const size = skill.size_bytes !== undefined
     ? (() => {
         const chip = document.createElement("span");
         chip.className = "meta-chip";
-        chip.textContent = skill.size_bytes > 0 ? formatBytes(skill.size_bytes) : "体积未知";
-        chip.title = skill.size_bytes > 0 ? "完整技能下载体积" : "源清单还没有提供体积";
+        chip.textContent = skill.size_bytes > 0
+          ? formatBytes(skill.size_bytes)
+          : tr("体积未知", "Size unknown");
+        chip.title = skill.size_bytes > 0
+          ? tr("完整技能下载体积", "Complete skill download size")
+          : tr("源清单还没有提供体积", "The source manifest does not provide a size yet");
         return chip;
       })()
     : undefined;
@@ -1017,8 +1466,12 @@ function card(skill: SkillCard): HTMLButtonElement {
     ? (() => {
         const chip = document.createElement("span");
         chip.className = "meta-chip match";
-        chip.textContent = `匹配：${skill.match_reasons.slice(0, 2).join("、")}`;
-        chip.title = skill.match_reasons.join("、");
+        const reasons = skill.match_reasons.map(localizedMatchReason);
+        chip.textContent = tr(
+          `匹配：${reasons.slice(0, 2).join("、")}`,
+          `Match: ${reasons.slice(0, 2).join(", ")}`,
+        );
+        chip.title = reasons.join(tr("、", ", "));
         return chip;
       })()
     : undefined;
@@ -1044,9 +1497,14 @@ function renderCategories(categories: Category[]) {
     const marker = document.createElement("span"); marker.className = "cat-index";
     marker.textContent = String(index + 1).padStart(2, "0");
     const copy = document.createElement("span"); copy.className = "cat-copy";
-    const name = document.createElement("b"); name.textContent = category.name;
+    const name = document.createElement("b");
+    if (category.name_en) categoryEnglishNames.set(category.name, category.name_en);
+    name.textContent = localizedCategory(category.name, category.name_en);
     const count = document.createElement("span"); count.className = "muted";
-    count.textContent = `${formatCount(category.skill_count)} 个`;
+    count.textContent = tr(
+      `${formatCount(category.skill_count)} 个`,
+      `${formatCount(category.skill_count)} ${category.skill_count === 1 ? "skill" : "skills"}`,
+    );
     const arrow = document.createElement("span"); arrow.className = "cat-arrow"; arrow.textContent = "→";
     copy.append(name, count);
     button.append(marker, copy, arrow);
@@ -1061,18 +1519,35 @@ function renderHomeMeta(data: BrowseResult) {
   const total = data.totalSkills ?? 0;
   const categories = data.categories?.length ?? 0;
   const usage = data.usage ?? { total_reads: 0, used_skills: 0, total_failures: 0 };
-  $("hero-kicker").textContent = `${formatCount(total)} 个顶层技能 · 实时索引`;
+  $("hero-kicker").textContent = tr(
+    `${formatCount(total)} 个顶层技能 · 实时索引`,
+    `${formatCount(total)} top-level ${total === 1 ? "skill" : "skills"} · live index`,
+  );
   $("stat-total").textContent = formatCount(total);
   $("stat-categories").textContent = formatCount(categories);
   $("stat-usage").textContent = formatCount(usage.total_reads);
   $("stat-explored").textContent = formatCount(usage.used_skills);
-  $("section-title").textContent = usage.total_reads > 0 ? "常用技能" : "近期值得探索";
+  $("section-kicker").textContent = usage.total_reads > 0
+    ? tr("Most used · 真实频次", "Most used · measured frequency")
+    : tr("Explore · 近期更新", "Explore · recent updates");
+  $("section-title").textContent = usage.total_reads > 0
+    ? tr("常用技能", "Common skills")
+    : tr("近期值得探索", "Worth exploring");
   $("section-caption").textContent = usage.total_reads > 0
-    ? "按本地读取频率排序，并标出真实调用次数与最近使用时间。"
-    : "还没有足够的本地调用记录；先展示近期更新与推荐入口。";
+    ? tr(
+        "按本地读取频率排序，并标出真实调用次数与最近使用时间。",
+        "Ranked by local reads, with real usage counts and the most recent use time.",
+      )
+    : tr(
+        "还没有足够的本地调用记录；先展示近期更新与推荐入口。",
+        "There is not enough local usage data yet; recently updated and recommended entries are shown first.",
+      );
   $("usage-summary").textContent = usage.total_reads > 0
-    ? `已使用 ${formatCount(usage.used_skills)} 个 · 共 ${formatCount(usage.total_reads)} 次`
-    : "等待首次调用";
+    ? tr(
+        `已使用 ${formatCount(usage.used_skills)} 个 · 共 ${formatCount(usage.total_reads)} 次`,
+        `${formatCount(usage.used_skills)} ${usage.used_skills === 1 ? "skill used" : "skills used"} · ${formatCount(usage.total_reads)} total ${usage.total_reads === 1 ? "read" : "reads"}`,
+      )
+    : tr("等待首次调用", "Waiting for first use");
   updateClearCacheButton();
 }
 
@@ -1082,8 +1557,8 @@ function updateSearchMore() {
   searchMore.hidden = view.view !== "search" || !currentSearch?.has_more;
   searchMore.disabled = searchMoreLoading;
   searchMore.textContent = searchMoreLoading
-    ? "正在加载…"
-    : `加载更多搜索结果（${shown}/${total}）`;
+    ? tr("正在加载…", "Loading…")
+    : tr(`加载更多搜索结果（${shown}/${total}）`, `Load more search results (${shown}/${total})`);
 }
 
 function syncPreviewHostButton() {
@@ -1116,7 +1591,9 @@ function cacheBadge(state?: CacheSkill) {
   revisionNote.hidden = true;
   if (!state || !state.found) {
     detailLocalPath = "";
-    badge.textContent = state ? "技能不存在" : "检查缓存…";
+    badge.textContent = state
+      ? tr("技能不存在", "Skill not found")
+      : tr("检查缓存…", "Checking cache…");
     badge.className = "badge warn";
     syncPreviewHostButton();
     updateClearCacheButton();
@@ -1124,9 +1601,12 @@ function cacheBadge(state?: CacheSkill) {
   }
   if (state.root) {
     detailLocalPath = "";
-    badge.textContent = "全局入口";
+    badge.textContent = tr("全局入口", "Global entry");
     badge.className = "badge router";
-    detail.textContent = "直接读取源仓库根 SKILL.md · 随源更新";
+    detail.textContent = tr(
+      "直接读取源仓库根 SKILL.md · 随源更新",
+      "Reads the source repository's root SKILL.md directly · tracks upstream",
+    );
     syncPreviewHostButton();
     updateClearCacheButton();
     return;
@@ -1135,22 +1615,37 @@ function cacheBadge(state?: CacheSkill) {
   const count = state.files_total ?? 0;
   const size = formatBytes(state.size_bytes ?? 0);
   if (state.complete) {
-    badge.textContent = "已完整缓存";
+    badge.textContent = tr("已完整缓存", "Fully cached");
     badge.className = "badge on";
-    detail.textContent = `${count} 个文件 · ${size} · 可执行`;
+    detail.textContent = tr(
+      `${count} 个文件 · ${size} · 可执行`,
+      `${count} ${count === 1 ? "file" : "files"} · ${size} · ready to run`,
+    );
   } else if (state.cached && state.catalog_current === false) {
-    badge.textContent = "缓存版本待验证";
+    badge.textContent = tr("缓存版本待验证", "Cache needs verification");
     badge.className = "badge warn";
-    detail.textContent = `${count} 个文件 · ${size} · 源版本检查失败`;
-    revisionNote.textContent = "当前显示的是本地缓存版本；联网重试后才能确认它和源技能一致。";
+    detail.textContent = tr(
+      `${count} 个文件 · ${size} · 源版本检查失败`,
+      `${count} ${count === 1 ? "file" : "files"} · ${size} · source revision check failed`,
+    );
+    revisionNote.textContent = tr(
+      "当前显示的是本地缓存版本；联网重试后才能确认它和源技能一致。",
+      "Showing the local cached revision. Retry while online to confirm it matches the source skill.",
+    );
     revisionNote.hidden = false;
   } else if (state.cached) {
-    badge.textContent = "部分缓存";
+    badge.textContent = tr("部分缓存", "Partially cached");
     badge.className = "badge warn";
-    detail.textContent = `缺少 ${state.files_missing_count ?? 0}/${count} 个文件`;
+    detail.textContent = tr(
+      `缺少 ${state.files_missing_count ?? 0}/${count} 个文件`,
+      `${state.files_missing_count ?? 0} of ${count} files missing`,
+    );
   } else {
-    badge.textContent = "尚未缓存";
-    detail.textContent = "读取说明时会下载完整技能（含脚本与资源）";
+    badge.textContent = tr("尚未缓存", "Not cached");
+    detail.textContent = tr(
+      "读取说明时会下载完整技能（含脚本与资源）",
+      "Reading the guide downloads the complete skill, including scripts and resources",
+    );
   }
   syncPreviewHostButton();
   updateClearCacheButton();
@@ -1161,7 +1656,7 @@ function resetClearCacheButton() {
   clearCacheTimer = undefined;
   clearCacheArmed = false;
   clearCacheButton.className = "";
-  clearCacheButton.textContent = "清除缓存";
+  clearCacheButton.textContent = tr("清除缓存", "Clear cache");
   clearCacheButton.setAttribute("aria-label", "");
 }
 
@@ -1169,7 +1664,7 @@ function updateClearCacheButton() {
   if (clearCacheBusy) {
     clearCacheButton.hidden = cacheMode === "local";
     clearCacheButton.disabled = true;
-    clearCacheButton.textContent = "正在清除…";
+    clearCacheButton.textContent = tr("正在清除…", "Clearing…");
     return;
   }
   const armed = clearCacheArmed;
@@ -1184,13 +1679,21 @@ function updateClearCacheButton() {
   const canClear = !!lastCacheState?.found && !!lastCacheState.cached && !detailMaterializing;
   clearCacheButton.disabled = !canClear;
   clearCacheButton.title = canClear
-    ? "删除这个技能已下载的文件，释放本地空间"
-    : detailMaterializing ? "技能正在下载，完成后可清除" : "当前没有可清除的技能缓存";
+    ? tr(
+        "删除这个技能已下载的文件，释放本地空间",
+        "Delete this skill's downloaded files and free local space",
+      )
+    : detailMaterializing
+      ? tr("技能正在下载，完成后可清除", "The skill is downloading and can be cleared when complete")
+      : tr("当前没有可清除的技能缓存", "There is no skill cache to clear");
   if (armed && canClear) {
     clearCacheArmed = true;
     clearCacheButton.className = "armed";
-    clearCacheButton.textContent = "再次点击确认";
-    clearCacheButton.setAttribute("aria-label", "再次点击确认清除当前技能缓存");
+    clearCacheButton.textContent = tr("再次点击确认", "Click again to confirm");
+    clearCacheButton.setAttribute("aria-label", tr(
+      "再次点击确认清除当前技能缓存",
+      "Click again to confirm clearing the current skill cache",
+    ));
   }
 }
 
@@ -1203,7 +1706,10 @@ async function refreshCacheStatus(name: string, token: number) {
     }
   } catch {
     if (!disposed && revision === token && cacheStatusRevision === statusToken) {
-      $("d-cache-detail").textContent = "缓存状态暂时不可用";
+      $("d-cache-detail").textContent = tr(
+        "缓存状态暂时不可用",
+        "Cache status is temporarily unavailable",
+      );
     }
   }
 }
@@ -1220,11 +1726,16 @@ function markMaterialized() {
   };
   cacheStatusRevision++;
   const badge = $("d-cached");
-  badge.textContent = rootSkill ? "全局入口" : "已完整缓存";
+  badge.textContent = rootSkill
+    ? tr("全局入口", "Global entry")
+    : tr("已完整缓存", "Fully cached");
   badge.className = rootSkill ? "badge router" : "badge on";
   $("d-cache-detail").textContent = rootSkill
-    ? "直接读取源仓库根 SKILL.md · 随源更新"
-    : "正在读取文件统计…";
+    ? tr(
+        "直接读取源仓库根 SKILL.md · 随源更新",
+        "Reads the source repository's root SKILL.md directly · tracks upstream",
+      )
+    : tr("正在读取文件统计…", "Reading file statistics…");
   $("d-revision-note").hidden = true;
   detailProgress.hidden = true;
   stopProgressPolling();
@@ -1285,15 +1796,21 @@ function setDetailTab(tab: DetailTab, load = true) {
 
 function updateExplorerChrome() {
   const subSkills = explorerView === "sub_skills";
-  $("nav-search-label").textContent = subSkills ? "搜索全部子技能" : "搜索当前目录文件";
-  navSearch.placeholder = subSkills ? "搜索子技能名称、路径或描述…" : "搜索文件名或路径…";
+  $("nav-search-label").textContent = subSkills
+    ? tr("搜索全部子技能", "Search all sub-skills")
+    : tr("搜索当前目录文件", "Search files in this folder");
+  navSearch.placeholder = subSkills
+    ? tr("搜索子技能名称、路径或描述…", "Search sub-skill names, paths or descriptions…")
+    : tr("搜索文件名或路径…", "Search file names or paths…");
 }
 
 function renderBreadcrumb(state: ExplorerState) {
   const host = $("breadcrumb");
   const fragments: Node[] = [];
   const root = document.createElement("button");
-  root.textContent = explorerView === "sub_skills" ? "全部子技能" : "技能根目录";
+  root.textContent = explorerView === "sub_skills"
+    ? tr("全部子技能", "All sub-skills")
+    : tr("技能根目录", "Skill root");
   root.onclick = () => changeExplorerPath("");
   fragments.push(root);
   let cursor = "";
@@ -1341,7 +1858,7 @@ function renderExplorerState(state: ExplorerState) {
   const empty = $("nav-empty");
   if (!page) {
     list.replaceChildren();
-    empty.textContent = "还没有可显示的内容。";
+    empty.textContent = tr("还没有可显示的内容。", "Nothing to show yet.");
     empty.hidden = false;
     $("nav-count").textContent = "";
     $("nav-page-info").textContent = "";
@@ -1350,17 +1867,32 @@ function renderExplorerState(state: ExplorerState) {
     return;
   }
   list.replaceChildren(...page.entries.map(navigationRow));
-  const label = explorerView === "sub_skills" ? "个子技能" : "个文件项";
-  $("nav-count").textContent = `${page.matched} ${label}`;
+  $("nav-count").textContent = explorerView === "sub_skills"
+    ? tr(
+        `${page.matched} 个子技能`,
+        `${page.matched} ${page.matched === 1 ? "sub-skill" : "sub-skills"}`,
+      )
+    : tr(
+        `${page.matched} 个文件项`,
+        `${page.matched} ${page.matched === 1 ? "file item" : "file items"}`,
+      );
   empty.hidden = page.entries.length !== 0;
   empty.textContent = page.query
-    ? `没有找到匹配“${page.query}”的内容。`
-    : explorerView === "sub_skills" ? "这个技能没有嵌套子技能。" : "这个目录没有可显示的文件。";
+    ? tr(
+        `没有找到匹配“${page.query}”的内容。`,
+        `No results matched “${page.query}”.`,
+      )
+    : explorerView === "sub_skills"
+      ? tr("这个技能没有嵌套子技能。", "This skill has no nested sub-skills.")
+      : tr("这个目录没有可显示的文件。", "There are no files to show in this folder.");
   const first = page.returned ? page.offset + 1 : 0;
   const last = page.offset + page.returned;
   $("nav-page-info").textContent = page.matched
-    ? `${first}–${last} / 共 ${page.matched} 项`
-    : "0 项";
+    ? tr(
+        `${first}–${last} / 共 ${page.matched} 项`,
+        `${first}–${last} of ${page.matched}`,
+      )
+    : tr("0 项", "0 items");
   $("nav-prev").hidden = state.index === 0;
   $("nav-next").hidden = !page.next_cursor;
 }
@@ -1368,9 +1900,9 @@ function renderExplorerState(state: ExplorerState) {
 function showExplorerLoading() {
   $("nav-list").replaceChildren();
   const empty = $("nav-empty");
-  empty.textContent = "正在读取技能目录…";
+  empty.textContent = tr("正在读取技能目录…", "Reading the skill directory…");
   empty.hidden = false;
-  $("nav-page-info").textContent = "加载中…";
+  $("nav-page-info").textContent = tr("加载中…", "Loading…");
   $("nav-prev").hidden = true;
   $("nav-next").hidden = true;
 }
@@ -1412,7 +1944,10 @@ async function loadExplorer(reset: boolean) {
     if (!reset && state.pages.length > 1) state.pages.pop();
     state.index = Math.max(0, state.pages.length - 1);
     renderExplorerState(state);
-    $("nav-empty").textContent = `目录读取失败：${errorMessage(error)}`;
+    $("nav-empty").textContent = tr(
+      `目录读取失败：${errorMessage(error)}`,
+      `Could not read the directory: ${errorMessage(error)}`,
+    );
     $("nav-empty").hidden = false;
   } finally {
     if (sameView()) state.loading = false;
@@ -1452,10 +1987,12 @@ async function openFile(path: string) {
   previewText = "";
   previewNextOffset = undefined;
   previewCopyPath = detailLocalPath ? `${detailLocalPath.replace(/[\\/]$/, "")}/${path}` : path;
-  previewCopyButton.textContent = detailLocalPath ? "复制完整路径" : "复制路径";
+  previewCopyButton.textContent = detailLocalPath
+    ? tr("复制完整路径", "Copy full path")
+    : tr("复制路径", "Copy path");
   $("preview-path").textContent = path;
   previewContent.hidden = false;
-  previewContent.textContent = "正在读取文件…";
+  previewContent.textContent = tr("正在读取文件…", "Reading file…");
   previewImage.src = "";
   previewImage.alt = "";
   previewImageWrap.hidden = true;
@@ -1501,8 +2038,16 @@ async function loadFileChunk(path: string, offset: number, append: boolean) {
     const combined = (append ? previewText : "") + result.content;
     const limited = combined.length > FILE_PREVIEW_CHARS;
     previewText = result.binary
-      ? `这是 ${fileTypeLabel(result.mime_type)}（${formatBytes(result.size_bytes)}）。\n\nApp 不解析这类内部字节。请点击“在 Codex 中打开”，交给宿主查看器或对应技能处理；也可复制完整路径手动打开。`
-      : limited ? combined.slice(0, FILE_PREVIEW_CHARS) + "\n…（界面预览已达到 1M 字符上限）" : combined;
+      ? tr(
+          `这是 ${fileTypeLabel(result.mime_type)}（${formatBytes(result.size_bytes)}）。\n\nApp 不解析这类内部字节。请点击“在 Codex 中打开”，交给宿主查看器或对应技能处理；也可复制完整路径手动打开。`,
+          `This is ${fileTypeLabel(result.mime_type)} (${formatBytes(result.size_bytes)}).\n\nThe app does not parse this file's internal bytes. Click “Open in Codex” to use the host viewer or an appropriate skill, or copy the full path and open it locally.`,
+        )
+      : limited
+        ? combined.slice(0, FILE_PREVIEW_CHARS) + tr(
+            "\n…（界面预览已达到 1M 字符上限）",
+            "\n…(preview reached the 1M character limit)",
+          )
+        : combined;
     previewNextOffset = result.binary || limited ? undefined : result.next_offset;
     previewContent.hidden = false;
     previewImageWrap.hidden = true;
@@ -1512,8 +2057,17 @@ async function loadFileChunk(path: string, offset: number, append: boolean) {
     if (disposed || view !== selected || previewRevision !== token) return;
     previewImageWrap.hidden = true;
     previewContent.hidden = false;
-    if (append) previewContent.textContent = previewText + `\n\n读取下一段失败：${errorMessage(error)}`;
-    else previewContent.textContent = `读取失败：${errorMessage(error)}`;
+    if (append) {
+      previewContent.textContent = previewText + tr(
+        `\n\n读取下一段失败：${errorMessage(error)}`,
+        `\n\nCould not read the next chunk: ${errorMessage(error)}`,
+      );
+    } else {
+      previewContent.textContent = tr(
+        `读取失败：${errorMessage(error)}`,
+        `Read failed: ${errorMessage(error)}`,
+      );
+    }
     previewMore.hidden = previewNextOffset === undefined;
   } finally {
     if (!disposed && view === selected && previewRevision === token) previewMore.disabled = false;
@@ -1538,6 +2092,28 @@ function closePreview() {
   previewMore.hidden = true;
 }
 
+function renderViewChrome(next: View) {
+  const heading = next.view === "category"
+    ? localizedCategory(next.category, currentListing?.category_en)
+    : next.view === "search"
+      ? tr("搜索结果", "Search results")
+      : next.view === "detail"
+        ? next.skill.name
+        : tr("Codex Skills 技能库", "Codex Skills Library");
+  $("heading").textContent = heading;
+  $("eyebrow").textContent = next.view === "category"
+    ? tr("Library · category", "Library · category")
+    : next.view === "search"
+      ? tr("Library · search result", "Library · search results")
+      : next.view === "detail"
+        ? tr("Skill dossier", "Skill details")
+        : tr("Skill atlas · on demand", "Skill atlas · on demand");
+  document.title = heading === tr("Codex Skills 技能库", "Codex Skills Library")
+    ? heading
+    : `${heading} · ${tr("Codex Skills 技能库", "Codex Skills Library")}`;
+  setText("back", tr("← 返回", "← Back"));
+}
+
 function showView(next: View) {
   const previous = view;
   view = next;
@@ -1548,12 +2124,7 @@ function showView(next: View) {
   $("search-zone").hidden = next.view === "detail";
   $("search-hint").hidden = next.view === "detail";
   $("content").setAttribute("data-view", next.view);
-  $("heading").textContent = next.view === "category" ? next.category :
-    next.view === "search" ? "搜索结果" :
-    next.view === "detail" ? next.skill.name : "Codex Skills 技能库";
-  $("eyebrow").textContent = next.view === "category" ? "Library · category" :
-    next.view === "search" ? "Library · search result" :
-    next.view === "detail" ? "Skill dossier" : "Skill atlas · on demand";
+  renderViewChrome(next);
   $("count").textContent = "";
   $("empty").hidden = true;
   if (next.view !== "detail") search.value = next.view === "search" ? next.query : "";
@@ -1565,9 +2136,12 @@ function showView(next: View) {
     detailMaterializing = !rootSkill && !next.skill.cached;
     detailInstructions = "";
     cacheBadge();
-    documentSource.textContent = "加载中";
-    instructionRaw.textContent = "正在读取技能简介与 README…";
-    renderedInstructions.textContent = "正在读取技能简介与 README…";
+    documentSource.textContent = tr("加载中", "Loading");
+    instructionRaw.textContent = tr(
+      "正在读取技能简介与 README…",
+      "Reading the skill overview and README…",
+    );
+    renderedInstructions.textContent = instructionRaw.textContent;
     setInstructionMode("rendered");
     $("d-cache-detail").textContent = "";
     if (next.skill.cached || rootSkill) detailProgress.hidden = true;
@@ -1596,7 +2170,9 @@ async function navigate(next: View) {
   const current = () => !disposed && revision === token;
   showView(next);
   busy(true);
-  status(next.view === "search" ? "搜索中…" : "加载中…");
+  status(next.view === "search"
+    ? tr("搜索中…", "Searching…")
+    : tr("加载中…", "Loading…"));
   try {
     if (next.view === "detail") {
       void refreshCacheStatus(next.skill.name, token);
@@ -1610,31 +2186,49 @@ async function navigate(next: View) {
       if (!current()) return;
       detailInstructions = instructions;
       renderDocument(
-        fallbackSkillOverview(next.skill, "正在读取技能包中的 README.md…"),
-        "技能简介",
+        fallbackSkillOverview(
+          next.skill,
+          tr("正在读取技能包中的 README.md…", "Reading the skill package README.md…"),
+        ),
+        tr("技能简介", "Skill overview"),
       );
       markMaterialized();
-      status("技能已缓存，正在读取 README…");
+      status(tr("技能已缓存，正在读取 README…", "Skill cached; reading README…"));
+      const currentReadmeRevision = ++readmeRevision;
+      const readmeLanguage = uiLanguage;
       try {
         const readmeResult = await readSkillReadme(next.skill.name);
-        if (!current()) return;
+        if (!current() || readmeRevision !== currentReadmeRevision ||
+            uiLanguage !== readmeLanguage) return;
         renderDocument(
           readmeResult.text.trim()
             ? readmeResult.text
-            : fallbackSkillOverview(next.skill, "技能包中的 README.md 为空。"),
-          readmeResult.text.trim() ? readmeResult.path : "技能简介",
+            : fallbackSkillOverview(
+                next.skill,
+                tr("技能包中的 README.md 为空。", "The skill package README.md is empty."),
+              ),
+          readmeResult.text.trim() ? readmeResult.path : tr("技能简介", "Skill overview"),
         );
-        status(readmeResult.text.trim() ? "" : "README.md 为空，当前显示技能简介");
+        status(readmeResult.text.trim()
+          ? ""
+          : tr("README.md 为空，当前显示技能简介", "README.md is empty; showing the skill overview"));
       } catch (readmeError) {
-        if (!current()) return;
+        if (!current() || readmeRevision !== currentReadmeRevision ||
+            uiLanguage !== readmeLanguage) return;
         renderDocument(
           fallbackSkillOverview(
             next.skill,
-            "该技能没有返回可显示的 README.md（可能未提供或暂时无法读取）。",
+            tr(
+              "该技能没有返回可显示的 README.md（可能未提供或暂时无法读取）。",
+              "This skill did not return a displayable README.md (it may be missing or temporarily unavailable).",
+            ),
           ),
-          "技能简介",
+          tr("技能简介", "Skill overview"),
         );
-        status(`README 不可用，已显示技能简介：${errorMessage(readmeError)}`);
+        status(tr(
+          `README 不可用，已显示技能简介：${errorMessage(readmeError)}`,
+          `README unavailable; showing the skill overview: ${errorMessage(readmeError)}`,
+        ));
       }
       updateAttachButton();
       void refreshCacheStatus(next.skill.name, token);
@@ -1644,33 +2238,66 @@ async function navigate(next: View) {
         : call<BrowseResult>("skills.browse", next.view === "category" ? { category: next.category } : {}));
       if (!current()) return;
       if (next.view === "home") {
-        $("count").textContent = `${formatCount(data.totalSkills ?? 0)} 顶层技能`;
+        currentHome = data;
+        $("count").textContent = tr(
+          `${formatCount(data.totalSkills ?? 0)} 顶层技能`,
+          `${formatCount(data.totalSkills ?? 0)} top-level skills`,
+        );
         renderHomeMeta(data);
         renderCards($("cards"), data.top ?? []);
         renderCategories(data.categories ?? []);
-        status(data.totalSkills ? "输入技能关键词，或从常用技能与领域开始" : "技能库为空，请检查服务端技能源配置");
+        status(data.totalSkills
+          ? tr(
+              "输入技能关键词，或从常用技能与领域开始",
+              "Enter a skill keyword, or start with a common skill or domain",
+            )
+          : tr(
+              "技能库为空，请检查服务端技能源配置",
+              "The skill library is empty; check the server's skill source configuration",
+            ));
       } else {
         const skills = (next.view === "search" ? data.results : data.skills) ?? [];
+        currentListing = data;
+        if (next.view === "category" && data.category_en) {
+          categoryEnglishNames.set(next.category, data.category_en);
+          renderViewChrome(next);
+        }
         if (next.view === "search") {
           rememberSearch(next.query);
           currentSearch = data;
-          $("count").textContent = `${skills.length}/${data.total ?? skills.length} 结果`;
+          $("count").textContent = tr(
+            `${skills.length}/${data.total ?? skills.length} 结果`,
+            `${skills.length}/${data.total ?? skills.length} results`,
+          );
         } else {
-          $("count").textContent = `${skills.length} 个`;
+          $("count").textContent = tr(
+            `${skills.length} 个`,
+            `${skills.length} ${skills.length === 1 ? "skill" : "skills"}`,
+          );
         }
         renderCards($("cards-list"), skills);
         $("empty").hidden = skills.length !== 0;
-        $("empty").textContent = next.view === "search" ? "没有找到匹配技能，试试更短的关键词，例如 PPT、视频翻译、小红书。" : "该分类暂无技能。";
-        status(skills.length ? "选择技能查看详情" : "没有匹配结果");
+        $("empty").textContent = next.view === "search"
+          ? tr(
+              "没有找到匹配技能，试试更短的关键词，例如 PPT、视频翻译、小红书。",
+              "No matching skills. Try a shorter keyword such as PPT, video translation or Xiaohongshu.",
+            )
+          : tr("该分类暂无技能。", "This category has no skills yet.");
+        status(skills.length
+          ? tr("选择技能查看详情", "Select a skill to see details")
+          : tr("没有匹配结果", "No matching results"));
         if (next.view === "search") updateSearchMore();
       }
     }
   } catch (error) {
     if (!current()) return;
     if (next.view === "detail") {
-      const failure = "读取未完成。技能可能仍在后台下载，重试可继续获取内容。";
+      const failure = tr(
+        "读取未完成。技能可能仍在后台下载，重试可继续获取内容。",
+        "The read did not finish. The skill may still be downloading in the background; retry to continue.",
+      );
       detailInstructions = "";
-      documentSource.textContent = "加载失败";
+      documentSource.textContent = tr("加载失败", "Load failed");
       instructionRaw.textContent = failure;
       renderedInstructions.textContent = failure;
       detailProgress.hidden = true;
@@ -1680,7 +2307,10 @@ async function navigate(next: View) {
       stopProgressPolling();
       void refreshCacheStatus(next.skill.name, token);
     }
-    status(`加载失败：${errorMessage(error)}`, () => void navigate(next));
+    status(tr(
+      `加载失败：${errorMessage(error)}`,
+      `Load failed: ${errorMessage(error)}`,
+    ), () => void navigate(next));
   } finally {
     if (current()) busy(false);
   }
@@ -1691,22 +2321,39 @@ attach.onclick = async () => {
   const selected = view;
   const skill = selected.skill;
   if (!detailInstructions.trim()) {
-    attachmentStatus("完整技能尚未缓存完成，请稍后再带入（不会自动发起对话）");
+    attachmentStatus(tr(
+      "完整技能尚未缓存完成，请稍后再带入（不会自动发起对话）",
+      "The complete skill is not cached yet. Try again later; no message will be sent automatically.",
+    ));
     return;
   }
   attaching = true; attach.disabled = true;
   updateAttachButton();
-  attachmentStatus(`正在将「${skill.name}」的完整技能带入对话…`);
+  attachmentStatus(tr(
+    `正在将「${skill.name}」的完整技能带入对话…`,
+    `Adding the complete ${skill.name} skill to this chat…`,
+  ));
   try {
     const handoff = [
-      `## 已选择技能：${skill.name}`,
+      tr(`## 已选择技能：${skill.name}`, `## Selected skill: ${skill.name}`),
       "",
-      "这是用户从 Codex Skills 技能库中明确选择的技能。请将下面的 SKILL.md 视为当前对话中该技能的权威工作流：在执行用户任务前完整阅读并遵循其中的步骤、工具和限制；需要额外文件时使用 load_skill_file 或对应 skill:// 资源，不要用通用知识替代。",
+      tr(
+        "这是用户从 Codex Skills 技能库中明确选择的技能。请将下面的 SKILL.md 视为当前对话中该技能的权威工作流：在执行用户任务前完整阅读并遵循其中的步骤、工具和限制；需要额外文件时使用 load_skill_file 或对应 skill:// 资源，不要用通用知识替代。",
+        "The user explicitly selected this skill from the Codex Skills library. Treat the following SKILL.md as the authoritative workflow for this skill in the current conversation: read it completely and follow its steps, tools and constraints before executing the user's task. When additional files are needed, use load_skill_file or the corresponding skill:// resource instead of substituting general knowledge.",
+      ),
       "",
-      `- 描述：${skill.description}`,
-      `- 技能资源：${skillUri(skill.name)}`,
-      ...(detailLocalPath ? [`- 本地缓存：${detailLocalPath}`] : []),
-      `- 指令大小：${detailInstructions.length} 字符`,
+      tr(
+        `- 描述：${skill.description}`,
+        `- Description: ${localizedDescription(skill.name, skill.description, skill.description_en)}`,
+      ),
+      tr(`- 技能资源：${skillUri(skill.name)}`, `- Skill resource: ${skillUri(skill.name)}`),
+      ...(detailLocalPath
+        ? [tr(`- 本地缓存：${detailLocalPath}`, `- Local cache: ${detailLocalPath}`)]
+        : []),
+      tr(
+        `- 指令大小：${detailInstructions.length} 字符`,
+        `- Instruction size: ${detailInstructions.length} characters`,
+      ),
       "",
       "--- BEGIN SKILL.md ---",
       detailInstructions,
@@ -1715,7 +2362,7 @@ attach.onclick = async () => {
     const selectedSkill: AttachedSkill = {
       name: skill.name,
       uri: skillUri(skill.name),
-      description: skill.description,
+      description: localizedDescription(skill.name, skill.description, skill.description_en),
       ...(skill.category ? { category: skill.category } : {}),
       local_path: detailLocalPath || null,
       instruction_chars: detailInstructions.length,
@@ -1736,7 +2383,7 @@ attach.onclick = async () => {
         text: handoff,
         annotations: { audience: ["assistant"] },
         _meta: {
-          "openai/title": `完整技能：${skill.name}`,
+          "openai/title": tr(`完整技能：${skill.name}`, `Complete skill: ${skill.name}`),
           [HANDOFF_BLOCK_META]: skill.name,
         },
       },
@@ -1748,7 +2395,7 @@ attach.onclick = async () => {
         uri: skillUri(skill.name),
         name: skill.name,
         title: skill.name,
-        description: skill.description,
+        description: localizedDescription(skill.name, skill.description, skill.description_en),
         mimeType: "text/markdown",
         annotations: { audience: ["assistant"] },
         _meta: { [HANDOFF_BLOCK_META]: skill.name },
@@ -1768,7 +2415,10 @@ attach.onclick = async () => {
       content,
       structuredContent,
     }, 15_000);
-    if (result?.isError) throw new Error("宿主未接受技能上下文");
+    if (result?.isError) throw new Error(tr(
+      "宿主未接受技能上下文",
+      "The host rejected the skill context",
+    ));
     hostModelContext = {
       content,
       structuredContent,
@@ -1777,11 +2427,22 @@ attach.onclick = async () => {
     updateAttachButton();
     if (view === selected && !disposed) {
       attachmentStatus(nextSkills.length === 1
-        ? `已将「${skill.name}」技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`
-        : `已将「${skill.name}」等 ${nextSkills.length} 个技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`);
+        ? tr(
+            `已将「${skill.name}」技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`,
+            `${skill.name} is attached to this chat. It stays hidden in the composer and is available in your next message.`,
+          )
+        : tr(
+            `已将「${skill.name}」等 ${nextSkills.length} 个技能带入当前对话；输入框无显示，但已带入，下一条消息可直接使用。`,
+            `${skill.name} and other skills are attached (${nextSkills.length} total). They stay hidden in the composer and are available in your next message.`,
+          ));
     }
   } catch (error) {
-    if (view === selected && !disposed) attachmentStatus(`加入失败：${errorMessage(error)}`);
+    if (view === selected && !disposed) {
+      attachmentStatus(tr(
+        `加入失败：${errorMessage(error)}`,
+        `Failed to add skill: ${errorMessage(error)}`,
+      ));
+    }
   } finally {
     attaching = false;
     updateAttachButton();
@@ -1803,7 +2464,10 @@ clearCacheButton.onclick = async () => {
       clearCacheArmed = false;
       updateClearCacheButton();
     }, 4_000);
-    status(`再次点击“确认”清除「${selected.skill.name}」的本地缓存`);
+    status(tr(
+      `再次点击“确认”清除「${selected.skill.name}」的本地缓存`,
+      `Click “Click again to confirm” to clear the local cache for ${selected.skill.name}`,
+    ));
     return;
   }
 
@@ -1826,18 +2490,29 @@ clearCacheButton.onclick = async () => {
       size_bytes: 0,
     };
     detailLocalPath = "";
-    $("d-cached").textContent = "尚未缓存";
+    $("d-cached").textContent = tr("尚未缓存", "Not cached");
     $("d-cached").className = "badge";
     $("d-cache-detail").textContent = result.cleared
-      ? `已清除 ${formatCount(result.files_removed)} 个文件 · 释放 ${formatBytes(result.bytes_removed)}`
-      : "当前没有可清除的缓存";
-    $("d-revision-note").textContent = "缓存已清除；当前页面保留刚才读取的说明，下次读取会重新下载。";
+      ? tr(
+          `已清除 ${formatCount(result.files_removed)} 个文件 · 释放 ${formatBytes(result.bytes_removed)}`,
+          `Cleared ${result.files_removed} ${result.files_removed === 1 ? "file" : "files"} · freed ${formatBytes(result.bytes_removed)}`,
+        )
+      : tr("当前没有可清除的缓存", "There is no cache to clear");
+    $("d-revision-note").textContent = tr(
+      "缓存已清除；当前页面保留刚才读取的说明，下次读取会重新下载。",
+      "The cache was cleared. This page keeps the guide already loaded; the next read will download the skill again.",
+    );
     $("d-revision-note").hidden = false;
     cache.clear();
-    status(result.cleared ? `已清除「${selected.skill.name}」的缓存` : "缓存已经为空");
+    status(result.cleared
+      ? tr(`已清除「${selected.skill.name}」的缓存`, `Cleared the ${selected.skill.name} cache`)
+      : tr("缓存已经为空", "The cache is already empty"));
   } catch (error) {
     if (!disposed && view === selected) {
-      status(`清除缓存失败：${errorMessage(error)}`, () => clearCacheButton.click());
+      status(tr(
+        `清除缓存失败：${errorMessage(error)}`,
+        `Failed to clear cache: ${errorMessage(error)}`,
+      ), () => clearCacheButton.click());
     }
   } finally {
     clearCacheBusy = false;
@@ -1877,11 +2552,20 @@ searchMore.onclick = async () => {
     currentSearch = merged;
     cache.set(JSON.stringify(selected), { value: merged, expires: Date.now() + 30_000 });
     renderCards($("cards-list"), merged.results ?? []);
-    $("count").textContent = `${merged.results?.length ?? 0}/${merged.total ?? 0} 结果`;
-    status(`已加载 ${merged.results?.length ?? 0}/${merged.total ?? 0} 个搜索结果`);
+    $("count").textContent = tr(
+      `${merged.results?.length ?? 0}/${merged.total ?? 0} 结果`,
+      `${merged.results?.length ?? 0}/${merged.total ?? 0} results`,
+    );
+    status(tr(
+      `已加载 ${merged.results?.length ?? 0}/${merged.total ?? 0} 个搜索结果`,
+      `Loaded ${merged.results?.length ?? 0} of ${merged.total ?? 0} search results`,
+    ));
   } catch (error) {
     if (!disposed && revision === token && view === selected) {
-      status(`加载更多失败：${errorMessage(error)}`, () => searchMore.click());
+      status(tr(
+        `加载更多失败：${errorMessage(error)}`,
+        `Failed to load more: ${errorMessage(error)}`,
+      ), () => searchMore.click());
     }
   } finally {
     if (!disposed) {
@@ -1933,12 +2617,20 @@ suggestModal.addEventListener("keydown", (event) => {
 $("suggest-copy").onclick = () => {
   const clipboard = globalThis.navigator?.clipboard;
   if (!clipboard) {
-    $("suggest-copy-status").textContent = "当前环境无法自动复制，请手动选择邮箱。";
+    $("suggest-copy-status").textContent = tr(
+      "当前环境无法自动复制，请手动选择邮箱。",
+      "Automatic copy is unavailable here; select the email address manually.",
+    );
     return;
   }
   void clipboard.writeText(suggestEmail).then(
-    () => { $("suggest-copy-status").textContent = "邮箱已复制"; },
-    () => { $("suggest-copy-status").textContent = "复制失败，请手动选择邮箱。"; },
+    () => { $("suggest-copy-status").textContent = tr("邮箱已复制", "Email copied"); },
+    () => {
+      $("suggest-copy-status").textContent = tr(
+        "复制失败，请手动选择邮箱。",
+        "Copy failed; select the email address manually.",
+      );
+    },
   );
 };
 previewOpenHost.onclick = async () => {
@@ -1946,11 +2638,12 @@ previewOpenHost.onclick = async () => {
   previewOpenHost.disabled = true;
   try {
     await transport.request("openai/files/open", { path: previewCopyPath }, 15_000);
-    status(`已交给 Codex 打开：${previewPath}`);
+    status(tr(`已交给 Codex 打开：${previewPath}`, `Opened in Codex: ${previewPath}`));
   } catch (error) {
-    status(
-      `宿主未能打开该文件：${errorMessage(error)}。可点击“复制路径”使用原生应用打开。`
-    );
+    status(tr(
+      `宿主未能打开该文件：${errorMessage(error)}。可点击“复制路径”使用原生应用打开。`,
+      `The host could not open this file: ${errorMessage(error)}. Click “Copy path” and open it in a native app.`,
+    ));
   } finally {
     previewOpenHost.disabled = false;
   }
@@ -1961,10 +2654,18 @@ previewMore.onclick = () => {
 $("preview-copy").onclick = () => {
   if (!previewCopyPath) return;
   const clipboard = globalThis.navigator?.clipboard;
-  if (!clipboard) { $("status").textContent = `文件路径：${previewCopyPath}`; return; }
+  if (!clipboard) {
+    $("status").textContent = tr(`文件路径：${previewCopyPath}`, `File path: ${previewCopyPath}`);
+    return;
+  }
   void clipboard.writeText(previewCopyPath).then(
-    () => { $("status").textContent = "文件路径已复制"; },
-    (error) => { $("status").textContent = `复制失败：${errorMessage(error)}`; },
+    () => { $("status").textContent = tr("文件路径已复制", "File path copied"); },
+    (error) => {
+      $("status").textContent = tr(
+        `复制失败：${errorMessage(error)}`,
+        `Copy failed: ${errorMessage(error)}`,
+      );
+    },
   );
 };
 navSearch.addEventListener("input", () => scheduleExplorerSearch());
@@ -1983,7 +2684,11 @@ function scheduleSearch(immediate = false) {
   if (!query) { void navigate({ view: "home" }); return; }
   const run = () => void navigate({ view: "search", query });
   if (immediate) run();
-  else { busy(true); status("等待输入…"); searchTimer = setTimeout(run, 250); }
+  else {
+    busy(true);
+    status(tr("等待输入…", "Waiting for input…"));
+    searchTimer = setTimeout(run, 250);
+  }
 }
 search.addEventListener("focus", () => {
   searchFocused = true;
@@ -2035,6 +2740,12 @@ function applyHostContext(context: HostContext) {
   for (const [name, value] of Object.entries(context.styles?.variables ?? {})) {
     if (name.startsWith("--") && typeof value === "string") document.documentElement.style.setProperty(name, value);
   }
+  if (!manualLanguagePreference && typeof context.locale === "string") {
+    const hostLanguage = normalizeUiLanguage(context.locale);
+    if (hostLanguage !== uiLanguage) {
+      applyLanguage(hostLanguage, { reloadReadme: false });
+    }
+  }
   if (Object.prototype.hasOwnProperty.call(context, "openai/modelContext")) {
     hostModelContext = context["openai/modelContext"] ?? null;
     updateAttachButton();
@@ -2048,7 +2759,10 @@ transport.on("notifications/progress", (params: {
   const total = Math.max(1, Number(params.total) || 1);
   const done = Math.max(0, Math.min(total, Number(params.progress) || 0));
   showDownloadProgress(done, total);
-  $("d-cache-detail").textContent = "正在从源仓库下载并校验文件";
+  $("d-cache-detail").textContent = tr(
+    "正在从源仓库下载并校验文件",
+    "Downloading and verifying files from the source repository",
+  );
 });
 transport.handle("ping", () => ({}));
 function dispose() {
@@ -2067,7 +2781,7 @@ window.addEventListener("focus", () => {
 async function connect() {
   if (connecting || disposed) return;
   connecting = true; busy(true); search.disabled = true;
-  status("正在连接技能库…");
+  status(tr("正在连接技能库…", "Connecting to the skill library…"));
   try {
     const result = await transport.request<InitializeResult>("ui/initialize", {
       protocolVersion: PROTOCOL_VERSION,
@@ -2075,7 +2789,12 @@ async function connect() {
       appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
     });
     if (disposed) return;
-    if (result.protocolVersion !== PROTOCOL_VERSION) throw new Error(`不支持的界面协议：${result.protocolVersion}`);
+    if (result.protocolVersion !== PROTOCOL_VERSION) {
+      throw new Error(tr(
+        `不支持的界面协议：${result.protocolVersion}`,
+        `Unsupported app protocol: ${result.protocolVersion}`,
+      ));
+    }
     hostCapabilities = result.hostCapabilities;
     applyHostContext(result.hostContext ?? {});
     transport.notify("ui/notifications/initialized");
@@ -2086,9 +2805,19 @@ async function connect() {
       if (loaded) void migrateLegacySearchHistory();
     });
   } catch (error) {
-    if (!disposed) { busy(false); status(`连接失败：${errorMessage(error)}`, () => void connect()); }
+    if (!disposed) {
+      busy(false);
+      status(tr(
+        `连接失败：${errorMessage(error)}`,
+        `Connection failed: ${errorMessage(error)}`,
+      ), () => void connect());
+    }
   } finally { connecting = false; }
 }
 
 declare const __APP_VERSION__: string;
+languageZh.onclick = () => applyLanguage("zh-CN", { persist: true });
+languageEn.onclick = () => applyLanguage("en", { persist: true });
+applyStaticLanguage();
+setText("status", tr("连接中…", "Connecting…"));
 void connect();

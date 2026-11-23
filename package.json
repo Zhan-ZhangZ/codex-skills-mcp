@@ -1,6 +1,6 @@
 {
   "name": "codex-skills-mcp",
-  "version": "1.7.2",
+  "version": "1.8.1",
   "description": "Local-first MCP server for on-demand expert skill discovery, loading, and orchestration",
   "type": "module",
   "author": {
@@ -52,6 +52,7 @@
     "prepublishOnly": "npm run build",
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:app": "node scripts/build-app.mjs",
+    "generate:catalog-en": "node scripts/generate-english-catalog.mjs",
     "benchmark:loader": "node scripts/benchmark-loader.mjs",
     "benchmark:remote": "node scripts/benchmark-remote.mjs",
     "preview:app": "npm run build:app && node scripts/preview-mcp-app.mjs"
